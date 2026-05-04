@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/ZombieMelee.tscn" id="2_melee"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/ZombieRanged.tscn" id="3_ranged"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/ZombieElite.tscn" id="4_elite"]
+
+[node name="CombatTest" type="Node2D"]
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 1152.0
+offset_bottom = 648.0
+color = Color(0.16, 0.2, 0.18, 1)
+mouse_filter = 2
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector2(220, 330)
+
+[node name="ZombieMelee" parent="." instance=ExtResource("2_melee")]
+position = Vector2(680, 250)
+
+[node name="ZombieRanged" parent="." instance=ExtResource("3_ranged")]
+position = Vector2(820, 390)
+
+[node name="ZombieElite" parent="." instance=ExtResource("4_elite")]
+position = Vector2(940, 250)

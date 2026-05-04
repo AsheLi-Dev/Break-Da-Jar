@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/ZombieRanged.gd" id="1_ranged"]
+[ext_resource type="PackedScene" path="res://scenes/projectiles/Projectile.tscn" id="2_projectile"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 17.0
+
+[sub_resource type="Gradient" id="Gradient_aim"]
+colors = PackedColorArray(1, 0.1, 0.1, 0.8, 1, 0.1, 0.1, 0)
+
+[node name="ZombieRanged" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_ranged")
+max_hp = 28.0
+move_speed = 82.0
+damage = 7.0
+attack_cooldown = 1.0
+projectile_scene = ExtResource("2_projectile")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="DebugBody" type="Polygon2D" parent="."]
+color = Color(0.42, 0.5, 0.58, 1)
+polygon = PackedVector2Array(17, 0, 15.976, 5.81434, 13.0239, 10.933, 8.5, 14.7224, 2.95202, 16.7417, -2.95202, 16.7417, -8.5, 14.7224, -13.0239, 10.933, -15.976, 5.81434, -17, 0, -15.976, -5.81434, -13.0239, -10.933, -8.5, -14.7224, -2.95202, -16.7417, 2.95202, -16.7417, 8.5, -14.7224, 13.0239, -10.933, 15.976, -5.81434)
+
+[node name="AimLine" type="Line2D" parent="."]
+visible = false
+width = 3.0
+default_color = Color(1, 0.1, 0.1, 0.8)
+points = PackedVector2Array(0, 0, 280, 0)
+gradient = SubResource("Gradient_aim")
