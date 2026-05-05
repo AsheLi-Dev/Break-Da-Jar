@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+event_name = &"enemy_killed"
+effect_type = &"poison_transfer_on_death"
+radius = 240.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"last_venom"
+display_name = "Last Venom"
+description = "When a Poisoned enemy dies, the nearest enemy receives its remaining Poison stacks."
+category = &"attack"
+rarity = &"legendary"
+effects = Array[Resource]([SubResource("Resource_effect")])

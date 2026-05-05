@@ -1,7 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
-[ext_resource type="Script" path="res://scripts/enemies/ZombieRanged.gd" id="1_ranged"]
+[ext_resource type="Script" path="res://scripts/enemies/AcidZombie.gd" id="1_ranged"]
 [ext_resource type="PackedScene" path="res://scenes/projectiles/Projectile.tscn" id="2_projectile"]
+[ext_resource type="Texture2D" path="res://assets/zombies/ranged zombie/Idle.png" id="3_idle"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 17.0
@@ -9,7 +10,7 @@ radius = 17.0
 [sub_resource type="Gradient" id="Gradient_aim"]
 colors = PackedColorArray(1, 0.1, 0.1, 0.8, 1, 0.1, 0.1, 0)
 
-[node name="ZombieRanged" type="CharacterBody2D" groups=["enemy"]]
+[node name="AcidZombie" type="CharacterBody2D" groups=["enemy"]]
 collision_layer = 2
 collision_mask = 1
 script = ExtResource("1_ranged")
@@ -23,8 +24,21 @@ projectile_scene = ExtResource("2_projectile")
 shape = SubResource("CircleShape2D_body")
 
 [node name="DebugBody" type="Polygon2D" parent="."]
+visible = false
 color = Color(0.42, 0.5, 0.58, 1)
 polygon = PackedVector2Array(17, 0, 15.976, 5.81434, 13.0239, 10.933, 8.5, 14.7224, 2.95202, 16.7417, -2.95202, 16.7417, -8.5, 14.7224, -13.0239, 10.933, -15.976, 5.81434, -17, 0, -15.976, -5.81434, -13.0239, -10.933, -8.5, -14.7224, -2.95202, -16.7417, 2.95202, -16.7417, 8.5, -14.7224, 13.0239, -10.933, 15.976, -5.81434)
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("3_idle")
+centered = true
+region_enabled = true
+region_rect = Rect2(0, 0, 128, 128)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("..")
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+anim_player = NodePath("../AnimationPlayer")
 
 [node name="AimLine" type="Line2D" parent="."]
 visible = false

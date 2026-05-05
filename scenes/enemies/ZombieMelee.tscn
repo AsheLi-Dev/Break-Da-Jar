@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/enemies/ZombieMelee.gd" id="1_melee"]
+[ext_resource type="Texture2D" path="res://assets/zombies/melee zombie 1/Idle.png" id="2_idle"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 18.0
@@ -21,14 +22,28 @@ attack_cooldown = 0.9
 shape = SubResource("CircleShape2D_body")
 
 [node name="DebugBody" type="Polygon2D" parent="."]
+visible = false
 color = Color(0.52, 0.56, 0.46, 1)
 polygon = PackedVector2Array(18, 0, 16.9145, 6.15636, 13.7888, 11.5702, 9, 15.5885, 3.12567, 17.7265, -3.12567, 17.7265, -9, 15.5885, -13.7888, 11.5702, -16.9145, 6.15636, -18, 0, -16.9145, -6.15636, -13.7888, -11.5702, -9, -15.5885, -3.12567, -17.7265, 3.12567, -17.7265, 9, -15.5885, 13.7888, -11.5702, 16.9145, -6.15636)
 
 [node name="DebugForward" type="Line2D" parent="."]
+visible = false
 width = 3.0
 default_color = Color(0.05, 0.05, 0.05, 1)
 points = PackedVector2Array(0, 0, 24, 0)
 gradient = SubResource("Gradient_forward")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_idle")
+centered = true
+region_enabled = true
+region_rect = Rect2(0, 0, 128, 128)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("..")
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+anim_player = NodePath("../AnimationPlayer")
 
 [node name="AttackWarning" type="Polygon2D" parent="."]
 visible = false

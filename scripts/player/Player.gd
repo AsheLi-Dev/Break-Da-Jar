@@ -13,6 +13,16 @@ const IDLE_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/idle.png")
 const ROLLING_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/rolling.png")
 const RUN_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/run.png")
 
+signal attack_hit(enemy: Node, damage_dealt: float, attack_info: Dictionary)
+signal attack_started(origin: Vector2, direction: Vector2, attack_info: Dictionary)
+signal enemy_killed(enemy: Node)
+signal container_broken(container: Node, attack_info: Dictionary)
+signal dash_started(direction: Vector2)
+signal dash_ended(direction: Vector2)
+signal round_started()
+signal round_ended()
+signal hp_changed(current_hp: int, max_hp: int)
+
 enum State {
 	NORMAL,
 	DASHING,
@@ -28,11 +38,14 @@ enum State {
 @export var max_hp: float = 100.0
 var hp: float
 
-# Holy bolt tuning. Hold shoot for automatic fire.
+# Holy boomerang tuning. Hold shoot for automatic fire.
 @export var projectile_scene: PackedScene
 @export var projectile_speed: float = 620.0
 @export var projectile_damage: float = 12.0
-@export var projectile_lifetime: float = 1.4
+@export var projectile_lifetime: float = 3.0
+@export var projectile_max_distance: float = 520.0
+@export var projectile_return_delay: float = 0.2
+@export var projectile_catch_distance: float = 22.0
 @export var fire_rate: float = 1.0
 @export var attack_slow_edge_frames: int = 3
 @export var attack_edge_animation_fps: float = 15.0
@@ -48,8 +61,17 @@ var hp: float
 
 # Dash is a short reposition. Slide is the invincible enemy-pass-through followup.
 @export var dash_speed: float = 560.0
-@export var dash_duration: float = 0.2
+@export var dash_duration: float = 0.1
 @export var dash_cooldown: float = 0.75
+@export var dash_smear_count: int = 5
+@export var dash_smear_lifetime: float = 0.14
+@export var dash_smear_spacing: float = 12.0
+@export var dash_smear_color: Color = Color(1.0, 1.0, 1.0, 0.35)
+@export var dash_forward_smear_enabled: bool = true
+@export var dash_forward_smear_delay_ratio: float = 0.7
+@export var dash_forward_smear_distance: float = 14.0
+@export var dash_forward_smear_lifetime: float = 0.08
+@export var dash_forward_smear_alpha: float = 0.18
 @export var slide_speed: float = 620.0
 @export var slide_duration: float = 0.28
 @export var slide_cancel_window: float = 0.1
@@ -58,8 +80,16 @@ var hp: float
 # Collision mask bit for enemies. Layer numbers are 1-based in the editor.
 @export var enemy_collision_layer_number: int = 2
 @export var world_collision_layer_number: int = 1
+@export var jar_collision_layer_number: int = 6
 @export var animation_fps: float = 15.0
+@export var movement_bounds_enabled: bool = false
+@export var movement_bounds: Rect2 = Rect2()
 
+var slow_multiplier: float = 1.0
+var slow_remaining: float = 0.0
+var stats: StatsComponent
+var inventory: InventoryComponent
+var temporary_buffs: TemporaryBuffComponent
 var state: int = State.NORMAL
 var facing_direction: Vector2 = Vector2.RIGHT
 var animation_direction: Vector2 = Vector2.RIGHT
@@ -85,6 +115,7 @@ var animation_tree: AnimationTree
 var animation_state: AnimationNodeStateMachinePlayback
 var current_animation: StringName = &"idle"
 var current_animation_name: StringName = &""
+var current_animation_elapsed: float = 0.0
 var action_animation: StringName = &""
 var action_animation_remaining: float = 0.0
 var action_animation_elapsed: float = 0.0
@@ -96,9 +127,11 @@ var action_animation_direction: Vector2 = Vector2.RIGHT
 
 func _ready() -> void:
 	add_to_group("player")
+	_ensure_stats_and_items()
 	hp = max_hp
 	saved_collision_mask = collision_mask
 	_ensure_placeholder_nodes()
+	hp_changed.emit(roundi(hp), roundi(max_hp))
 
 
 func _physics_process(delta: float) -> void:
@@ -131,9 +164,75 @@ func take_damage(amount: float) -> void:
 	if is_invincible:
 		return
 
-	hp = maxf(0.0, hp - amount)
+	var final_damage: float = amount
+	if stats != null:
+		final_damage = float(stats.calculate_incoming_damage(amount))
+	hp = maxf(0.0, hp - final_damage)
+	hp_changed.emit(roundi(hp), roundi(max_hp))
 	if hp <= 0.0:
 		die()
+
+
+func heal(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	hp = minf(max_hp, hp + amount)
+	hp_changed.emit(roundi(hp), roundi(max_hp))
+
+
+func get_stats() -> StatsComponent:
+	return stats
+
+
+func get_temporary_buffs() -> TemporaryBuffComponent:
+	return temporary_buffs
+
+
+func get_base_attack_damage() -> float:
+	return projectile_damage
+
+
+func add_item(item: ItemDefinition) -> void:
+	if inventory != null:
+		inventory.add_item(item)
+
+
+func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Dictionary = {}) -> float:
+	if enemy == null or not enemy.has_method("take_damage"):
+		return 0.0
+
+	var final_damage: float = raw_damage
+	if stats != null:
+		final_damage *= stats.get_damage_multiplier()
+		if bool(attack_info.get("allow_crit", true)) and randf() < stats.critical_chance:
+			final_damage *= 2.0
+			attack_info["critical"] = true
+			print("Critical hit")
+
+	var damage_dealt: float = enemy.take_damage(final_damage, self, attack_info)
+	if damage_dealt <= 0.0:
+		damage_dealt = final_damage
+
+	if bool(attack_info.get("direct", true)):
+		_apply_attack_status_procs(enemy)
+		if stats != null and stats.lifesteal > 0.0:
+			var heal_amount: float = damage_dealt * stats.lifesteal
+			heal(heal_amount)
+			print("Lifesteal heals %s" % heal_amount)
+
+	if bool(attack_info.get("allow_procs", true)):
+		attack_hit.emit(enemy, damage_dealt, attack_info)
+
+	return damage_dealt
+
+
+func notify_enemy_killed(enemy: Node) -> void:
+	enemy_killed.emit(enemy)
+
+
+func apply_slow(multiplier: float, duration: float) -> void:
+	slow_multiplier = minf(slow_multiplier, clampf(multiplier, 0.05, 1.0))
+	slow_remaining = maxf(slow_remaining, duration)
 
 
 func die() -> void:
@@ -146,12 +245,17 @@ func _update_timers(delta: float) -> void:
 	dash_cooldown_remaining = maxf(0.0, dash_cooldown_remaining - delta)
 	slide_window_remaining = maxf(0.0, slide_window_remaining - delta)
 	invincible_remaining = maxf(0.0, invincible_remaining - delta)
+	slow_remaining = maxf(0.0, slow_remaining - delta)
+	if slow_remaining <= 0.0:
+		slow_multiplier = 1.0
 	is_invincible = invincible_remaining > 0.0
 
 
 func _update_normal_movement(delta: float) -> void:
 	var input_direction: Vector2 = _get_move_input()
-	var target_speed: float = move_speed
+	var target_speed: float = move_speed * slow_multiplier
+	if stats != null:
+		target_speed = stats.get_move_speed(move_speed) * slow_multiplier
 	if _is_attack_movement_slowed():
 		target_speed *= attack_move_speed_multiplier
 
@@ -161,6 +265,7 @@ func _update_normal_movement(delta: float) -> void:
 		velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 
 	move_and_slide()
+	_clamp_to_movement_bounds()
 
 
 func _try_start_dash() -> void:
@@ -181,15 +286,20 @@ func _try_start_dash() -> void:
 	dash_cooldown_remaining = dash_cooldown
 	slide_window_remaining = dash_duration + slide_cancel_window
 	velocity = dash_direction * dash_speed
+	dash_started.emit(dash_direction)
+	_spawn_dash_smear()
+	_schedule_forward_dash_smear()
 
 
 func _update_dash(delta: float) -> void:
 	dash_time_remaining -= delta
 	velocity = dash_direction * dash_speed
 	move_and_slide()
+	_clamp_to_movement_bounds()
 
 	if dash_time_remaining <= 0.0:
 		state = State.NORMAL
+		dash_ended.emit(dash_direction)
 
 
 func _try_start_slide() -> void:
@@ -219,11 +329,13 @@ func _update_slide(delta: float) -> void:
 	slide_time_remaining -= delta
 	velocity = dash_direction * slide_speed
 	move_and_slide()
+	_clamp_to_movement_bounds()
 
 	# Optional future upgrade: add a DashHitbox Area2D to damage or knock back enemies along the slide path.
 	if slide_time_remaining <= 0.0:
 		state = State.NORMAL
 		collision_mask = saved_collision_mask
+		dash_ended.emit(dash_direction)
 
 
 func _try_fire_projectile() -> void:
@@ -250,7 +362,7 @@ func _try_cast_shockwave() -> void:
 			continue
 
 		if body.has_method("take_damage"):
-			body.call("take_damage", shockwave_damage)
+			deal_player_damage_to_enemy(body, shockwave_damage, {"source": "shockwave", "direct": true, "allow_procs": true})
 
 		if body.has_method("apply_knockback"):
 			var body_2d: Node2D = body as Node2D
@@ -274,6 +386,72 @@ func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectil
 	get_tree().current_scene.add_child(projectile)
 	projectile.direction = direction
 	return projectile
+
+
+func _spawn_dash_smear() -> void:
+	if sprite == null or sprite.texture == null:
+		return
+
+	var count: int = maxi(dash_smear_count, 0)
+	for index in range(count):
+		var ghost := Sprite2D.new()
+		ghost.name = "DashSmear"
+		ghost.texture = sprite.texture
+		ghost.centered = sprite.centered
+		ghost.region_enabled = sprite.region_enabled
+		ghost.region_rect = sprite.region_rect
+		ghost.global_position = global_position - dash_direction.normalized() * dash_smear_spacing * float(index + 1)
+		ghost.global_rotation = sprite.global_rotation
+		ghost.global_scale = sprite.global_scale
+		ghost.modulate = Color(
+			dash_smear_color.r,
+			dash_smear_color.g,
+			dash_smear_color.b,
+			dash_smear_color.a * (1.0 - float(index) / float(maxi(count, 1)))
+		)
+		ghost.z_index = sprite.z_index - 1
+		get_tree().current_scene.add_child(ghost)
+
+		var tween := ghost.create_tween()
+		tween.tween_property(ghost, "modulate:a", 0.0, dash_smear_lifetime)
+		tween.finished.connect(ghost.queue_free)
+
+
+func _schedule_forward_dash_smear() -> void:
+	if not dash_forward_smear_enabled:
+		return
+
+	var delay: float = dash_duration * clampf(dash_forward_smear_delay_ratio, 0.0, 1.0)
+	get_tree().create_timer(delay).timeout.connect(_spawn_forward_dash_smear)
+
+
+func _spawn_forward_dash_smear() -> void:
+	if state != State.DASHING:
+		return
+	if sprite == null or sprite.texture == null:
+		return
+
+	var ghost := Sprite2D.new()
+	ghost.name = "DashForwardSmear"
+	ghost.texture = sprite.texture
+	ghost.centered = sprite.centered
+	ghost.region_enabled = sprite.region_enabled
+	ghost.region_rect = sprite.region_rect
+	ghost.global_position = global_position + dash_direction.normalized() * dash_forward_smear_distance
+	ghost.global_rotation = sprite.global_rotation
+	ghost.global_scale = sprite.global_scale
+	ghost.modulate = Color(
+		dash_smear_color.r,
+		dash_smear_color.g,
+		dash_smear_color.b,
+		dash_forward_smear_alpha
+	)
+	ghost.z_index = sprite.z_index - 1
+	get_tree().current_scene.add_child(ghost)
+
+	var tween := ghost.create_tween()
+	tween.tween_property(ghost, "modulate:a", 0.0, dash_forward_smear_lifetime)
+	tween.finished.connect(ghost.queue_free)
 
 
 func _hide_shockwave_visual() -> void:
@@ -354,13 +532,16 @@ func _update_sprite_animation(delta: float) -> void:
 
 	var wanted_animation: StringName = _get_locomotion_animation()
 	_play_sprite_animation(wanted_animation)
+	current_animation_elapsed += delta
 
 
 func _get_locomotion_animation() -> StringName:
 	if state == State.SLIDING:
 		return &"rolling"
 	if state == State.DASHING:
-		return &"run"
+		if velocity.length_squared() > 16.0:
+			return &"run"
+		return &"idle"
 	if velocity.length_squared() > 16.0:
 		return &"run"
 
@@ -382,6 +563,7 @@ func _play_sprite_animation(animation_name: StringName, force_restart: bool = fa
 
 	current_animation = animation_name
 	current_animation_name = tree_animation_name
+	current_animation_elapsed = 0.0
 	if animation_state != null:
 		if force_restart:
 			animation_state.start(String(tree_animation_name), true)
@@ -411,7 +593,10 @@ func _get_attack_projectile_time() -> float:
 
 
 func _get_fire_interval() -> float:
-	return 1.0 / maxf(fire_rate, 0.01)
+	var base_interval: float = 1.0 / maxf(fire_rate, 0.01)
+	if stats != null:
+		return stats.get_attack_interval(base_interval)
+	return base_interval
 
 
 func _can_cancel_current_action() -> bool:
@@ -442,10 +627,28 @@ func _spawn_holy_bolt_at(target_position: Vector2) -> void:
 		direction = direction.normalized()
 
 	var projectile: Projectile = _spawn_projectile(muzzle.global_position, direction)
+	projectile.owner_player = self
 	projectile.collision_mask = 0
 	projectile.set_collision_mask_value(enemy_collision_layer_number, true)
 	projectile.set_collision_mask_value(world_collision_layer_number, true)
+	projectile.set_collision_mask_value(jar_collision_layer_number, true)
 	projectile.setup(direction, projectile_damage, projectile_speed, projectile_lifetime, &"enemy")
+	projectile.enable_boomerang(self, projectile_max_distance, projectile_return_delay, projectile_catch_distance)
+	attack_started.emit(muzzle.global_position, direction, {"source": "projectile", "direct": true})
+
+
+func emit_container_broken(container: Node, attack_info: Dictionary = {}) -> void:
+	container_broken.emit(container, attack_info)
+
+
+func emit_round_started() -> void:
+	round_started.emit()
+
+
+func emit_round_ended() -> void:
+	round_ended.emit()
+	if temporary_buffs != null:
+		temporary_buffs.clear_round_buffs()
 
 
 func _get_animation_texture(animation_name: StringName) -> Texture2D:
@@ -563,6 +766,58 @@ func _ensure_placeholder_nodes() -> void:
 	shockwave_visual.visible = false
 
 
+func _ensure_stats_and_items() -> void:
+	if stats == null:
+		stats = StatsComponent.new()
+	stats.max_hp = roundi(max_hp)
+	stats.base_move_speed = move_speed
+	if not stats.stat_changed.is_connected(_on_stat_changed):
+		stats.stat_changed.connect(_on_stat_changed)
+
+	inventory = get_node_or_null("InventoryComponent") as InventoryComponent
+	if inventory == null:
+		inventory = InventoryComponent.new()
+		inventory.name = "InventoryComponent"
+		add_child(inventory)
+	inventory.setup(self)
+
+	temporary_buffs = get_node_or_null("TemporaryBuffComponent") as TemporaryBuffComponent
+	if temporary_buffs == null:
+		temporary_buffs = TemporaryBuffComponent.new()
+		temporary_buffs.name = "TemporaryBuffComponent"
+		add_child(temporary_buffs)
+	temporary_buffs.setup(self)
+
+
+func _on_stat_changed(stat_name: StringName, _value: Variant) -> void:
+	if stat_name == &"max_hp" and stats != null:
+		var old_max_hp: float = max_hp
+		max_hp = float(stats.max_hp)
+		if max_hp > old_max_hp:
+			hp += max_hp - old_max_hp
+		hp = minf(hp, max_hp)
+		hp_changed.emit(roundi(hp), roundi(max_hp))
+
+
+func _apply_attack_status_procs(enemy: Node) -> void:
+	if stats == null or enemy == null:
+		return
+	if randf() < stats.bleed_chance and enemy.has_method("apply_status_effect"):
+		enemy.apply_status_effect(&"bleeding", self)
+	if randf() < stats.poison_chance and enemy.has_method("apply_status_effect"):
+		enemy.apply_status_effect(&"poison", self)
+
+
+func _clamp_to_movement_bounds() -> void:
+	if not movement_bounds_enabled:
+		return
+
+	global_position = Vector2(
+		clampf(global_position.x, movement_bounds.position.x, movement_bounds.end.x),
+		clampf(global_position.y, movement_bounds.position.y, movement_bounds.end.y)
+	)
+
+
 func _circle_polygon(radius: float, points: int) -> PackedVector2Array:
 	var polygon: PackedVector2Array = PackedVector2Array()
 	for point in range(points):
@@ -652,7 +907,8 @@ func _create_direction_animation(animation_base: StringName, row: int) -> Animat
 	animation.value_track_set_update_mode(region_track, Animation.UPDATE_DISCRETE)
 
 	var time: float = 0.0
-	for frame in range(FRAMES_PER_DIRECTION):
+	var frame_count: int = _get_animation_frame_count(animation_base)
+	for frame in range(frame_count):
 		var region := Rect2(
 			Vector2(frame * FRAME_SIZE.x, row * FRAME_SIZE.y),
 			Vector2(FRAME_SIZE)
@@ -705,8 +961,12 @@ func _get_attack_windup_frame_duration(frame: int) -> float:
 	return 1.0 / maxf(attack_fast_animation_fps, 0.01)
 
 
-func _get_animation_loop_mode(animation_base: StringName) -> int:
+func _get_animation_loop_mode(animation_base: StringName) -> Animation.LoopMode:
 	if animation_base == &"idle" or animation_base == &"run":
 		return Animation.LOOP_LINEAR
 
 	return Animation.LOOP_NONE
+
+
+func _get_animation_frame_count(animation_base: StringName) -> int:
+	return FRAMES_PER_DIRECTION

@@ -1,27 +1,54 @@
 extends EnemyBase
 class_name ZombieMelee
 
+const FRAME_SIZE := Vector2i(128, 128)
+const FRAMES_PER_DIRECTION := 15
+const DIRECTION_COUNT := 8
+const ATTACK_ACTIVE_START_FRAME := 7
+const ATTACK_ACTIVE_END_FRAME := 9
+const VISUAL_VARIANT_DIRS: Array[String] = [
+	"res://assets/zombies/melee zombie 1",
+	"res://assets/zombies/melee zombie 2",
+	"res://assets/zombies/melee zombie 3",
+	"res://assets/zombies/melee zombie 4",
+	"res://assets/zombies/melee zombie 5",
+	"res://assets/zombies/melee zombie 6",
+]
+
 # Melee attack tuning. Telegraph shows before the hitbox turns on.
 @export var attack_range: float = 58.0
-@export var telegraph_time: float = 0.45
-@export var hitbox_time: float = 0.12
 @export var cone_angle_degrees: float = 80.0
 @export var cone_radius: float = 72.0
 @export var warning_color: Color = Color(1.0, 0.25, 0.08, 0.28)
+@export var animation_fps: float = 15.0
+@export var take_damage_animation_time: float = 0.2
+@export var randomize_visual_variant: bool = true
+@export_range(0, 5, 1) var visual_variant_index: int = 0
 
 var cooldown_remaining: float = 0.0
 var attack_phase: StringName = &"idle"
-var phase_time: float = 0.0
+var attack_elapsed: float = 0.0
 var hit_targets: Array[Node] = []
+var facing_direction: Vector2 = Vector2.RIGHT
+var action_animation: StringName = &""
+var action_animation_remaining: float = 0.0
+var current_animation_name: StringName = &""
+var animation_textures: Dictionary = {}
 
 var warning_cone: Polygon2D
 var attack_area: Area2D
 var attack_collision: CollisionPolygon2D
+var sprite: Sprite2D
+var animation_player: AnimationPlayer
+var animation_tree: AnimationTree
+var animation_state: AnimationNodeStateMachinePlayback
 
 
 func _ready() -> void:
 	super()
 	_ensure_melee_nodes()
+	_ensure_animation_nodes()
+	_play_zombie_animation(&"idle", true)
 
 
 func _physics_process(delta: float) -> void:
@@ -36,14 +63,16 @@ func _physics_process(delta: float) -> void:
 
 	if attack_phase != &"idle":
 		_update_attack(delta)
+		_update_zombie_animation(delta)
 		return
 
 	if not has_valid_target():
 		stop_moving()
+		_update_zombie_animation(delta)
 		return
 
 	var distance: float = global_position.distance_to(target.global_position)
-	face_position(target.global_position)
+	_face_target_for_attack(target.global_position)
 
 	if distance <= attack_range:
 		stop_moving()
@@ -52,32 +81,69 @@ func _physics_process(delta: float) -> void:
 	else:
 		move_toward_position(target.global_position, move_speed, delta)
 
+	_update_zombie_animation(delta)
+
+
+func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {}) -> float:
+	if is_dead:
+		return 0.0
+
+	last_damage_source = source
+	last_attack_info = attack_info
+	var old_hp: float = hp
+	hp = maxf(0.0, hp - amount)
+	if hp <= 0.0:
+		die()
+		return old_hp
+
+	_start_action_animation(&"take_damage", take_damage_animation_time)
+	return old_hp - hp
+
+
+func die() -> void:
+	if is_dead:
+		return
+
+	is_dead = true
+	_notify_player_kill_once()
+	attack_area.monitoring = false
+	warning_cone.visible = false
+	collision_layer = 0
+	collision_mask = 0
+	died.emit(self)
+	_start_action_animation(&"die", _get_full_animation_time())
+	get_tree().create_timer(_get_full_animation_time()).timeout.connect(queue_free)
+
 
 func _start_attack() -> void:
-	attack_phase = &"telegraph"
-	phase_time = telegraph_time
+	attack_phase = &"startup"
+	attack_elapsed = 0.0
 	hit_targets.clear()
 	# Warning is visible during windup; no damage happens yet.
 	warning_cone.visible = true
 	attack_area.monitoring = false
+	_start_action_animation(&"attack", _get_full_animation_time())
 
 
 func _update_attack(delta: float) -> void:
-	if has_valid_target():
-		face_position(target.global_position)
-
 	stop_moving()
-	phase_time -= delta
+	attack_elapsed += delta
 
-	if attack_phase == &"telegraph" and phase_time <= 0.0:
+	var active_start_time: float = _get_attack_active_start_time()
+	var active_end_time: float = _get_attack_active_end_time()
+	if attack_phase == &"startup" and attack_elapsed >= active_start_time:
 		attack_phase = &"active"
-		phase_time = hitbox_time
 		warning_cone.visible = false
 		# Damage only comes from this Area2D while it is active.
 		attack_area.monitoring = true
 		_damage_overlapping_players()
-	elif attack_phase == &"active" and phase_time <= 0.0:
+	elif attack_phase == &"active" and attack_elapsed >= active_end_time:
 		attack_area.monitoring = false
+		attack_phase = &"recovery"
+
+	if attack_elapsed >= _get_full_animation_time():
+		attack_area.monitoring = false
+		warning_cone.visible = false
 		attack_phase = &"idle"
 		cooldown_remaining = attack_cooldown
 
@@ -131,6 +197,213 @@ func _ensure_melee_nodes() -> void:
 		attack_collision.name = "CollisionPolygon2D"
 		attack_area.add_child(attack_collision)
 	attack_collision.polygon = cone_polygon
+
+
+func _face_target_for_attack(world_position: Vector2) -> void:
+	var offset: Vector2 = world_position - global_position
+	if offset.length_squared() <= 0.001:
+		return
+
+	facing_direction = offset.normalized()
+	rotation = facing_direction.angle()
+	if sprite != null:
+		sprite.rotation = -rotation
+
+
+func _update_zombie_animation(delta: float) -> void:
+	if action_animation_remaining > 0.0:
+		action_animation_remaining = maxf(0.0, action_animation_remaining - delta)
+		if sprite != null:
+			sprite.rotation = -rotation
+		return
+
+	var wanted_animation: StringName = &"idle"
+	if velocity.length_squared() > 16.0:
+		wanted_animation = &"run"
+
+	_play_zombie_animation(wanted_animation)
+
+
+func _start_action_animation(animation_name: StringName, duration: float) -> void:
+	action_animation = animation_name
+	action_animation_remaining = duration
+	_play_zombie_animation(animation_name, true)
+
+
+func _play_zombie_animation(animation_name: StringName, force_restart: bool = false) -> void:
+	var direction_row: int = _get_direction_row(facing_direction)
+	var tree_animation_name: StringName = StringName("%s_%d" % [String(animation_name), direction_row])
+	if current_animation_name == tree_animation_name and not force_restart:
+		return
+
+	current_animation_name = tree_animation_name
+	if sprite != null:
+		sprite.rotation = -rotation
+	if animation_state != null:
+		if force_restart:
+			animation_state.start(String(tree_animation_name), true)
+		else:
+			animation_state.travel(String(tree_animation_name))
+	else:
+		animation_player.play(String(tree_animation_name))
+
+
+func _ensure_animation_nodes() -> void:
+	var debug_body := get_node_or_null("DebugBody") as CanvasItem
+	if debug_body != null:
+		debug_body.visible = false
+	var debug_forward := get_node_or_null("DebugForward") as CanvasItem
+	if debug_forward != null:
+		debug_forward.visible = false
+
+	sprite = get_node_or_null("Sprite2D") as Sprite2D
+	if sprite == null:
+		sprite = Sprite2D.new()
+		sprite.name = "Sprite2D"
+		add_child(sprite)
+		move_child(sprite, 1)
+	sprite.centered = true
+	sprite.region_enabled = true
+	_load_visual_variant_textures()
+	sprite.texture = _get_animation_texture(&"idle")
+	sprite.region_rect = Rect2(Vector2.ZERO, Vector2(FRAME_SIZE))
+	sprite.rotation = -rotation
+
+	animation_player = get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if animation_player == null:
+		animation_player = AnimationPlayer.new()
+		animation_player.name = "AnimationPlayer"
+		add_child(animation_player)
+	animation_player.root_node = NodePath("..")
+
+	animation_tree = get_node_or_null("AnimationTree") as AnimationTree
+	if animation_tree == null:
+		animation_tree = AnimationTree.new()
+		animation_tree.name = "AnimationTree"
+		add_child(animation_tree)
+
+	_build_animation_library()
+	_build_animation_state_machine()
+
+	animation_tree.set("anim_player", NodePath("../AnimationPlayer"))
+	animation_tree.active = true
+	animation_state = animation_tree.get("parameters/playback") as AnimationNodeStateMachinePlayback
+
+
+func _build_animation_library() -> void:
+	if animation_player.has_animation_library(""):
+		animation_player.remove_animation_library("")
+
+	var library := AnimationLibrary.new()
+	var animation_bases: Array[StringName] = [
+		&"idle",
+		&"run",
+		&"attack",
+		&"take_damage",
+		&"die",
+	]
+
+	for animation_base in animation_bases:
+		for row in range(DIRECTION_COUNT):
+			var animation_name: String = "%s_%d" % [String(animation_base), row]
+			library.add_animation(animation_name, _create_direction_animation(animation_base, row))
+
+	animation_player.add_animation_library("", library)
+
+
+func _build_animation_state_machine() -> void:
+	var state_machine := AnimationNodeStateMachine.new()
+	var animation_bases: Array[StringName] = [
+		&"idle",
+		&"run",
+		&"attack",
+		&"take_damage",
+		&"die",
+	]
+
+	for animation_base in animation_bases:
+		for row in range(DIRECTION_COUNT):
+			var animation_name: String = "%s_%d" % [String(animation_base), row]
+			var animation_node := AnimationNodeAnimation.new()
+			animation_node.animation = animation_name
+			state_machine.add_node(animation_name, animation_node)
+
+	animation_tree.tree_root = state_machine
+
+
+func _create_direction_animation(animation_base: StringName, row: int) -> Animation:
+	var animation := Animation.new()
+	animation.length = _get_full_animation_time()
+	animation.loop_mode = _get_animation_loop_mode(animation_base)
+
+	var texture_track: int = animation.add_track(Animation.TYPE_VALUE)
+	animation.track_set_path(texture_track, NodePath("Sprite2D:texture"))
+	animation.track_set_interpolation_type(texture_track, Animation.INTERPOLATION_NEAREST)
+	animation.value_track_set_update_mode(texture_track, Animation.UPDATE_DISCRETE)
+	animation.track_insert_key(texture_track, 0.0, _get_animation_texture(animation_base))
+
+	var region_track: int = animation.add_track(Animation.TYPE_VALUE)
+	animation.track_set_path(region_track, NodePath("Sprite2D:region_rect"))
+	animation.track_set_interpolation_type(region_track, Animation.INTERPOLATION_NEAREST)
+	animation.value_track_set_update_mode(region_track, Animation.UPDATE_DISCRETE)
+
+	for frame in range(FRAMES_PER_DIRECTION):
+		var region := Rect2(
+			Vector2(frame * FRAME_SIZE.x, row * FRAME_SIZE.y),
+			Vector2(FRAME_SIZE)
+		)
+		animation.track_insert_key(region_track, float(frame) / animation_fps, region)
+
+	return animation
+
+
+func _get_animation_texture(animation_name: StringName) -> Texture2D:
+	if animation_textures.has(animation_name):
+		return animation_textures[animation_name] as Texture2D
+
+	return animation_textures[&"idle"] as Texture2D
+
+
+func _load_visual_variant_textures() -> void:
+	var variant_index: int = clampi(visual_variant_index, 0, VISUAL_VARIANT_DIRS.size() - 1)
+	if randomize_visual_variant:
+		variant_index = randi_range(0, VISUAL_VARIANT_DIRS.size() - 1)
+
+	var variant_dir: String = VISUAL_VARIANT_DIRS[variant_index]
+	animation_textures = {
+		&"idle": load("%s/Idle.png" % variant_dir),
+		&"run": load("%s/Run.png" % variant_dir),
+		&"attack": load("%s/Attack1.png" % variant_dir),
+		&"take_damage": load("%s/TakeDamage.png" % variant_dir),
+		&"die": load("%s/Die.png" % variant_dir),
+	}
+
+
+func _get_animation_loop_mode(animation_name: StringName) -> Animation.LoopMode:
+	if animation_name == &"idle" or animation_name == &"run":
+		return Animation.LOOP_LINEAR
+
+	return Animation.LOOP_NONE
+
+
+func _get_full_animation_time() -> float:
+	return float(FRAMES_PER_DIRECTION) / animation_fps
+
+
+func _get_attack_active_start_time() -> float:
+	return float(ATTACK_ACTIVE_START_FRAME) / animation_fps
+
+
+func _get_attack_active_end_time() -> float:
+	return float(ATTACK_ACTIVE_END_FRAME + 1) / animation_fps
+
+
+func _get_direction_row(direction: Vector2) -> int:
+	if direction.length_squared() <= 0.001:
+		return 0
+
+	var angle: float = fposmod(direction.angle(), TAU)
+	return int(round(angle / (PI * 0.25))) % DIRECTION_COUNT
 
 
 func _make_cone_polygon(radius: float, angle: float, steps: int) -> PackedVector2Array:

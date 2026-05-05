@@ -1,0 +1,92 @@
+extends Node
+class_name StatusEffectComponent
+
+@export var bleeding_duration: float = 3.0
+@export var bleeding_max_hp_damage_per_second: float = 0.05
+@export var poison_duration: float = 4.0
+@export var poison_damage_per_stack: float = 5.0
+@export var poison_max_stacks: int = 10
+
+var owner_enemy: EnemyBase
+var status_owner_player: Node
+var bleeding_time_left: float = 0.0
+var poison_time_left: float = 0.0
+var poison_stacks: int = 0
+var dot_tick_timer: float = 0.0
+
+
+func setup(enemy: EnemyBase) -> void:
+	owner_enemy = enemy
+
+
+func _process(delta: float) -> void:
+	tick(delta)
+
+
+func tick(delta: float) -> void:
+	if owner_enemy == null or owner_enemy.is_dead:
+		return
+
+	bleeding_time_left = maxf(0.0, bleeding_time_left - delta)
+	poison_time_left = maxf(0.0, poison_time_left - delta)
+	if poison_time_left <= 0.0:
+		poison_stacks = 0
+
+	dot_tick_timer += delta
+	while dot_tick_timer >= 1.0:
+		dot_tick_timer -= 1.0
+		_apply_dot_tick()
+
+
+func apply_status_effect(id: StringName, source_player: Node = null) -> void:
+	match id:
+		&"bleeding":
+			apply_bleeding(source_player)
+		&"poison":
+			apply_poison(source_player)
+
+
+func apply_bleeding(source_player: Node = null) -> void:
+	bleeding_time_left = bleeding_duration
+	if source_player != null:
+		status_owner_player = source_player
+	print("Bleeding applied to %s" % owner_enemy.name)
+
+
+func apply_poison(source_player: Node = null) -> void:
+	apply_poison_stacks(1, source_player)
+
+
+func apply_poison_stacks(amount: int, source_player: Node = null) -> void:
+	poison_stacks = clampi(poison_stacks + amount, 0, poison_max_stacks)
+	poison_time_left = poison_duration
+	if source_player != null:
+		status_owner_player = source_player
+	print("Poison applied to %s stacks=%d" % [owner_enemy.name, poison_stacks])
+
+
+func get_poison_stacks() -> int:
+	return poison_stacks
+
+
+func has_status(id: StringName) -> bool:
+	match id:
+		&"bleeding":
+			return bleeding_time_left > 0.0
+		&"poison":
+			return poison_time_left > 0.0 and poison_stacks > 0
+		_:
+			return false
+
+
+func _apply_dot_tick() -> void:
+	if bleeding_time_left > 0.0:
+		var bleed_damage: float = maxf(1.0, owner_enemy.max_hp * bleeding_max_hp_damage_per_second)
+		owner_enemy.take_damage(bleed_damage, status_owner_player, {"source": "bleeding", "direct": false})
+
+	if owner_enemy == null or owner_enemy.is_dead:
+		return
+
+	if poison_time_left > 0.0 and poison_stacks > 0:
+		var poison_damage: float = poison_damage_per_stack * float(poison_stacks)
+		owner_enemy.take_damage(poison_damage, status_owner_player, {"source": "poison", "direct": false})

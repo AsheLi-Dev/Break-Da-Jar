@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/StatModifierEffect.gd" id="2_stat"]
+
+[sub_resource type="Resource" id="Resource_damage"]
+script = ExtResource("2_stat")
+stat_name = &"chain_lightning_damage_scale_override"
+operation = &"set"
+value = 1.5
+
+[sub_resource type="Resource" id="Resource_containers"]
+script = ExtResource("2_stat")
+stat_name = &"chain_lightning_can_target_containers"
+operation = &"set"
+value = 1.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"storm_greed"
+display_name = "Storm Greed"
+description = "Your Chain Lightning deals 150% ATK damage, but it can chain to containers."
+category = &"attack"
+rarity = &"legendary"
+effects = Array[Resource]([SubResource("Resource_damage"), SubResource("Resource_containers")])

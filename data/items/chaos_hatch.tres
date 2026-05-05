@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+event_name = &"container_broken"
+effect_type = &"container_break_random_proc"
+chance = 1.0
+damage_scale = 0.5
+chain_count = 3
+radius = 180.0
+internal_cooldown = 0.05
+choices = Array[StringName]([&"chain_lightning", &"fireball"])
+only_direct_container_breaks = true
+
+[resource]
+script = ExtResource("1_def")
+id = &"chaos_hatch"
+display_name = "Chaos Hatch"
+description = "Breaking a container randomly triggers Chain Lightning or Fireball."
+category = &"utility"
+rarity = &"legendary"
+effects = Array[Resource]([SubResource("Resource_effect")])

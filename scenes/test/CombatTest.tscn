@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/ZombieMelee.tscn" id="2_melee"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/ZombieRanged.tscn" id="3_ranged"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/ZombieElite.tscn" id="4_elite"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/AcidZombie.tscn" id="3_ranged"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/EliteBrute.tscn" id="4_elite"]
 
 [node name="CombatTest" type="Node2D"]
 
@@ -19,8 +19,8 @@ position = Vector2(220, 330)
 [node name="ZombieMelee" parent="." instance=ExtResource("2_melee")]
 position = Vector2(680, 250)
 
-[node name="ZombieRanged" parent="." instance=ExtResource("3_ranged")]
+[node name="AcidZombie" parent="." instance=ExtResource("3_ranged")]
 position = Vector2(820, 390)
 
-[node name="ZombieElite" parent="." instance=ExtResource("4_elite")]
+[node name="EliteBrute" parent="." instance=ExtResource("4_elite")]
 position = Vector2(940, 250)

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/StatModifierEffect.gd" id="2_stat"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_stat")
+stat_name = &"lifesteal"
+operation = &"add"
+value = 0.1
+
+[resource]
+script = ExtResource("1_def")
+id = &"blood_sanctified_blade"
+display_name = "Blood-Sanctified Blade"
+description = "+10% Lifesteal from direct player damage."
+category = &"defense"
+rarity = &"rare"
+effects = Array[Resource]([SubResource("Resource_effect")])

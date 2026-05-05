@@ -1,0 +1,72 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/EliteBrute.gd" id="1_elite"]
+[ext_resource type="PackedScene" path="res://scenes/projectiles/Projectile.tscn" id="2_projectile"]
+[ext_resource type="Texture2D" path="res://assets/zombies/elite brute zombie/Idle.png" id="3_idle"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 24.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_melee"]
+radius = 105.0
+
+[node name="EliteBrute" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_elite")
+max_hp = 120.0
+move_speed = 78.0
+damage = 10.0
+attack_cooldown = 1.2
+projectile_scene = ExtResource("2_projectile")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="DebugBody" type="Polygon2D" parent="."]
+visible = false
+color = Color(0.42, 0.22, 0.5, 1)
+polygon = PackedVector2Array(24, 0, 22.5526, 8.20848, 18.3851, 15.4269, 12, 20.7846, 4.16756, 23.6354, -4.16756, 23.6354, -12, 20.7846, -18.3851, 15.4269, -22.5526, 8.20848, -24, 0, -22.5526, -8.20848, -18.3851, -15.4269, -12, -20.7846, -4.16756, -23.6354, 4.16756, -23.6354, 12, -20.7846, 18.3851, -15.4269, 22.5526, -8.20848)
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("3_idle")
+centered = true
+region_enabled = true
+region_rect = Rect2(0, 0, 192, 192)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("..")
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+anim_player = NodePath("../AnimationPlayer")
+
+[node name="MeleeWarning" type="Polygon2D" parent="."]
+visible = false
+color = Color(1, 0.15, 0, 0.22)
+
+[node name="MeleeHitbox" type="Area2D" parent="."]
+collision_layer = 8
+collision_mask = 1
+monitoring = false
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="MeleeHitbox"]
+shape = SubResource("CircleShape2D_melee")
+
+[node name="ShoutWarning" type="Polygon2D" parent="."]
+visible = false
+color = Color(0.45, 0.9, 1, 0.22)
+
+[node name="ShoutHitbox" type="Area2D" parent="."]
+collision_layer = 8
+collision_mask = 1
+monitoring = false
+monitorable = false
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="ShoutHitbox"]
+
+[node name="RangedWarning" type="Line2D" parent="."]
+visible = false
+width = 8.0
+default_color = Color(0.5, 1, 0.1, 0.55)
+points = PackedVector2Array(0, 0, 260, 0)

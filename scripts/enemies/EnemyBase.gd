@@ -18,11 +18,16 @@ var hp: float
 var target: Node2D
 var is_dead: bool = false
 var knockback_velocity: Vector2 = Vector2.ZERO
+var status_effects: StatusEffectComponent
+var last_damage_source: Node
+var last_attack_info: Dictionary = {}
+var kill_notified: bool = false
 
 
 func _ready() -> void:
 	hp = max_hp
 	add_to_group("enemy")
+	_ensure_status_effects()
 	_find_target()
 	_ensure_placeholder_visual()
 
@@ -38,13 +43,17 @@ func _physics_process(delta: float) -> void:
 	_chase_target(delta)
 
 
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {}) -> float:
 	if is_dead:
-		return
+		return 0.0
 
+	last_damage_source = source
+	last_attack_info = attack_info
+	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
 	if hp <= 0.0:
 		die()
+	return old_hp - hp
 
 
 func die() -> void:
@@ -52,8 +61,27 @@ func die() -> void:
 		return
 
 	is_dead = true
+	_notify_player_kill_once()
 	died.emit(self)
 	queue_free()
+
+
+func apply_status_effect(id: StringName, source_player: Node = null) -> void:
+	if status_effects != null:
+		status_effects.apply_status_effect(id, source_player)
+
+
+func apply_poison_stacks(amount: int, source_player: Node = null) -> void:
+	if status_effects != null:
+		status_effects.apply_poison_stacks(amount, source_player)
+
+
+func get_poison_stacks() -> int:
+	return status_effects.get_poison_stacks() if status_effects != null else 0
+
+
+func has_status(id: StringName) -> bool:
+	return status_effects.has_status(id) if status_effects != null else false
 
 
 func apply_knockback(force: Vector2) -> void:
@@ -138,6 +166,23 @@ func _ensure_placeholder_visual() -> void:
 	forward.add_point(Vector2.ZERO)
 	forward.add_point(Vector2(24.0, 0.0))
 	add_child(forward)
+
+
+func _ensure_status_effects() -> void:
+	status_effects = get_node_or_null("StatusEffectComponent") as StatusEffectComponent
+	if status_effects == null:
+		status_effects = StatusEffectComponent.new()
+		status_effects.name = "StatusEffectComponent"
+		add_child(status_effects)
+	status_effects.setup(self)
+
+
+func _notify_player_kill_once() -> void:
+	if kill_notified:
+		return
+	kill_notified = true
+	if last_damage_source != null and last_damage_source.has_method("notify_enemy_killed"):
+		last_damage_source.notify_enemy_killed(self)
 
 
 func _circle_polygon(radius: float, points: int) -> PackedVector2Array:
