@@ -28,3 +28,11 @@ func add_item(item: ItemDefinition) -> void:
 			effect_instance.configure_instance(item.id, effect_index, int(item_counts[item.id]) - 1)
 		if effect_instance.has_method("apply_to"):
 			effect_instance.apply_to(owner_player)
+
+	for applied_effect in applied_effects:
+		if applied_effect != null and applied_effect.has_method("on_item_count_changed"):
+			applied_effect.on_item_count_changed(item.id)
+
+
+func get_item_count(item_id: StringName) -> int:
+	return int(item_counts.get(item_id, 0))

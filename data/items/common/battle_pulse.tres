@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_attack_speed"]
+script = ExtResource("2_event")
+effect_type = &"periodic_timed_stat_buff"
+stat_name = &"attack_speed_bonus"
+value = 0.2
+duration = 3.0
+max_stacks = 1
+internal_cooldown = 10.0
+
+[sub_resource type="Resource" id="Resource_move_speed"]
+script = ExtResource("2_event")
+effect_type = &"periodic_timed_stat_buff"
+stat_name = &"movement_speed_bonus"
+value = 0.2
+duration = 3.0
+max_stacks = 1
+internal_cooldown = 10.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"battle_pulse"
+display_name = "Battle Pulse"
+description = "Every 10 seconds, gain 20% attack speed and movement speed for 3 seconds."
+category = &"utility"
+rarity = &"common"
+tags = Array[StringName]([&"AttackSpeed", &"MoveSpeed", &"Timed"])
+effects = Array[Resource]([SubResource("Resource_attack_speed"), SubResource("Resource_move_speed")])

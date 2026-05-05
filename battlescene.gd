@@ -84,12 +84,17 @@ var game_over: bool = false
 var hud_message: String = ""
 var round_time_remaining: float = 0.0
 var auto_break_triggered: bool = false
+var shop_transition_pending: bool = false
 
 var player: Player
 var camera: Camera2D
 var hud_label: Label
 var status_panel: Panel
 var status_label: Label
+var talent_tree_layer: CanvasLayer
+var talent_tree_panel: Panel
+var talent_point_label: Label
+var talent_buttons: Dictionary = {}
 
 
 func _ready() -> void:
@@ -118,6 +123,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_tree().reload_current_scene()
 			return
 		if Input.is_action_just_pressed("shop_next_round") and phase == Phase.SHOP:
+			if _is_talent_tree_open():
+				return
 			_advance_from_shop()
 
 
@@ -159,6 +166,9 @@ func _spawn_player() -> void:
 	player.global_position = PLAYER_POSITION
 	player.movement_bounds_enabled = true
 	player.movement_bounds = PLAY_AREA_RECT
+	player.experience_changed.connect(_on_player_progress_changed)
+	player.talent_points_changed.connect(_on_player_talent_points_changed)
+	player.talent_unlocked.connect(_on_player_talent_unlocked)
 	add_child(player)
 
 
@@ -180,12 +190,13 @@ func _start_combat_round() -> void:
 	phase = Phase.COMBAT
 	round_time_remaining = ROUND_CONTAINER_AUTO_BREAK_TIME
 	auto_break_triggered = false
+	shop_transition_pending = false
 	hud_message = "Round %d started." % current_round
 	status_panel.visible = false
 	_clear_shop_containers()
 	_spawn_containers()
 	if is_instance_valid(player):
-		player.emit_round_started()
+		player.emit_round_started(current_round)
 	_update_hud()
 
 
@@ -274,10 +285,11 @@ func _create_combat_container(container_position: Vector2, container_number: int
 	return container
 
 
-func _create_shop_container(container_position: Vector2, index: int) -> BreakableContainer:
-	var category: int = _roll_shop_category()
-	var tier: int = _roll_shop_tier()
-	var price: int = _get_shop_price(category, tier)
+func _create_shop_container(container_position: Vector2, index: int, forced_category: int = -1, forced_tier: int = -1) -> BreakableContainer:
+	var category: int = forced_category if forced_category >= 0 else _roll_shop_category()
+	var tier: int = forced_tier if forced_tier >= 0 else _roll_shop_tier()
+	var base_price: int = _get_shop_price(category, tier)
+	var price: int = _apply_shop_price_discount(base_price)
 	var container := _create_base_container(container_position, "ShopJar%d" % index)
 	container.is_shop_container = true
 	container.container_type = ContainerType.URN
@@ -294,6 +306,7 @@ func _create_shop_container(container_position: Vector2, index: int) -> Breakabl
 	shop_container_data[container] = {
 		"category": category,
 		"tier": tier,
+		"base_price": base_price,
 		"price": price,
 	}
 	return container
@@ -398,6 +411,9 @@ func _on_shop_container_broken(container: BreakableContainer, _attack_info: Dict
 		shop_containers.erase(container)
 
 	var data: Dictionary = shop_container_data.get(container, {})
+	var price: int = int(data.get("price", 0))
+	if is_instance_valid(player):
+		player.emit_shop_container_broken(container, price)
 	var category: int = int(data.get("category", ShopCategory.BROWN))
 	var tier: int = int(data.get("tier", ShopTier.COMMON))
 	var rarity: StringName = _roll_item_rarity_for_tier(tier)
@@ -408,6 +424,35 @@ func _on_shop_container_broken(container: BreakableContainer, _attack_info: Dict
 	else:
 		hud_message = "The shop jar was empty."
 	shop_container_data.erase(container)
+	_update_hud()
+
+
+func add_player_gold(amount: int, reason: String = "") -> void:
+	if amount <= 0:
+		return
+	gold += amount
+	if reason != "":
+		hud_message = "%s refunded %d gold." % [reason, amount]
+	else:
+		hud_message = "Gained %d gold." % amount
+	_update_hud()
+
+
+func refresh_shop_container_prices() -> void:
+	for container in shop_containers:
+		if not is_instance_valid(container):
+			continue
+		var data: Dictionary = shop_container_data.get(container, {})
+		if data.is_empty():
+			continue
+		var category: int = int(data.get("category", ShopCategory.BROWN))
+		var tier: int = int(data.get("tier", ShopTier.COMMON))
+		var base_price: int = int(data.get("base_price", _get_shop_price(category, tier)))
+		var price: int = _apply_shop_price_discount(base_price)
+		data["base_price"] = base_price
+		data["price"] = price
+		shop_container_data[container] = data
+		_update_shop_label(container, category, tier, price)
 	_update_hud()
 
 
@@ -473,18 +518,26 @@ func _on_enemy_died(enemy: EnemyBase) -> void:
 	var reward: int = int(enemy_gold_rewards.get(enemy, MELEE_ZOMBIE_GOLD))
 	enemy_gold_rewards.erase(enemy)
 	gold += reward
-	hud_message = "+%d gold" % reward
+	if is_instance_valid(player):
+		player.gain_experience(reward)
+	hud_message = "+%d gold, +%d EXP" % [reward, reward]
 	_update_hud()
 	_check_combat_clear()
 
 
 func _enter_shop_phase() -> void:
+	if phase != Phase.COMBAT or game_over:
+		return
+
+	shop_transition_pending = false
 	phase = Phase.SHOP
 	round_time_remaining = 0.0
 	hud_message = "Shop phase. Shoot jars to buy items, or press Enter for next round."
 	if is_instance_valid(player):
 		player.emit_round_ended()
+		player.settle_round_level_rewards()
 	_spawn_shop_containers()
+	_maybe_show_talent_tree()
 	_update_hud()
 
 
@@ -495,9 +548,18 @@ func _spawn_shop_containers() -> void:
 		var container := _create_shop_container(position, index + 1)
 		shop_containers.append(container)
 		add_child(container)
+	var extra_rare_count: int = player.consume_extra_rare_shop_jars() if is_instance_valid(player) else 0
+	for extra_index in range(extra_rare_count):
+		var index: int = SHOP_CONTAINER_COUNT + extra_index
+		var position: Vector2 = SHOP_CONTAINER_START + SHOP_CONTAINER_SPACING * float(index)
+		var container := _create_shop_container(position, index + 1, ShopCategory.BROWN, ShopTier.RARE)
+		shop_containers.append(container)
+		add_child(container)
 
 
 func _advance_from_shop() -> void:
+	if _is_talent_tree_open():
+		return
 	if current_round >= MAX_ROUNDS:
 		_win_game()
 		return
@@ -514,13 +576,13 @@ func _create_hud() -> void:
 	var hud_bg := ColorRect.new()
 	hud_bg.color = Color(0.04, 0.06, 0.07, 0.72)
 	hud_bg.position = Vector2(24, 24)
-	hud_bg.size = Vector2(760, 78)
+	hud_bg.size = Vector2(1060, 78)
 	hud_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.add_child(hud_bg)
 
 	hud_label = Label.new()
 	hud_label.position = Vector2(36, 30)
-	hud_label.size = Vector2(730, 66)
+	hud_label.size = Vector2(1030, 66)
 	hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	canvas.add_child(hud_label)
 
@@ -537,6 +599,179 @@ func _create_hud() -> void:
 	status_label.size = Vector2(492, 180)
 	status_panel.add_child(status_label)
 
+	_create_talent_tree_ui()
+
+
+func _create_talent_tree_ui() -> void:
+	talent_tree_layer = CanvasLayer.new()
+	talent_tree_layer.name = "TalentTreeLayer"
+	talent_tree_layer.layer = 30
+	talent_tree_layer.visible = false
+	add_child(talent_tree_layer)
+
+	var blocker := ColorRect.new()
+	blocker.name = "Blocker"
+	blocker.color = Color(0.0, 0.0, 0.0, 0.58)
+	blocker.position = Vector2.ZERO
+	blocker.size = SCREEN_SIZE
+	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+	talent_tree_layer.add_child(blocker)
+
+	talent_tree_panel = Panel.new()
+	talent_tree_panel.name = "TalentTreePanel"
+	talent_tree_panel.position = Vector2(600, 72)
+	talent_tree_panel.size = Vector2(720, 936)
+	talent_tree_layer.add_child(talent_tree_panel)
+
+	var title := Label.new()
+	title.name = "Title"
+	title.text = "Talent Tree"
+	title.position = Vector2(32, 22)
+	title.size = Vector2(360, 32)
+	title.add_theme_font_size_override("font_size", 24)
+	talent_tree_panel.add_child(title)
+
+	talent_point_label = Label.new()
+	talent_point_label.name = "TalentPointLabel"
+	talent_point_label.position = Vector2(32, 58)
+	talent_point_label.size = Vector2(360, 28)
+	talent_tree_panel.add_child(talent_point_label)
+
+	var close_button := Button.new()
+	close_button.name = "CloseButton"
+	close_button.text = "Close"
+	close_button.position = Vector2(588, 24)
+	close_button.size = Vector2(96, 34)
+	close_button.pressed.connect(_hide_talent_tree)
+	talent_tree_panel.add_child(close_button)
+
+	var graph := Control.new()
+	graph.name = "Graph"
+	graph.position = Vector2(0, 96)
+	graph.size = Vector2(720, 820)
+	graph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	talent_tree_panel.add_child(graph)
+
+	_add_talent_connection_lines(graph)
+	_add_talent_buttons(graph)
+	_update_talent_tree_ui()
+
+
+func _add_talent_connection_lines(graph: Control) -> void:
+	if not is_instance_valid(player):
+		return
+
+	for connection in player.get_talent_connections():
+		var from_id: StringName = connection[0]
+		var to_id: StringName = connection[1]
+		var from_position: Vector2 = _get_talent_ui_position(player.get_talent_node_grid_position(from_id))
+		var to_position: Vector2 = _get_talent_ui_position(player.get_talent_node_grid_position(to_id))
+		var line := ColorRect.new()
+		line.name = "TalentConnection"
+		line.color = Color(0.42, 0.48, 0.44, 0.85)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if absf(from_position.x - to_position.x) < 0.1:
+			line.position = Vector2(from_position.x - 2.0, minf(from_position.y, to_position.y))
+			line.size = Vector2(4.0, absf(from_position.y - to_position.y))
+		else:
+			line.position = Vector2(minf(from_position.x, to_position.x), from_position.y - 2.0)
+			line.size = Vector2(absf(from_position.x - to_position.x), 4.0)
+		graph.add_child(line)
+
+
+func _add_talent_buttons(graph: Control) -> void:
+	if not is_instance_valid(player):
+		return
+
+	talent_buttons.clear()
+	for node_id in player.get_talent_node_ids():
+		var button := Button.new()
+		button.name = String(node_id)
+		button.text = player.get_talent_display_name(node_id)
+		button.tooltip_text = player.get_talent_description(node_id)
+		button.position = _get_talent_ui_position(player.get_talent_node_grid_position(node_id)) - Vector2(24, 24)
+		button.size = Vector2(48, 48)
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(_on_talent_button_pressed.bind(node_id))
+		graph.add_child(button)
+		talent_buttons[node_id] = button
+
+
+func _get_talent_ui_position(coord: Vector2i) -> Vector2:
+	var spacing := Vector2(78.0, 86.0)
+	var center_x: float = 360.0
+	var bottom_y: float = 716.0
+	return Vector2(
+		center_x + (float(coord.x) - 2.5) * spacing.x,
+		bottom_y - float(coord.y) * spacing.y
+	)
+
+
+func _on_talent_button_pressed(node_id: StringName) -> void:
+	if not is_instance_valid(player):
+		return
+
+	if player.unlock_talent(node_id):
+		hud_message = "Unlocked +1 ATK."
+	_update_talent_tree_ui()
+	_update_hud()
+
+
+func _on_player_progress_changed(_current_exp: int, _required_exp: int, _level: int) -> void:
+	_update_hud()
+
+
+func _on_player_talent_points_changed(_unspent_points: int, _pending_points: int) -> void:
+	_update_talent_tree_ui()
+	_update_hud()
+
+
+func _on_player_talent_unlocked(_node_id: StringName) -> void:
+	_update_talent_tree_ui()
+
+
+func _maybe_show_talent_tree() -> void:
+	if is_instance_valid(player) and player.unspent_talent_points > 0:
+		_show_talent_tree()
+
+
+func _show_talent_tree() -> void:
+	if talent_tree_layer == null:
+		return
+	talent_tree_layer.visible = true
+	_update_talent_tree_ui()
+
+
+func _hide_talent_tree() -> void:
+	if talent_tree_layer == null:
+		return
+	talent_tree_layer.visible = false
+
+
+func _is_talent_tree_open() -> bool:
+	return talent_tree_layer != null and talent_tree_layer.visible
+
+
+func _update_talent_tree_ui() -> void:
+	if talent_point_label == null or not is_instance_valid(player):
+		return
+
+	talent_point_label.text = "Unspent Talent Points: %d" % player.unspent_talent_points
+	for node_id in talent_buttons.keys():
+		var button := talent_buttons[node_id] as Button
+		if button == null:
+			continue
+
+		var unlocked: bool = player.unlocked_talents.has(node_id)
+		var can_unlock: bool = player.can_unlock_talent(node_id)
+		button.disabled = unlocked or not can_unlock
+		if unlocked:
+			button.modulate = Color(1.0, 0.86, 0.32)
+		elif can_unlock:
+			button.modulate = Color(0.42, 0.92, 0.58)
+		else:
+			button.modulate = Color(0.44, 0.48, 0.48)
+
 
 func _cleanup_enemy_list() -> void:
 	for enemy in enemies.duplicate():
@@ -550,8 +785,16 @@ func _update_hud() -> void:
 		return
 
 	var hp: int = 0
+	var level: int = 1
+	var experience: int = 0
+	var required_experience: int = 10
+	var unspent_talents: int = 0
 	if is_instance_valid(player):
 		hp = int(ceil(player.hp))
+		level = player.level
+		experience = player.experience
+		required_experience = player.get_required_exp_for_next_level()
+		unspent_talents = player.unspent_talent_points
 
 	var phase_label: String = "Combat" if phase == Phase.COMBAT else "Shop"
 	var objective_count: int = containers.size() if phase == Phase.COMBAT else shop_containers.size()
@@ -565,12 +808,16 @@ func _update_hud() -> void:
 			hud_message,
 		]
 
-	hud_label.text = "Round: %d/%d   Phase: %s   Gold: %d   HP: %d   %s: %d   Zombies: %d%s" % [
+	hud_label.text = "Round: %d/%d   Phase: %s   Gold: %d   HP: %d   Lv: %d   EXP: %d/%d   Talent: %d   %s: %d   Zombies: %d%s" % [
 		current_round,
 		MAX_ROUNDS,
 		phase_label,
 		gold,
 		hp,
+		level,
+		experience,
+		required_experience,
+		unspent_talents,
 		objective_label,
 		objective_count,
 		enemies.size(),
@@ -584,11 +831,12 @@ func _check_defeat() -> void:
 
 
 func _check_combat_clear() -> void:
-	if phase != Phase.COMBAT or game_over:
+	if phase != Phase.COMBAT or game_over or shop_transition_pending:
 		return
 
 	if containers.is_empty() and enemies.is_empty():
-		_enter_shop_phase()
+		shop_transition_pending = true
+		call_deferred("_enter_shop_phase")
 
 
 func _update_round_timer(delta: float) -> void:
@@ -705,6 +953,28 @@ func _get_shop_price(category: int, tier: int) -> int:
 			return 75 if is_brown else 90
 		_:
 			return 12 if is_brown else 15
+
+
+func _get_discounted_shop_price(category: int, tier: int) -> int:
+	return _apply_shop_price_discount(_get_shop_price(category, tier))
+
+
+func _apply_shop_price_discount(base_price: int) -> int:
+	var price: int = base_price
+	if is_instance_valid(player):
+		price = maxi(1, floori(float(price) * player.get_shop_price_multiplier()))
+	return price
+
+
+func _update_shop_label(container: BreakableContainer, category: int, tier: int, price: int) -> void:
+	var label := container.get_node_or_null("ShopLabel") as Label
+	if label == null:
+		return
+	label.text = "%s %s\n%dg" % [
+		_get_shop_category_label(category),
+		_get_shop_tier_label(tier),
+		price,
+	]
 
 
 func _get_shop_category_filter(category: int) -> StringName:

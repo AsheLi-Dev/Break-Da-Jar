@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+event_name = &"round_started"
+effect_type = &"lose_current_hp_percent_then_heal_over_time"
+value = 0.5
+duration = 30.0
+damage_scale = 1.5
+
+[resource]
+script = ExtResource("1_def")
+id = &"blood_renewal_idol"
+display_name = "Blood Renewal Idol"
+description = "At the start of each round, lose 50% of your current HP, then recover 150% of the HP lost per copy over 30 seconds."
+category = &"defense"
+rarity = &"legendary"
+tags = Array[StringName]([&"RoundStart", &"Heal", &"HP"])
+effects = Array[Resource]([SubResource("Resource_effect")])

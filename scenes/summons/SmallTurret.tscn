@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/summons/SmallTurret.gd" id="1_turret"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_detection"]
+radius = 220.0
+
+[node name="SmallTurret" type="Node2D"]
+script = ExtResource("1_turret")
+
+[node name="Sprite2D" type="Polygon2D" parent="."]
+color = Color(0.9, 0.78, 0.28, 1)
+polygon = PackedVector2Array(0, -14, 13, 8, 0, 14, -13, 8)
+
+[node name="DetectionArea" type="Area2D" parent="."]
+monitoring = false
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DetectionArea"]
+shape = SubResource("CircleShape2D_detection")
+
+[node name="FirePoint" type="Marker2D" parent="."]
+
+[node name="LifetimeTimer" type="Timer" parent="."]
+one_shot = true

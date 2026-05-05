@@ -11,7 +11,11 @@ func _ready() -> void:
 func load_items_from_folder(path: String) -> void:
 	items_by_id.clear()
 	all_items.clear()
+	_load_items_recursive(path)
+	print("Item database loaded %d items." % all_items.size())
 
+
+func _load_items_recursive(path: String) -> void:
 	var dir := DirAccess.open(path)
 	if dir == null:
 		push_warning("Item folder not found: %s" % path)
@@ -20,14 +24,19 @@ func load_items_from_folder(path: String) -> void:
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
-		if not dir.current_is_dir() and file_name.ends_with(".tres"):
-			var item := load(path.path_join(file_name)) as ItemDefinition
+		if file_name == "." or file_name == "..":
+			file_name = dir.get_next()
+			continue
+		var item_path := path.path_join(file_name)
+		if dir.current_is_dir():
+			_load_items_recursive(item_path)
+		elif file_name.ends_with(".tres"):
+			var item := load(item_path) as ItemDefinition
 			if item != null:
 				items_by_id[item.id] = item
 				all_items.append(item)
 		file_name = dir.get_next()
 	dir.list_dir_end()
-	print("Item database loaded %d items." % all_items.size())
 
 
 func get_item(id: StringName) -> ItemDefinition:

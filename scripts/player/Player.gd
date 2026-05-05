@@ -9,6 +9,7 @@ const ATTACK_PROJECTILE_FRAME := 7
 const ABILITY_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/ability.png")
 const ATTACK_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack.png")
 const ATTACK_ALT_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack_alt.png")
+const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
 const IDLE_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/idle.png")
 const ROLLING_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/rolling.png")
 const RUN_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/run.png")
@@ -17,11 +18,17 @@ signal attack_hit(enemy: Node, damage_dealt: float, attack_info: Dictionary)
 signal attack_started(origin: Vector2, direction: Vector2, attack_info: Dictionary)
 signal enemy_killed(enemy: Node)
 signal container_broken(container: Node, attack_info: Dictionary)
+signal shop_container_broken(container: Node, gold_cost: int)
 signal dash_started(direction: Vector2)
 signal dash_ended(direction: Vector2)
-signal round_started()
+signal round_started(round_index: int)
 signal round_ended()
+signal damage_taken(final_damage_taken: float)
 signal hp_changed(current_hp: int, max_hp: int)
+signal player_leveled_up(new_level: int)
+signal experience_changed(current_exp: int, required_exp: int, level: int)
+signal talent_points_changed(unspent_points: int, pending_points: int)
+signal talent_unlocked(node_id: StringName)
 
 enum State {
 	NORMAL,
@@ -90,6 +97,21 @@ var slow_remaining: float = 0.0
 var stats: StatsComponent
 var inventory: InventoryComponent
 var temporary_buffs: TemporaryBuffComponent
+var level: int = 1
+var experience: int = 0
+var pending_talent_points: int = 0
+var unspent_talent_points: int = 0
+var unlocked_talents: Array[StringName] = []
+var talent_slide_attack_speed_enabled: bool = false
+var talent_next_attack_after_slide_enabled: bool = false
+var talent_slide_damage_reduction_enabled: bool = false
+var talent_max_hp_from_atk_enabled: bool = false
+var talent_heal_on_kill_enabled: bool = false
+var applied_max_hp_from_atk: int = 0
+var next_attack_after_slide_ready: bool = false
+var next_attack_damage_bonus: float = 0.0
+var shop_price_multiplier: float = 1.0
+var extra_rare_shop_jars_pending: int = 0
 var state: int = State.NORMAL
 var facing_direction: Vector2 = Vector2.RIGHT
 var animation_direction: Vector2 = Vector2.RIGHT
@@ -163,12 +185,17 @@ func _physics_process(delta: float) -> void:
 func take_damage(amount: float) -> void:
 	if is_invincible:
 		return
+	if stats != null and randf() < 1.0 - stats.dodge_chance_multiplier:
+		return
 
 	var final_damage: float = amount
 	if stats != null:
 		final_damage = float(stats.calculate_incoming_damage(amount))
+	if final_damage <= 0.0:
+		return
 	hp = maxf(0.0, hp - final_damage)
 	hp_changed.emit(roundi(hp), roundi(max_hp))
+	damage_taken.emit(final_damage)
 	if hp <= 0.0:
 		die()
 
@@ -178,6 +205,18 @@ func heal(amount: float) -> void:
 		return
 	hp = minf(max_hp, hp + amount)
 	hp_changed.emit(roundi(hp), roundi(max_hp))
+
+
+func lose_hp(amount: float) -> float:
+	if amount <= 0.0:
+		return 0.0
+
+	var old_hp: float = hp
+	hp = maxf(0.0, hp - amount)
+	hp_changed.emit(roundi(hp), roundi(max_hp))
+	if hp <= 0.0:
+		die()
+	return old_hp - hp
 
 
 func get_stats() -> StatsComponent:
@@ -192,9 +231,129 @@ func get_base_attack_damage() -> float:
 	return projectile_damage
 
 
+func gain_experience(amount: int) -> void:
+	if amount <= 0:
+		return
+
+	experience += amount
+	while experience >= _get_required_exp_for_next_level():
+		experience -= _get_required_exp_for_next_level()
+		_level_up()
+
+	experience_changed.emit(experience, _get_required_exp_for_next_level(), level)
+
+
+func settle_round_level_rewards() -> void:
+	if pending_talent_points <= 0:
+		return
+
+	unspent_talent_points += pending_talent_points
+	pending_talent_points = 0
+	talent_points_changed.emit(unspent_talent_points, pending_talent_points)
+
+
+func get_required_exp_for_next_level() -> int:
+	return _get_required_exp_for_next_level()
+
+
+func get_talent_node_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for coord in _get_talent_coords():
+		ids.append(_get_talent_node_id(coord))
+	return ids
+
+
+func get_talent_node_grid_position(node_id: StringName) -> Vector2i:
+	for coord in _get_talent_coords():
+		if _get_talent_node_id(coord) == node_id:
+			return coord
+	return Vector2i.ZERO
+
+
+func get_talent_display_name(node_id: StringName) -> String:
+	var definition: Dictionary = _get_talent_definition(node_id)
+	return String(definition.get("name", "+1 ATK"))
+
+
+func get_talent_description(node_id: StringName) -> String:
+	var definition: Dictionary = _get_talent_definition(node_id)
+	return String(definition.get("description", "+1 ATK"))
+
+
+func get_talent_connections() -> Array:
+	var connections: Array = []
+	for coord in _get_talent_coords():
+		var node_id: StringName = _get_talent_node_id(coord)
+		for neighbor in _get_talent_neighbor_coords(coord):
+			if _is_talent_coord_valid(neighbor):
+				var neighbor_id: StringName = _get_talent_node_id(neighbor)
+				if String(node_id) < String(neighbor_id):
+					connections.append([node_id, neighbor_id])
+	return connections
+
+
+func can_unlock_talent(node_id: StringName) -> bool:
+	if unspent_talent_points <= 0:
+		return false
+	if unlocked_talents.has(node_id):
+		return false
+
+	var coord: Vector2i = get_talent_node_grid_position(node_id)
+	if not _is_talent_coord_valid(coord):
+		return false
+	if _is_talent_start_coord(coord):
+		return true
+
+	for neighbor in _get_talent_neighbor_coords(coord):
+		if unlocked_talents.has(_get_talent_node_id(neighbor)):
+			return true
+
+	return false
+
+
+func unlock_talent(node_id: StringName) -> bool:
+	if not can_unlock_talent(node_id):
+		return false
+
+	unspent_talent_points -= 1
+	unlocked_talents.append(node_id)
+	_apply_talent_effect(node_id)
+	talent_unlocked.emit(node_id)
+	talent_points_changed.emit(unspent_talent_points, pending_talent_points)
+	return true
+
+
 func add_item(item: ItemDefinition) -> void:
 	if inventory != null:
 		inventory.add_item(item)
+
+
+func get_item_count(item_id: StringName) -> int:
+	return inventory.get_item_count(item_id) if inventory != null else 0
+
+
+func add_shop_price_multiplier(multiplier: float) -> void:
+	shop_price_multiplier *= maxf(multiplier, 0.01)
+	if get_tree().current_scene != null and get_tree().current_scene.has_method("refresh_shop_container_prices"):
+		get_tree().current_scene.refresh_shop_container_prices()
+
+
+func get_shop_price_multiplier() -> float:
+	return shop_price_multiplier
+
+
+func queue_extra_rare_shop_jar(amount: int = 1) -> void:
+	extra_rare_shop_jars_pending += maxi(amount, 0)
+
+
+func consume_extra_rare_shop_jars() -> int:
+	var amount: int = extra_rare_shop_jars_pending
+	extra_rare_shop_jars_pending = 0
+	return amount
+
+
+func add_next_attack_damage_bonus(bonus: float) -> void:
+	next_attack_damage_bonus += maxf(bonus, 0.0)
 
 
 func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Dictionary = {}) -> float:
@@ -203,9 +362,19 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 
 	var final_damage: float = raw_damage
 	if stats != null:
+		if _should_consume_next_slide_attack(attack_info):
+			final_damage *= 1.5
+			next_attack_after_slide_ready = false
+			attack_info["talent_slide_attack_bonus"] = true
+		if bool(attack_info.get("direct", true)) and next_attack_damage_bonus > 0.0:
+			final_damage *= 1.0 + next_attack_damage_bonus
+			attack_info["next_attack_damage_bonus"] = next_attack_damage_bonus
+			next_attack_damage_bonus = 0.0
 		final_damage *= stats.get_damage_multiplier()
+		if bool(attack_info.get("direct", true)):
+			final_damage *= _get_conditional_direct_damage_multiplier(enemy)
 		if bool(attack_info.get("allow_crit", true)) and randf() < stats.critical_chance:
-			final_damage *= 2.0
+			final_damage *= 2.0 + stats.critical_damage_bonus
 			attack_info["critical"] = true
 			print("Critical hit")
 
@@ -221,13 +390,23 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 			print("Lifesteal heals %s" % heal_amount)
 
 	if bool(attack_info.get("allow_procs", true)):
+		_try_trigger_talent_fireball(enemy)
 		attack_hit.emit(enemy, damage_dealt, attack_info)
 
 	return damage_dealt
 
 
 func notify_enemy_killed(enemy: Node) -> void:
+	if talent_heal_on_kill_enabled:
+		heal(5.0)
 	enemy_killed.emit(enemy)
+
+
+func add_gold(amount: int, reason: String = "") -> void:
+	if amount <= 0 or get_tree().current_scene == null:
+		return
+	if get_tree().current_scene.has_method("add_player_gold"):
+		get_tree().current_scene.add_player_gold(amount, reason)
 
 
 func apply_slow(multiplier: float, duration: float) -> void:
@@ -335,6 +514,7 @@ func _update_slide(delta: float) -> void:
 	if slide_time_remaining <= 0.0:
 		state = State.NORMAL
 		collision_mask = saved_collision_mask
+		_apply_slide_finished_talents()
 		dash_ended.emit(dash_direction)
 
 
@@ -641,14 +821,283 @@ func emit_container_broken(container: Node, attack_info: Dictionary = {}) -> voi
 	container_broken.emit(container, attack_info)
 
 
-func emit_round_started() -> void:
-	round_started.emit()
+func emit_shop_container_broken(container: Node, gold_cost: int) -> void:
+	shop_container_broken.emit(container, gold_cost)
+
+
+func emit_round_started(round_index: int = 0) -> void:
+	round_started.emit(round_index)
 
 
 func emit_round_ended() -> void:
 	round_ended.emit()
 	if temporary_buffs != null:
 		temporary_buffs.clear_round_buffs()
+
+
+func _get_required_exp_for_next_level() -> int:
+	return 10 + (level - 1) * 5
+
+
+func _level_up() -> void:
+	level += 1
+	pending_talent_points += 1
+	talent_points_changed.emit(unspent_talent_points, pending_talent_points)
+	player_leveled_up.emit(level)
+
+
+func _get_talent_definition(node_id: StringName) -> Dictionary:
+	match node_id:
+		&"talent_2_0":
+			return {
+				"name": "+10%\nDMG",
+				"description": "+10% attack damage.",
+				"stat": &"attack_damage_bonus",
+				"value": 0.1,
+			}
+		&"talent_2_1":
+			return {
+				"name": "Slide\nAS",
+				"description": "Gain +20% attack speed for 3s after sliding.",
+				"effect": &"slide_attack_speed",
+			}
+		&"talent_2_2":
+			return {
+				"name": "+10%\nCRIT",
+				"description": "+10% crit chance.",
+				"stat": &"critical_chance",
+				"value": 0.1,
+			}
+		&"talent_2_3":
+			return {
+				"name": "Fire\n10%",
+				"description": "Attacks have 10% chance to trigger Fireball.",
+				"stat": &"fireball_chance",
+				"value": 0.1,
+			}
+		&"talent_2_4":
+			return {
+				"name": "Slide\nHit",
+				"description": "Next attack after sliding deals +50% damage.",
+				"effect": &"next_slide_attack",
+			}
+		&"talent_3_0":
+			return {
+				"name": "+10%\nHP",
+				"description": "+10% max HP.",
+				"stat": &"max_hp",
+				"operation": &"multiply_add",
+				"value": 0.1,
+			}
+		&"talent_3_1":
+			return {
+				"name": "Slide\nDR",
+				"description": "Gain 20% damage reduction for 2s after sliding.",
+				"effect": &"slide_damage_reduction",
+			}
+		&"talent_3_2":
+			return {
+				"name": "+10\nDEF",
+				"description": "+10 Defense.",
+				"stat": &"defense",
+				"value": 10.0,
+			}
+		&"talent_3_3":
+			return {
+				"name": "ATK\nHP",
+				"description": "Gain max HP equal to your ATK.",
+				"effect": &"max_hp_from_atk",
+			}
+		&"talent_3_4":
+			return {
+				"name": "Kill\nHeal",
+				"description": "Heal 5 HP after killing an enemy.",
+				"effect": &"heal_on_kill",
+			}
+		_:
+			return {
+				"name": "+1\nATK",
+				"description": "+1 ATK.",
+				"stat": &"atk",
+				"value": 1.0,
+			}
+
+
+func _apply_talent_effect(node_id: StringName) -> void:
+	var definition: Dictionary = _get_talent_definition(node_id)
+	var effect: StringName = StringName(definition.get("effect", &""))
+	match effect:
+		&"slide_attack_speed":
+			talent_slide_attack_speed_enabled = true
+		&"next_slide_attack":
+			talent_next_attack_after_slide_enabled = true
+		&"slide_damage_reduction":
+			talent_slide_damage_reduction_enabled = true
+		&"max_hp_from_atk":
+			talent_max_hp_from_atk_enabled = true
+			_update_max_hp_from_atk_talent()
+		&"heal_on_kill":
+			talent_heal_on_kill_enabled = true
+		_:
+			if stats != null:
+				stats.apply_modifier(
+					StringName(definition.get("stat", &"atk")),
+					StringName(definition.get("operation", &"add")),
+					float(definition.get("value", 1.0))
+				)
+
+
+func _apply_slide_finished_talents() -> void:
+	if talent_slide_attack_speed_enabled and temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"talent_slide_attack_speed", &"attack_speed_bonus", 0.2, 3.0, 1)
+	if talent_slide_damage_reduction_enabled and temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"talent_slide_damage_reduction", &"damage_reduction_bonus", 0.2, 2.0, 1)
+	if talent_next_attack_after_slide_enabled:
+		next_attack_after_slide_ready = true
+
+
+func _update_max_hp_from_atk_talent() -> void:
+	if not talent_max_hp_from_atk_enabled or stats == null:
+		return
+
+	var wanted_bonus: int = maxi(stats.atk, 0)
+	var delta: int = wanted_bonus - applied_max_hp_from_atk
+	if delta == 0:
+		return
+
+	applied_max_hp_from_atk = wanted_bonus
+	stats.apply_modifier(&"max_hp", &"add", float(delta))
+
+
+func _should_consume_next_slide_attack(attack_info: Dictionary) -> bool:
+	if not next_attack_after_slide_ready:
+		return false
+	if not bool(attack_info.get("direct", true)):
+		return false
+	return StringName(attack_info.get("source", &"")) == &"projectile"
+
+
+func _get_conditional_direct_damage_multiplier(enemy: Node) -> float:
+	if stats == null:
+		return 1.0
+
+	var multiplier: float = 1.0
+	if stats.elite_direct_damage_bonus > 0.0 and _is_elite_enemy(enemy):
+		multiplier *= 1.0 + stats.elite_direct_damage_bonus
+
+	var hp_fraction: float = _get_enemy_hp_fraction(enemy)
+	if stats.high_hp_direct_damage_bonus > 0.0 and hp_fraction > 0.75:
+		multiplier *= 1.0 + stats.high_hp_direct_damage_bonus
+	if stats.low_hp_direct_damage_bonus > 0.0 and hp_fraction < 0.25:
+		multiplier *= 1.0 + stats.low_hp_direct_damage_bonus
+	var distance: float = _get_distance_to_enemy(enemy)
+	if stats.nearby_direct_damage_bonus > 0.0 and distance <= 180.0:
+		multiplier *= 1.0 + stats.nearby_direct_damage_bonus
+	if stats.distant_direct_damage_bonus > 0.0 and distance >= 360.0:
+		multiplier *= 1.0 + stats.distant_direct_damage_bonus
+	return multiplier
+
+
+func _is_elite_enemy(enemy: Node) -> bool:
+	if enemy == null:
+		return false
+	var enemy_base := enemy as EnemyBase
+	if enemy_base != null:
+		return enemy_base.is_elite
+	return enemy is EliteBrute
+
+
+func _get_enemy_hp_fraction(enemy: Node) -> float:
+	if enemy == null:
+		return 1.0
+	var enemy_base := enemy as EnemyBase
+	if enemy_base == null:
+		return 1.0
+	if enemy_base.max_hp <= 0.0:
+		return 1.0
+	return clampf(enemy_base.hp / enemy_base.max_hp, 0.0, 1.0)
+
+
+func _get_distance_to_enemy(enemy: Node) -> float:
+	var enemy_2d := enemy as Node2D
+	if enemy_2d == null:
+		return 0.0
+	return global_position.distance_to(enemy_2d.global_position)
+
+
+func _try_trigger_talent_fireball(enemy: Node) -> void:
+	if stats == null or stats.fireball_chance <= 0.0:
+		return
+	if randf() >= stats.fireball_chance:
+		return
+
+	var enemy_2d := enemy as Node2D
+	if enemy_2d == null:
+		return
+
+	_launch_talent_fireball(global_position, enemy_2d.global_position)
+
+
+func _launch_talent_fireball(start_position: Vector2, target_position: Vector2) -> void:
+	if get_tree().current_scene == null:
+		return
+
+	var direction: Vector2 = target_position - start_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	var final_damage: float = projectile_damage
+	if stats != null:
+		final_damage *= stats.get_damage_multiplier()
+	final_damage *= 1.2
+
+	var fireball := Area2D.new()
+	fireball.set_script(FIREBALL_SCRIPT)
+	fireball.setup(self, start_position, direction, final_damage, 80.0)
+	fireball.collision_layer = 1 << 2
+	fireball.collision_mask = 1 << 1
+	get_tree().current_scene.add_child(fireball)
+
+
+func _get_talent_coords() -> Array[Vector2i]:
+	var coords: Array[Vector2i] = []
+	for y in range(5):
+		coords.append(Vector2i(2, y))
+		coords.append(Vector2i(3, y))
+	for y in range(4, 8):
+		for x in range(6):
+			var coord := Vector2i(x, y)
+			if not coords.has(coord):
+				coords.append(coord)
+	return coords
+
+
+func _get_talent_node_id(coord: Vector2i) -> StringName:
+	return StringName("talent_%d_%d" % [coord.x, coord.y])
+
+
+func _is_talent_coord_valid(coord: Vector2i) -> bool:
+	if coord.y >= 4 and coord.y <= 7:
+		return coord.x >= 0 and coord.x <= 5
+	if coord.y >= 0 and coord.y <= 3:
+		return coord.x == 2 or coord.x == 3
+	return false
+
+
+func _is_talent_start_coord(coord: Vector2i) -> bool:
+	return coord.y == 0 and (coord.x == 2 or coord.x == 3)
+
+
+func _get_talent_neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
+	var neighbors: Array[Vector2i] = []
+	neighbors.append(coord + Vector2i(0, -1))
+	neighbors.append(coord + Vector2i(0, 1))
+	if coord.y == 0 or coord.y >= 4:
+		neighbors.append(coord + Vector2i(-1, 0))
+		neighbors.append(coord + Vector2i(1, 0))
+	return neighbors
 
 
 func _get_animation_texture(animation_name: StringName) -> Texture2D:
@@ -797,6 +1246,8 @@ func _on_stat_changed(stat_name: StringName, _value: Variant) -> void:
 			hp += max_hp - old_max_hp
 		hp = minf(hp, max_hp)
 		hp_changed.emit(roundi(hp), roundi(max_hp))
+	elif stat_name == &"atk":
+		_update_max_hp_from_atk_talent()
 
 
 func _apply_attack_status_procs(enemy: Node) -> void:

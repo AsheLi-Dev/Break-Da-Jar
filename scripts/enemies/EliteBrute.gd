@@ -68,6 +68,7 @@ var animation_state: AnimationNodeStateMachinePlayback
 
 
 func _ready() -> void:
+	is_elite = true
 	super()
 	_ensure_elite_nodes()
 	_ensure_animation_nodes()

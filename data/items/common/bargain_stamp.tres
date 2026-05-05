@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+effect_type = &"shop_price_multiplier"
+value = 0.9
+
+[resource]
+script = ExtResource("1_def")
+id = &"bargain_stamp"
+display_name = "Bargain Stamp"
+description = "Shop jar prices are reduced by 10%. Multiple copies stack multiplicatively."
+category = &"utility"
+rarity = &"common"
+tags = Array[StringName]([&"Economy", &"Shop"])
+effects = Array[Resource]([SubResource("Resource_effect")])

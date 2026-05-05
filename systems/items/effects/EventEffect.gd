@@ -2,6 +2,10 @@ extends ItemEffect
 class_name EventEffect
 
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
+const FIRE_DRAGON_SCENE := preload("res://scenes/summons/FireDragon.tscn")
+const HEALING_OVER_TIME_SCRIPT := preload("res://systems/combat/HealingOverTimeEffect.gd")
+const ITEM_RUNTIME_EFFECT_SCRIPT := preload("res://systems/items/effects/ItemRuntimeEffectNode.gd")
+const SMALL_TURRET_SCENE := preload("res://scenes/summons/SmallTurret.tscn")
 
 @export var event_name: StringName
 @export var effect_type: StringName
@@ -30,6 +34,12 @@ var cooldown_remaining: float = 0.0
 var item_id: StringName
 var item_effect_index: int = 0
 var item_stack_index: int = 0
+var runtime_trigger_count: int = 0
+var kill_counter: int = 0
+var fireburst_deferred: bool = false
+var applied_shared_stat_bonus: float = 0.0
+var fire_dragons: Array[Node] = []
+var accumulated_hp_loss: float = 0.0
 
 
 func configure_instance(new_item_id: StringName, new_effect_index: int, new_stack_index: int) -> void:
@@ -40,6 +50,13 @@ func configure_instance(new_item_id: StringName, new_effect_index: int, new_stac
 
 func apply_to(player: Node) -> void:
 	owner_player = player
+	if _is_shared_runtime_effect() and item_stack_index > 0:
+		return
+	if _is_pickup_effect():
+		_apply_pickup_effect()
+		return
+	if _uses_shared_stack_listener() and item_stack_index > 0:
+		return
 	if not player.has_signal(event_name):
 		push_warning("Player signal missing: %s" % event_name)
 		return
@@ -47,6 +64,15 @@ func apply_to(player: Node) -> void:
 	var callable := Callable(self, "_on_player_event")
 	if not player.is_connected(event_name, callable):
 		player.connect(event_name, callable)
+	if effect_type == &"fire_dragons_per_max_hp":
+		_sync_fire_dragons(_get_owner_max_hp())
+
+
+func on_item_count_changed(changed_item_id: StringName) -> void:
+	if changed_item_id != item_id:
+		return
+	if effect_type == &"fire_dragons_per_max_hp" and item_stack_index == 0:
+		_sync_fire_dragons(_get_owner_max_hp())
 
 
 func _on_player_event(arg1: Variant = null, arg2: Variant = null, arg3: Variant = null) -> void:
@@ -86,13 +112,102 @@ func _on_player_event(arg1: Variant = null, arg2: Variant = null, arg3: Variant 
 			_update_missing_hp_bonus(int(arg1), int(arg2))
 		&"container_break_random_proc":
 			_container_break_random_proc(arg1, arg2)
+		&"refund_gold_on_shop_container_break":
+			_refund_gold_on_shop_container_break(arg2)
+		&"summon_turret_on_level_up":
+			_summon_turrets(1)
+		&"heal_over_time_after_damage_taken":
+			_heal_over_time_after_damage_taken(float(arg1))
+		&"fireballs_every_n_kills":
+			_fireballs_every_n_kills()
+		&"summon_turrets_on_round_start":
+			_summon_turrets(maxi(chain_count, 1))
+		&"stat_bonus_every_n_kills_shared":
+			_stat_bonus_every_n_kills_shared()
+		&"lose_current_hp_percent_then_heal_over_time":
+			_lose_current_hp_percent_then_heal_over_time()
+		&"fire_dragons_per_max_hp":
+			_sync_fire_dragons(int(arg2))
+		&"gold_every_hp_lost":
+			_gold_every_hp_lost(float(arg1))
+		&"direct_container_break_exp":
+			_direct_container_break_exp(arg2)
+		&"direct_container_break_gold":
+			_direct_container_break_gold(arg2)
+		&"direct_container_break_round_damage":
+			_direct_container_break_round_damage(arg2)
+		&"chance_heal_on_kill":
+			_chance_heal_on_kill()
+		&"shop_price_multiplier":
+			_apply_shop_price_multiplier()
+		&"queue_extra_rare_shop_jar":
+			_queue_extra_rare_shop_jar()
+		&"next_attack_damage_after_kill":
+			_next_attack_damage_after_kill()
 
 
 func _start_cooldown_timer() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null:
 		return
-	tree.create_timer(internal_cooldown).timeout.connect(func() -> void: cooldown_remaining = 0.0)
+	tree.create_timer(internal_cooldown).timeout.connect(_clear_cooldown)
+
+
+func _clear_cooldown() -> void:
+	cooldown_remaining = 0.0
+
+
+func _is_pickup_effect() -> bool:
+	if effect_type == &"shop_price_multiplier":
+		return true
+	if effect_type == &"queue_extra_rare_shop_jar":
+		return true
+	if effect_type == &"nearby_enemy_attack_speed":
+		return true
+	if effect_type == &"stationary_attack_speed":
+		return true
+	return effect_type == &"periodic_timed_stat_buff"
+
+
+func _apply_pickup_effect() -> void:
+	match effect_type:
+		&"shop_price_multiplier":
+			_apply_shop_price_multiplier()
+		&"queue_extra_rare_shop_jar":
+			_queue_extra_rare_shop_jar()
+		&"nearby_enemy_attack_speed":
+			_add_runtime_effect_node()
+		&"stationary_attack_speed":
+			_add_runtime_effect_node()
+		&"periodic_timed_stat_buff":
+			_add_runtime_effect_node()
+
+
+func _is_shared_runtime_effect() -> bool:
+	return effect_type == &"nearby_enemy_attack_speed" or effect_type == &"stationary_attack_speed"
+
+
+func _add_runtime_effect_node() -> void:
+	if owner_player == null:
+		return
+
+	var node := Node.new()
+	node.name = "ItemRuntimeEffectNode"
+	node.set_script(ITEM_RUNTIME_EFFECT_SCRIPT)
+	node.call(
+		"setup",
+		owner_player,
+		item_id,
+		effect_type,
+		stat_name,
+		value,
+		duration,
+		max_stacks,
+		radius,
+		damage_scale,
+		internal_cooldown
+	)
+	owner_player.add_child(node)
 
 
 func _add_timed_buff() -> void:
@@ -203,6 +318,307 @@ func _run_container_break_random_proc_after_delay(origin: Vector2) -> void:
 		print("Chaos Hatch triggers %s" % choice)
 	else:
 		print("Chaos Hatch found no target for %s" % choice)
+
+
+func _is_direct_player_container_break(info: Dictionary) -> bool:
+	return String(info.get("source", "")) == "player_attack"
+
+
+func _direct_container_break_exp(info_value: Variant) -> void:
+	var info: Dictionary = info_value if info_value is Dictionary else {}
+	if not _is_direct_player_container_break(info) or owner_player == null or not owner_player.has_method("gain_experience"):
+		return
+	owner_player.gain_experience(int(value))
+
+
+func _direct_container_break_gold(info_value: Variant) -> void:
+	var info: Dictionary = info_value if info_value is Dictionary else {}
+	if not _is_direct_player_container_break(info) or owner_player == null or not owner_player.has_method("add_gold"):
+		return
+	owner_player.add_gold(int(value), "Jar Dividend")
+
+
+func _direct_container_break_round_damage(info_value: Variant) -> void:
+	var info: Dictionary = info_value if info_value is Dictionary else {}
+	if not _is_direct_player_container_break(info):
+		return
+	_add_round_buff()
+
+
+func _chance_heal_on_kill() -> void:
+	if owner_player != null and owner_player.has_method("heal"):
+		owner_player.heal(value)
+
+
+func _next_attack_damage_after_kill() -> void:
+	if owner_player != null and owner_player.has_method("add_next_attack_damage_bonus"):
+		owner_player.add_next_attack_damage_bonus(value)
+
+
+func _apply_shop_price_multiplier() -> void:
+	if owner_player != null and owner_player.has_method("add_shop_price_multiplier"):
+		owner_player.add_shop_price_multiplier(value)
+
+
+func _queue_extra_rare_shop_jar() -> void:
+	if owner_player != null and owner_player.has_method("queue_extra_rare_shop_jar"):
+		owner_player.queue_extra_rare_shop_jar(maxi(int(value), 1))
+
+
+func _refund_gold_on_shop_container_break(gold_cost_value: Variant) -> void:
+	if max_stacks > 0 and runtime_trigger_count >= max_stacks:
+		return
+	var gold_cost: int = int(gold_cost_value)
+	if gold_cost <= 0 or owner_player == null or not owner_player.has_method("add_gold"):
+		return
+
+	var refund: int = floori(float(gold_cost) * value)
+	if refund <= 0:
+		refund = 1
+	runtime_trigger_count += 1
+	owner_player.add_gold(refund, "Shop Refund Charm")
+
+
+func _heal_over_time_after_damage_taken(final_damage_taken: float) -> void:
+	if final_damage_taken <= 0.0 or owner_player == null:
+		return
+	var total_heal: float = final_damage_taken * value
+	if total_heal <= 0.0:
+		return
+
+	var effect := Node.new()
+	effect.name = "HealingOverTimeEffect"
+	effect.set_script(HEALING_OVER_TIME_SCRIPT)
+	effect.call("setup", owner_player, total_heal, duration)
+	owner_player.add_child(effect)
+
+
+func _gold_every_hp_lost(final_damage_taken: float) -> void:
+	if final_damage_taken <= 0.0 or owner_player == null or not owner_player.has_method("add_gold"):
+		return
+
+	var hp_per_gold: float = maxf(value, 0.001)
+	accumulated_hp_loss += final_damage_taken
+	var gold_to_add: int = int(floorf(accumulated_hp_loss / hp_per_gold))
+	if gold_to_add <= 0:
+		return
+
+	accumulated_hp_loss -= float(gold_to_add) * hp_per_gold
+	owner_player.add_gold(gold_to_add, "Pain Dividend")
+
+
+func _lose_current_hp_percent_then_heal_over_time() -> void:
+	if owner_player == null or not owner_player.has_method("lose_hp"):
+		return
+	var current_hp: float = float(owner_player.get("hp"))
+	var hp_loss: float = current_hp * value
+	if hp_loss <= 0.0:
+		return
+
+	var actual_loss: float = float(owner_player.lose_hp(hp_loss))
+	if actual_loss <= 0.0:
+		return
+
+	var total_heal: float = actual_loss * damage_scale * float(_get_item_count())
+	var effect := Node.new()
+	effect.name = "HealingOverTimeEffect"
+	effect.set_script(HEALING_OVER_TIME_SCRIPT)
+	effect.call("setup", owner_player, total_heal, duration)
+	owner_player.add_child(effect)
+
+
+func _uses_shared_stack_listener() -> bool:
+	if effect_type == &"stat_bonus_every_n_kills_shared":
+		return true
+	if effect_type == &"lose_current_hp_percent_then_heal_over_time":
+		return true
+	return effect_type == &"fire_dragons_per_max_hp"
+
+
+func _get_item_count() -> int:
+	if owner_player != null and owner_player.has_method("get_item_count"):
+		return maxi(int(owner_player.get_item_count(item_id)), 1)
+	return 1
+
+
+func _fireballs_every_n_kills() -> void:
+	var threshold: int = maxi(max_stacks, 1)
+	kill_counter += 1
+	if kill_counter < threshold or fireburst_deferred:
+		return
+
+	fireburst_deferred = true
+	call_deferred("_release_pending_fireburst")
+
+
+func _release_pending_fireburst() -> void:
+	fireburst_deferred = false
+	var threshold: int = maxi(max_stacks, 1)
+	while kill_counter >= threshold:
+		kill_counter -= threshold
+		if not _release_fireballs_from_player(maxi(chain_count, 1)):
+			break
+
+
+func _release_fireballs_from_player(count: int) -> bool:
+	var origin: Vector2 = _get_player_position()
+	var targets: Array[Node2D] = _get_enemies_near(origin, radius)
+	if targets.is_empty():
+		return false
+
+	var fallback_target: Node2D = targets[0]
+	for index in range(count):
+		var target: Node2D = _pop_nearest_target(targets, origin)
+		if target == null:
+			target = fallback_target
+		if target == null or not is_instance_valid(target):
+			continue
+		var target_position: Vector2 = target.global_position
+		if targets.is_empty() and count > 1:
+			target_position = origin + (target.global_position - origin).rotated(deg_to_rad(_get_spread_angle(index, count)))
+		_launch_fireball(origin, target_position)
+	return true
+
+
+func _pop_nearest_target(targets: Array[Node2D], origin: Vector2) -> Node2D:
+	var best_index: int = -1
+	var best_distance: float = INF
+	for index in range(targets.size()):
+		var target: Node2D = targets[index]
+		if target == null or not is_instance_valid(target):
+			continue
+		var distance: float = target.global_position.distance_squared_to(origin)
+		if distance < best_distance:
+			best_distance = distance
+			best_index = index
+	if best_index < 0:
+		return null
+	var best: Node2D = targets[best_index]
+	targets.remove_at(best_index)
+	return best
+
+
+func _stat_bonus_every_n_kills_shared() -> void:
+	var threshold: int = maxi(max_stacks, 1)
+	kill_counter += 1
+	if kill_counter < threshold:
+		return
+
+	var triggers: int = int(kill_counter / threshold)
+	kill_counter %= threshold
+	var wanted_bonus: float = applied_shared_stat_bonus + value * float(triggers)
+	var cap: float = _get_shared_stat_bonus_cap()
+	_set_shared_stat_bonus(minf(wanted_bonus, cap))
+
+
+func _get_shared_stat_bonus_cap() -> float:
+	return duration * float(_get_item_count())
+
+
+func _set_shared_stat_bonus(wanted_bonus: float) -> void:
+	var delta: float = wanted_bonus - applied_shared_stat_bonus
+	if is_equal_approx(delta, 0.0):
+		return
+
+	applied_shared_stat_bonus = wanted_bonus
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return
+	var stats: StatsComponent = owner_player.get_stats()
+	if stats != null:
+		stats.apply_modifier(stat_name, &"add", delta)
+
+
+func _sync_fire_dragons(max_hp: int) -> void:
+	_cleanup_fire_dragons()
+	var hp_per_dragon: int = maxi(max_stacks, 1)
+	var wanted_count: int = int(floori(float(maxi(max_hp, 0)) / float(hp_per_dragon))) * _get_item_count()
+	while fire_dragons.size() < wanted_count:
+		_add_fire_dragon(fire_dragons.size(), wanted_count)
+	while fire_dragons.size() > wanted_count:
+		var dragon: Node = fire_dragons.pop_back()
+		if is_instance_valid(dragon):
+			dragon.queue_free()
+	_update_fire_dragon_offsets()
+
+
+func _add_fire_dragon(index: int, total_count: int) -> void:
+	if owner_player == null or owner_player.get_tree().current_scene == null:
+		return
+
+	var player_2d := owner_player as Node2D
+	if player_2d == null:
+		return
+
+	var dragon := FIRE_DRAGON_SCENE.instantiate()
+	if dragon == null:
+		return
+	var follow_radius: float = radius if radius > 0.0 else 56.0
+	var follow_offset: Vector2 = _get_fire_dragon_offset(index, total_count, follow_radius)
+	dragon.call("setup", player_2d, follow_offset, damage_scale, dash_fireball_auto_aim_radius, value)
+	dragon.global_position = player_2d.global_position + follow_offset
+	owner_player.get_tree().current_scene.add_child(dragon)
+	fire_dragons.append(dragon)
+
+
+func _update_fire_dragon_offsets() -> void:
+	var total_count: int = fire_dragons.size()
+	var follow_radius: float = radius if radius > 0.0 else 56.0
+	for index in range(total_count):
+		var dragon := fire_dragons[index]
+		if is_instance_valid(dragon):
+			dragon.call("set_follow_offset", _get_fire_dragon_offset(index, total_count, follow_radius))
+
+
+func _get_fire_dragon_offset(index: int, total_count: int, follow_radius: float) -> Vector2:
+	if total_count <= 1:
+		return Vector2(42.0, -34.0)
+	var angle: float = -PI * 0.5 + TAU * float(index) / float(total_count)
+	return Vector2.RIGHT.rotated(angle) * follow_radius
+
+
+func _cleanup_fire_dragons() -> void:
+	for index in range(fire_dragons.size() - 1, -1, -1):
+		if not is_instance_valid(fire_dragons[index]):
+			fire_dragons.remove_at(index)
+
+
+func _get_owner_max_hp() -> int:
+	if owner_player == null:
+		return 0
+	if owner_player.has_method("get_stats"):
+		var stats: StatsComponent = owner_player.get_stats()
+		if stats != null:
+			return stats.max_hp
+	return int(owner_player.get("max_hp"))
+
+
+func _get_spread_angle(index: int, count: int) -> float:
+	if count <= 1:
+		return 0.0
+	return (float(index) - float(count - 1) * 0.5) * duplicate_projectile_spread_degrees
+
+
+func _summon_turrets(count: int) -> void:
+	if owner_player == null or owner_player.get_tree().current_scene == null:
+		return
+
+	var origin: Vector2 = _get_player_position()
+	var spawn_radius: float = radius if radius > 0.0 else 28.0
+	for index in range(count):
+		var turret := SMALL_TURRET_SCENE.instantiate()
+		if turret == null:
+			continue
+		turret.call("setup", owner_player, duration)
+		turret.set("damage_scale", damage_scale)
+		turret.global_position = origin + _get_spawn_offset(index, count, spawn_radius)
+		owner_player.get_tree().current_scene.add_child(turret)
+
+
+func _get_spawn_offset(index: int, count: int, spawn_radius: float) -> Vector2:
+	if count <= 1:
+		return Vector2.ZERO
+	var angle: float = TAU * float(index) / float(count)
+	return Vector2.RIGHT.rotated(angle) * spawn_radius
 
 
 func _apply_poison_near_position(origin: Vector2, stacks: int) -> void:

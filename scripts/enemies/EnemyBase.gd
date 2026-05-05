@@ -9,6 +9,7 @@ signal died(enemy: EnemyBase)
 @export var damage: float = 8.0
 @export var attack_cooldown: float = 1.0
 @export var knockback_friction: float = 1600.0
+@export var is_elite: bool = false
 
 # The enemy automatically tracks the first node in this group.
 @export var target_group: StringName = &"player"

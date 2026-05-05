@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+event_name = &"hp_changed"
+effect_type = &"fire_dragons_per_max_hp"
+value = 0.5
+max_stacks = 100
+radius = 64.0
+damage_scale = 1.0
+dash_fireball_auto_aim_radius = 620.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"dragonheart_aerie"
+display_name = "Dragonheart Aerie"
+description = "For every 100 max HP you have, summon a fire dragon that follows you and launches Fireballs."
+category = &"attack"
+rarity = &"legendary"
+tags = Array[StringName]([&"MaxHP", &"Summon", &"Fireball"])
+effects = Array[Resource]([SubResource("Resource_effect")])
