@@ -25,9 +25,6 @@ const GRID_SIZE := 16
 const CONTAINER_GRID_MIN_INDEX := 3
 const CONTAINER_GRID_MAX_INDEX := 12
 const CONTAINER_COLLISION_RADIUS := 18.0
-const URN_MAX_HP := 12.0
-const BARREL_MAX_HP := 24.0
-const TOMB_MAX_HP := 48.0
 
 const SHOP_CONTAINER_COUNT := 3
 const SHOP_CONTAINER_START := PLAY_AREA_CENTER + Vector2(-150, 120)
@@ -43,24 +40,15 @@ const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMele
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")
 const ELITE_BRUTE_SCENE: PackedScene = preload("res://scenes/enemies/EliteBrute.tscn")
 const CAMERA_SHAKE_SCRIPT := preload("res://systems/combat/CameraShake.gd")
+const CONTAINER_CATALOG := preload("res://systems/battle/ContainerCatalog.gd")
 const REWARD_PICKUP_SCRIPT := preload("res://systems/items/RewardPickup.gd")
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
+const SHOP_RULES := preload("res://systems/battle/ShopRules.gd")
+const TALENT_TREE_UI_CONTROLLER := preload("res://systems/battle/TalentTreeUiController.gd")
 const BATTLE_BGM: AudioStream = preload("res://assets/sfx/junipersona-to-the-death-159171.mp3")
 const SHOP_INSUFFICIENT_GOLD_SFX: AudioStream = preload("res://assets/sfx/Error_1.wav")
-const TALENT_HOVER_SFX: AudioStream = preload("res://assets/sfx/Hover_1.wav")
 const TALENT_UNLOCK_SFX: AudioStream = preload("res://assets/sfx/Confirm_7.wav")
 const ARENA_TEXTURE: Texture2D = preload("res://assets/map/arena tiles.png")
-const URN_TEXTURE: Texture2D = preload("res://assets/containers/Urn G/urn-G-main-static-00.png")
-const URN_DAMAGED_TEXTURE: Texture2D = preload("res://assets/containers/Urn G/urn-G-crack-00.png")
-const URN_HIT_TEXTURE: Texture2D = preload("res://assets/containers/Urn G/urn-G-crack-hit-00.png")
-const URN_DESTROYED_TEXTURE: Texture2D = preload("res://assets/containers/Urn G/urn-G-static-destroyed-00.png")
-const BARREL_TEXTURE: Texture2D = preload("res://assets/containers/Barrel B/barrel-B-main-static-00.png")
-const BARREL_HIT_TEXTURE: Texture2D = preload("res://assets/containers/Barrel B/barrel-B-hit-00.png")
-const BARREL_DESTROYED_TEXTURE: Texture2D = preload("res://assets/containers/Barrel B/barrel-B-static-destroyed-00.png")
-const TOMB_TEXTURE: Texture2D = preload("res://assets/containers/Tomb A/tomb-A-main-static-00.png")
-const TOMB_DAMAGED_TEXTURE: Texture2D = preload("res://assets/containers/Tomb A/tomb-A-crack-1-00.png")
-const TOMB_HIT_TEXTURE: Texture2D = preload("res://assets/containers/Tomb A/tomb-A-main-hit-00.png")
-const TOMB_DESTROYED_TEXTURE: Texture2D = preload("res://assets/containers/Tomb A/tomb-A-static-destroyed-00.png")
 
 enum Phase {
 	COMBAT,
@@ -109,10 +97,7 @@ var camera: Camera2D
 var hud_label: Label
 var status_panel: Panel
 var status_label: Label
-var talent_tree_layer: CanvasLayer
-var talent_tree_panel: Panel
-var talent_point_label: Label
-var talent_buttons: Dictionary = {}
+var talent_tree_ui: CanvasLayer
 var bgm_player: AudioStreamPlayer
 
 
@@ -125,6 +110,10 @@ func _ready() -> void:
 	_start_bgm()
 	_create_hud()
 	_start_combat_round()
+
+
+func _exit_tree() -> void:
+	_stop_bgm()
 
 
 func _process(delta: float) -> void:
@@ -314,6 +303,16 @@ func _start_bgm() -> void:
 	bgm_player.play()
 
 
+func _stop_bgm() -> void:
+	if bgm_player == null or not is_instance_valid(bgm_player):
+		return
+	var replay_callable := Callable(bgm_player, "play")
+	if bgm_player.finished.is_connected(replay_callable):
+		bgm_player.finished.disconnect(replay_callable)
+	bgm_player.stop()
+	bgm_player.stream = null
+
+
 func _start_combat_round() -> void:
 	phase = Phase.COMBAT
 	round_time_remaining = ROUND_CONTAINER_AUTO_BREAK_TIME
@@ -421,18 +420,11 @@ func _pick_free_single_cell(occupied_cells: Dictionary) -> Vector2i:
 
 
 func _roll_combat_container_type() -> int:
-	var roll: float = randf()
-	if roll < 0.7:
-		return ContainerType.URN
-	if roll < 0.95:
-		return ContainerType.BARREL
-	return ContainerType.TOMB
+	return CONTAINER_CATALOG.roll_combat_type()
 
 
 func _roll_small_combat_container_type() -> int:
-	if randf() < 0.7 / 0.95:
-		return ContainerType.URN
-	return ContainerType.BARREL
+	return CONTAINER_CATALOG.roll_small_combat_type()
 
 
 func _create_combat_container(container_position: Vector2, container_number: int, container_type: int) -> BreakableContainer:
@@ -459,10 +451,10 @@ func _create_shop_container(container_position: Vector2, index: int, forced_cate
 	var container := _create_base_container(container_position, "ShopJar%d" % index)
 	container.is_shop_container = true
 	container.container_type = ContainerType.URN
-	container.static_texture = URN_TEXTURE
-	container.damaged_texture = URN_DAMAGED_TEXTURE
-	container.hit_texture = URN_HIT_TEXTURE
-	container.destroyed_texture = URN_DESTROYED_TEXTURE
+	container.static_texture = _get_container_texture(ContainerType.URN)
+	container.damaged_texture = _get_container_damaged_texture(ContainerType.URN)
+	container.hit_texture = _get_container_hit_texture(ContainerType.URN)
+	container.destroyed_texture = _get_container_destroyed_texture(ContainerType.URN)
 	container.destroy_frames = _get_container_destroy_frames(ContainerType.URN)
 	container.max_hp = SHOP_CONTAINER_MAX_HP
 	container.area_entered.connect(_on_container_area_entered.bind(container))
@@ -800,109 +792,13 @@ func _create_hud() -> void:
 
 
 func _create_talent_tree_ui() -> void:
-	talent_tree_layer = CanvasLayer.new()
-	talent_tree_layer.name = "TalentTreeLayer"
-	talent_tree_layer.layer = 30
-	talent_tree_layer.visible = false
-	add_child(talent_tree_layer)
-
-	var blocker := ColorRect.new()
-	blocker.name = "Blocker"
-	blocker.color = Color(0.0, 0.0, 0.0, 0.58)
-	blocker.position = Vector2.ZERO
-	blocker.size = SCREEN_SIZE
-	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
-	talent_tree_layer.add_child(blocker)
-
-	talent_tree_panel = Panel.new()
-	talent_tree_panel.name = "TalentTreePanel"
-	talent_tree_panel.position = Vector2(600, 72)
-	talent_tree_panel.size = Vector2(720, 936)
-	talent_tree_layer.add_child(talent_tree_panel)
-
-	var title := Label.new()
-	title.name = "Title"
-	title.text = "Talent Tree"
-	title.position = Vector2(32, 22)
-	title.size = Vector2(360, 32)
-	title.add_theme_font_size_override("font_size", 24)
-	talent_tree_panel.add_child(title)
-
-	talent_point_label = Label.new()
-	talent_point_label.name = "TalentPointLabel"
-	talent_point_label.position = Vector2(32, 58)
-	talent_point_label.size = Vector2(360, 28)
-	talent_tree_panel.add_child(talent_point_label)
-
-	var close_button := Button.new()
-	close_button.name = "CloseButton"
-	close_button.text = "Close"
-	close_button.position = Vector2(588, 24)
-	close_button.size = Vector2(96, 34)
-	close_button.pressed.connect(_hide_talent_tree)
-	talent_tree_panel.add_child(close_button)
-
-	var graph := Control.new()
-	graph.name = "Graph"
-	graph.position = Vector2(0, 96)
-	graph.size = Vector2(720, 820)
-	graph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	talent_tree_panel.add_child(graph)
-
-	_add_talent_connection_lines(graph)
-	_add_talent_buttons(graph)
-	_update_talent_tree_ui()
-
-
-func _add_talent_connection_lines(graph: Control) -> void:
 	if not is_instance_valid(player):
 		return
 
-	for connection in player.get_talent_connections():
-		var from_id: StringName = connection[0]
-		var to_id: StringName = connection[1]
-		var from_position: Vector2 = _get_talent_ui_position(player.get_talent_node_grid_position(from_id))
-		var to_position: Vector2 = _get_talent_ui_position(player.get_talent_node_grid_position(to_id))
-		var line := ColorRect.new()
-		line.name = "TalentConnection"
-		line.color = Color(0.42, 0.48, 0.44, 0.85)
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if absf(from_position.x - to_position.x) < 0.1:
-			line.position = Vector2(from_position.x - 2.0, minf(from_position.y, to_position.y))
-			line.size = Vector2(4.0, absf(from_position.y - to_position.y))
-		else:
-			line.position = Vector2(minf(from_position.x, to_position.x), from_position.y - 2.0)
-			line.size = Vector2(absf(from_position.x - to_position.x), 4.0)
-		graph.add_child(line)
-
-
-func _add_talent_buttons(graph: Control) -> void:
-	if not is_instance_valid(player):
-		return
-
-	talent_buttons.clear()
-	for node_id in player.get_talent_node_ids():
-		var button := Button.new()
-		button.name = String(node_id)
-		button.text = player.get_talent_display_name(node_id)
-		button.tooltip_text = player.get_talent_description(node_id)
-		button.position = _get_talent_ui_position(player.get_talent_node_grid_position(node_id)) - Vector2(24, 24)
-		button.size = Vector2(48, 48)
-		button.focus_mode = Control.FOCUS_NONE
-		button.mouse_entered.connect(_play_talent_hover_sfx)
-		button.pressed.connect(_on_talent_button_pressed.bind(node_id))
-		graph.add_child(button)
-		talent_buttons[node_id] = button
-
-
-func _get_talent_ui_position(coord: Vector2i) -> Vector2:
-	var spacing := Vector2(78.0, 86.0)
-	var center_x: float = 360.0
-	var bottom_y: float = 716.0
-	return Vector2(
-		center_x + (float(coord.x) - 2.5) * spacing.x,
-		bottom_y - float(coord.y) * spacing.y
-	)
+	talent_tree_ui = TALENT_TREE_UI_CONTROLLER.new() as CanvasLayer
+	talent_tree_ui.setup(player)
+	talent_tree_ui.talent_requested.connect(_on_talent_button_pressed)
+	add_child(talent_tree_ui)
 
 
 func _on_talent_button_pressed(node_id: StringName) -> void:
@@ -921,16 +817,6 @@ func _play_talent_unlock_sfx() -> void:
 	if parent == null:
 		parent = self
 	SFX_PLAYER.play_2d(parent, TALENT_UNLOCK_SFX, player.global_position, -2.0, 1.0, 1.0)
-
-
-func _play_talent_hover_sfx() -> void:
-	if not is_instance_valid(player):
-		return
-
-	var parent := get_tree().current_scene
-	if parent == null:
-		parent = self
-	SFX_PLAYER.play_2d(parent, TALENT_HOVER_SFX, player.global_position, -6.0, 1.0, 1.0)
 
 
 func _play_shop_insufficient_gold_sfx(sound_position: Vector2) -> void:
@@ -959,41 +845,24 @@ func _maybe_show_talent_tree() -> void:
 
 
 func _show_talent_tree() -> void:
-	if talent_tree_layer == null:
+	if talent_tree_ui == null:
 		return
-	talent_tree_layer.visible = true
-	_update_talent_tree_ui()
+	talent_tree_ui.show_tree()
 
 
 func _hide_talent_tree() -> void:
-	if talent_tree_layer == null:
+	if talent_tree_ui == null:
 		return
-	talent_tree_layer.visible = false
+	talent_tree_ui.hide_tree()
 
 
 func _is_talent_tree_open() -> bool:
-	return talent_tree_layer != null and talent_tree_layer.visible
+	return talent_tree_ui != null and talent_tree_ui.is_open()
 
 
 func _update_talent_tree_ui() -> void:
-	if talent_point_label == null or not is_instance_valid(player):
-		return
-
-	talent_point_label.text = "Unspent Talent Points: %d" % player.unspent_talent_points
-	for node_id in talent_buttons.keys():
-		var button := talent_buttons[node_id] as Button
-		if button == null:
-			continue
-
-		var unlocked: bool = player.unlocked_talents.has(node_id)
-		var can_unlock: bool = player.can_unlock_talent(node_id)
-		button.disabled = unlocked or not can_unlock
-		if unlocked:
-			button.modulate = Color(1.0, 0.86, 0.32)
-		elif can_unlock:
-			button.modulate = Color(0.42, 0.92, 0.58)
-		else:
-			button.modulate = Color(0.44, 0.48, 0.48)
+	if talent_tree_ui != null:
+		talent_tree_ui.refresh()
 
 
 func _cleanup_enemy_list() -> void:
@@ -1149,78 +1018,34 @@ func _clear_shop_containers() -> void:
 
 
 func _roll_shop_category() -> int:
-	if randf() < 0.7:
-		return ShopCategory.BROWN
-
-	var categories: Array[int] = [
-		ShopCategory.ATTACK,
-		ShopCategory.DEFENSE,
-		ShopCategory.UTILITY,
-	]
-	return categories.pick_random()
+	return SHOP_RULES.roll_category()
 
 
 func _roll_shop_tier() -> int:
-	var roll: float = randf()
-	if roll < 0.89:
-		return ShopTier.COMMON
-	if roll < 0.99:
-		return ShopTier.RARE
-	return ShopTier.LEGENDARY
+	return SHOP_RULES.roll_tier()
 
 
 func _roll_item_rarity_for_tier(tier: int) -> StringName:
-	var roll: float = randf()
-	match tier:
-		ShopTier.RARE:
-			return &"rare" if roll < 0.95 else &"legendary"
-		ShopTier.LEGENDARY:
-			return &"legendary"
-		_:
-			if roll < 0.89:
-				return &"common"
-			if roll < 0.99:
-				return &"rare"
-			return &"legendary"
+	return SHOP_RULES.rarity_for_tier(tier)
 
 
 func _roll_shop_item(category: int, rarity: StringName) -> ItemDefinition:
 	var database := get_node_or_null("/root/ItemDatabase")
-	if database == null:
-		return null
-
-	var category_filter: StringName = _get_shop_category_filter(category)
-	var item: ItemDefinition = database.get_random_item(category_filter, rarity)
-	if item != null:
-		return item
-
-	item = database.get_random_item(&"", rarity)
-	if item != null:
-		return item
-
-	return database.get_random_item()
+	return SHOP_RULES.roll_item(database, category, rarity)
 
 
 func _get_shop_price(category: int, tier: int) -> int:
-	var is_brown: bool = category == ShopCategory.BROWN
-	match tier:
-		ShopTier.RARE:
-			return 30 if is_brown else 36
-		ShopTier.LEGENDARY:
-			return 75 if is_brown else 90
-		_:
-			return 12 if is_brown else 15
+	return SHOP_RULES.price(category, tier)
 
 
 func _get_discounted_shop_price(category: int, tier: int) -> int:
-	return _apply_shop_price_discount(_get_shop_price(category, tier))
+	var multiplier: float = player.get_shop_price_multiplier() if is_instance_valid(player) else 1.0
+	return SHOP_RULES.discounted_price(category, tier, multiplier)
 
 
 func _apply_shop_price_discount(base_price: int) -> int:
-	var price: int = base_price
-	if is_instance_valid(player):
-		price = maxi(1, floori(float(price) * player.get_shop_price_multiplier()))
-	return price
+	var multiplier: float = player.get_shop_price_multiplier() if is_instance_valid(player) else 1.0
+	return SHOP_RULES.discounted_base_price(base_price, multiplier)
 
 
 func _update_shop_label(container: BreakableContainer, category: int, tier: int, price: int) -> void:
@@ -1235,133 +1060,44 @@ func _update_shop_label(container: BreakableContainer, category: int, tier: int,
 
 
 func _get_shop_category_filter(category: int) -> StringName:
-	match category:
-		ShopCategory.ATTACK:
-			return &"attack"
-		ShopCategory.DEFENSE:
-			return &"defense"
-		ShopCategory.UTILITY:
-			return &"utility"
-		_:
-			return &""
+	return SHOP_RULES.category_filter(category)
 
 
 func _get_shop_category_color(category: int) -> Color:
-	match category:
-		ShopCategory.ATTACK:
-			return Color(1.0, 0.38, 0.32)
-		ShopCategory.DEFENSE:
-			return Color(0.38, 1.0, 0.48)
-		ShopCategory.UTILITY:
-			return Color(0.42, 0.68, 1.0)
-		_:
-			return Color(0.74, 0.52, 0.34)
+	return SHOP_RULES.category_color(category)
 
 
 func _get_shop_category_label(category: int) -> String:
-	match category:
-		ShopCategory.ATTACK:
-			return "Red"
-		ShopCategory.DEFENSE:
-			return "Green"
-		ShopCategory.UTILITY:
-			return "Blue"
-		_:
-			return "Brown"
+	return SHOP_RULES.category_label(category)
 
 
 func _get_shop_tier_label(tier: int) -> String:
-	match tier:
-		ShopTier.RARE:
-			return "Rare"
-		ShopTier.LEGENDARY:
-			return "Legend"
-		_:
-			return "Common"
+	return SHOP_RULES.tier_label(tier)
 
 
 func _get_container_texture(container_type: int) -> Texture2D:
-	match container_type:
-		ContainerType.BARREL:
-			return BARREL_TEXTURE
-		ContainerType.TOMB:
-			return TOMB_TEXTURE
-		_:
-			return URN_TEXTURE
+	return CONTAINER_CATALOG.texture(container_type)
 
 
 func _get_container_damaged_texture(container_type: int) -> Texture2D:
-	match container_type:
-		ContainerType.TOMB:
-			return TOMB_DAMAGED_TEXTURE
-		ContainerType.URN:
-			return URN_DAMAGED_TEXTURE
-		_:
-			return null
+	return CONTAINER_CATALOG.damaged_texture(container_type)
 
 
 func _get_container_hit_texture(container_type: int) -> Texture2D:
-	match container_type:
-		ContainerType.BARREL:
-			return BARREL_HIT_TEXTURE
-		ContainerType.TOMB:
-			return TOMB_HIT_TEXTURE
-		_:
-			return URN_HIT_TEXTURE
+	return CONTAINER_CATALOG.hit_texture(container_type)
 
 
 func _get_container_destroyed_texture(container_type: int) -> Texture2D:
-	match container_type:
-		ContainerType.BARREL:
-			return BARREL_DESTROYED_TEXTURE
-		ContainerType.TOMB:
-			return TOMB_DESTROYED_TEXTURE
-		_:
-			return URN_DESTROYED_TEXTURE
+	return CONTAINER_CATALOG.destroyed_texture(container_type)
 
 
 func _get_container_destroy_frames(container_type: int) -> Array[Texture2D]:
-	match container_type:
-		ContainerType.BARREL:
-			return [
-				preload("res://assets/containers/Barrel B/barrel-B-destr-anim-01.png"),
-				preload("res://assets/containers/Barrel B/barrel-B-destr-anim-02.png"),
-				preload("res://assets/containers/Barrel B/barrel-B-destr-anim-03.png"),
-				preload("res://assets/containers/Barrel B/barrel-B-destr-anim-04.png"),
-			]
-		ContainerType.TOMB:
-			return [
-				preload("res://assets/containers/Tomb A/tomb-A-destr-anim-01.png"),
-				preload("res://assets/containers/Tomb A/tomb-A-destr-anim-02.png"),
-				preload("res://assets/containers/Tomb A/tomb-A-destr-anim-03.png"),
-				preload("res://assets/containers/Tomb A/tomb-A-destr-anim-04.png"),
-				preload("res://assets/containers/Tomb A/tomb-A-destr-anim-05.png"),
-				preload("res://assets/containers/Tomb A/tomb-A-destr-anim-06.png"),
-			]
-		_:
-			return [
-				preload("res://assets/containers/Urn G/urn-G-destr-anim-01.png"),
-				preload("res://assets/containers/Urn G/urn-G-destr-anim-02.png"),
-				preload("res://assets/containers/Urn G/urn-G-destr-anim-03.png"),
-				preload("res://assets/containers/Urn G/urn-G-destr-anim-04.png"),
-			]
+	return CONTAINER_CATALOG.destroy_frames(container_type)
 
 
 func _get_container_max_hp(container_type: int) -> float:
-	match container_type:
-		ContainerType.BARREL:
-			return BARREL_MAX_HP
-		ContainerType.TOMB:
-			return TOMB_MAX_HP
-		_:
-			return URN_MAX_HP
+	return CONTAINER_CATALOG.max_hp(container_type)
 
 
 func _get_container_type_name(container_type: int) -> String:
-	match container_type:
-		ContainerType.BARREL:
-			return "Barrel"
-		ContainerType.TOMB:
-			return "Tomb"
-		_:
-			return "Urn"
+	return CONTAINER_CATALOG.type_name(container_type)

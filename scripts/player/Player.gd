@@ -15,6 +15,7 @@ const SLIDE_END_FPS := 30.0
 const ABILITY_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/ability.png")
 const ATTACK_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack.png")
 const ATTACK_ALT_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack_alt.png")
+const DIRECTIONAL_ANIMATION_LIBRARY_BUILDER := preload("res://scripts/player/DirectionalAnimationLibraryBuilder.gd")
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
 const FLOATING_TEXT_SCRIPT := preload("res://systems/combat/FloatingText.gd")
 const HOLY_SPELL_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HeavensFury_spritesheet.png")
@@ -27,6 +28,7 @@ const SLIDE_START_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/slid
 const RUN_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/run.png")
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const ENEMY_HURT_SFX: AudioStream = preload("res://assets/sfx/enemy_hurt.wav")
+const TALENT_CATALOG := preload("res://scripts/player/PlayerTalentCatalog.gd")
 
 signal attack_hit(enemy: Node, damage_dealt: float, attack_info: Dictionary)
 signal attack_started(origin: Vector2, direction: Vector2, attack_info: Dictionary)
@@ -312,17 +314,11 @@ func get_required_exp_for_next_level() -> int:
 
 
 func get_talent_node_ids() -> Array[StringName]:
-	var ids: Array[StringName] = []
-	for coord in _get_talent_coords():
-		ids.append(_get_talent_node_id(coord))
-	return ids
+	return TALENT_CATALOG.node_ids()
 
 
 func get_talent_node_grid_position(node_id: StringName) -> Vector2i:
-	for coord in _get_talent_coords():
-		if _get_talent_node_id(coord) == node_id:
-			return coord
-	return Vector2i.ZERO
+	return TALENT_CATALOG.grid_position(node_id)
 
 
 func get_talent_display_name(node_id: StringName) -> String:
@@ -336,15 +332,7 @@ func get_talent_description(node_id: StringName) -> String:
 
 
 func get_talent_connections() -> Array:
-	var connections: Array = []
-	for coord in _get_talent_coords():
-		var node_id: StringName = _get_talent_node_id(coord)
-		for neighbor in _get_talent_neighbor_coords(coord):
-			if _is_talent_coord_valid(neighbor):
-				var neighbor_id: StringName = _get_talent_node_id(neighbor)
-				if String(node_id) < String(neighbor_id):
-					connections.append([node_id, neighbor_id])
-	return connections
+	return TALENT_CATALOG.connections()
 
 
 func can_unlock_talent(node_id: StringName) -> bool:
@@ -1194,80 +1182,7 @@ func _play_spritesheet_effect(
 
 
 func _get_talent_definition(node_id: StringName) -> Dictionary:
-	match node_id:
-		&"talent_2_0":
-			return {
-				"name": "+10%\nDMG",
-				"description": "+10% attack damage.",
-				"stat": &"attack_damage_bonus",
-				"value": 0.1,
-			}
-		&"talent_2_1":
-			return {
-				"name": "Slide\nAS",
-				"description": "Gain +20% attack speed for 3s after sliding.",
-				"effect": &"slide_attack_speed",
-			}
-		&"talent_2_2":
-			return {
-				"name": "+10%\nCRIT",
-				"description": "+10% crit chance.",
-				"stat": &"critical_chance",
-				"value": 0.1,
-			}
-		&"talent_2_3":
-			return {
-				"name": "Fire\n10%",
-				"description": "Attacks have 10% chance to trigger Fireball.",
-				"stat": &"fireball_chance",
-				"value": 0.1,
-			}
-		&"talent_2_4":
-			return {
-				"name": "Slide\nHit",
-				"description": "Next attack after sliding deals +50% damage.",
-				"effect": &"next_slide_attack",
-			}
-		&"talent_3_0":
-			return {
-				"name": "+10%\nHP",
-				"description": "+10% max HP.",
-				"stat": &"max_hp",
-				"operation": &"multiply_add",
-				"value": 0.1,
-			}
-		&"talent_3_1":
-			return {
-				"name": "Slide\nDR",
-				"description": "Gain 20% damage reduction for 2s after sliding.",
-				"effect": &"slide_damage_reduction",
-			}
-		&"talent_3_2":
-			return {
-				"name": "+10\nDEF",
-				"description": "+10 Defense.",
-				"stat": &"defense",
-				"value": 10.0,
-			}
-		&"talent_3_3":
-			return {
-				"name": "ATK\nHP",
-				"description": "Gain max HP equal to your ATK.",
-				"effect": &"max_hp_from_atk",
-			}
-		&"talent_3_4":
-			return {
-				"name": "Kill\nHeal",
-				"description": "Heal 5 HP after killing an enemy.",
-				"effect": &"heal_on_kill",
-			}
-		_:
-			return {
-				"name": "+1\nATK",
-				"description": "+1 ATK.",
-				"stat": &"atk",
-				"value": 1.0,
-			}
+	return TALENT_CATALOG.definition(node_id)
 
 
 func _apply_talent_effect(node_id: StringName) -> void:
@@ -1415,42 +1330,23 @@ func _launch_talent_fireball(start_position: Vector2, target_position: Vector2) 
 
 
 func _get_talent_coords() -> Array[Vector2i]:
-	var coords: Array[Vector2i] = []
-	for y in range(5):
-		coords.append(Vector2i(2, y))
-		coords.append(Vector2i(3, y))
-	for y in range(4, 8):
-		for x in range(6):
-			var coord := Vector2i(x, y)
-			if not coords.has(coord):
-				coords.append(coord)
-	return coords
+	return TALENT_CATALOG.coords()
 
 
 func _get_talent_node_id(coord: Vector2i) -> StringName:
-	return StringName("talent_%d_%d" % [coord.x, coord.y])
+	return TALENT_CATALOG.node_id(coord)
 
 
 func _is_talent_coord_valid(coord: Vector2i) -> bool:
-	if coord.y >= 4 and coord.y <= 7:
-		return coord.x >= 0 and coord.x <= 5
-	if coord.y >= 0 and coord.y <= 3:
-		return coord.x == 2 or coord.x == 3
-	return false
+	return TALENT_CATALOG.is_coord_valid(coord)
 
 
 func _is_talent_start_coord(coord: Vector2i) -> bool:
-	return coord.y == 0 and (coord.x == 2 or coord.x == 3)
+	return TALENT_CATALOG.is_start_coord(coord)
 
 
 func _get_talent_neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
-	var neighbors: Array[Vector2i] = []
-	neighbors.append(coord + Vector2i(0, -1))
-	neighbors.append(coord + Vector2i(0, 1))
-	if coord.y == 0 or coord.y >= 4:
-		neighbors.append(coord + Vector2i(-1, 0))
-		neighbors.append(coord + Vector2i(1, 0))
-	return neighbors
+	return TALENT_CATALOG.neighbor_coords(coord)
 
 
 func _get_animation_texture(animation_name: StringName) -> Texture2D:
@@ -1708,32 +1604,30 @@ func _ensure_animation_tree() -> void:
 
 
 func _build_animation_library() -> void:
-	if animation_player.has_animation_library(""):
-		animation_player.remove_animation_library("")
-
-	var library := AnimationLibrary.new()
-	var animation_bases: Array[StringName] = [
-		&"idle",
-		&"run",
-		&"attack",
-		&"ability",
-		&"rolling",
-		&"slide_start",
-		&"slide_hold",
-		&"slide_end",
-	]
-
-	for animation_base in animation_bases:
-		for row in range(DIRECTION_COUNT):
-			var animation_name: String = "%s_%d" % [String(animation_base), row]
-			library.add_animation(animation_name, _create_direction_animation(animation_base, row))
-
-	animation_player.add_animation_library("", library)
+	DIRECTIONAL_ANIMATION_LIBRARY_BUILDER.build_library(
+		animation_player,
+		_get_animation_bases(),
+		DIRECTION_COUNT,
+		FRAME_SIZE,
+		Callable(self, "_get_animation_texture"),
+		Callable(self, "_get_animation_length"),
+		Callable(self, "_get_animation_loop_mode"),
+		Callable(self, "_get_animation_frame_count"),
+		Callable(self, "_get_animation_frame_column"),
+		Callable(self, "_get_frame_duration")
+	)
 
 
 func _build_animation_state_machine() -> void:
-	var state_machine := AnimationNodeStateMachine.new()
-	var animation_bases: Array[StringName] = [
+	DIRECTIONAL_ANIMATION_LIBRARY_BUILDER.build_state_machine(
+		animation_tree,
+		_get_animation_bases(),
+		DIRECTION_COUNT
+	)
+
+
+func _get_animation_bases() -> Array[StringName]:
+	return [
 		&"idle",
 		&"run",
 		&"attack",
@@ -1743,45 +1637,6 @@ func _build_animation_state_machine() -> void:
 		&"slide_hold",
 		&"slide_end",
 	]
-
-	for animation_base in animation_bases:
-		for row in range(DIRECTION_COUNT):
-			var animation_name: String = "%s_%d" % [String(animation_base), row]
-			var animation_node := AnimationNodeAnimation.new()
-			animation_node.animation = animation_name
-			state_machine.add_node(animation_name, animation_node)
-
-	animation_tree.tree_root = state_machine
-
-
-func _create_direction_animation(animation_base: StringName, row: int) -> Animation:
-	var animation := Animation.new()
-	animation.length = _get_animation_length(animation_base)
-	animation.loop_mode = _get_animation_loop_mode(animation_base)
-
-	var texture_track: int = animation.add_track(Animation.TYPE_VALUE)
-	animation.track_set_path(texture_track, NodePath("Sprite2D:texture"))
-	animation.track_set_interpolation_type(texture_track, Animation.INTERPOLATION_NEAREST)
-	animation.value_track_set_update_mode(texture_track, Animation.UPDATE_DISCRETE)
-	animation.track_insert_key(texture_track, 0.0, _get_animation_texture(animation_base))
-
-	var region_track: int = animation.add_track(Animation.TYPE_VALUE)
-	animation.track_set_path(region_track, NodePath("Sprite2D:region_rect"))
-	animation.track_set_interpolation_type(region_track, Animation.INTERPOLATION_NEAREST)
-	animation.value_track_set_update_mode(region_track, Animation.UPDATE_DISCRETE)
-
-	var time: float = 0.0
-	var frame_count: int = _get_animation_frame_count(animation_base)
-	for frame in range(frame_count):
-		var frame_column: int = _get_animation_frame_column(animation_base, frame)
-		var region := Rect2(
-			Vector2(frame_column * FRAME_SIZE.x, row * FRAME_SIZE.y),
-			Vector2(FRAME_SIZE)
-		)
-		animation.track_insert_key(region_track, time, region)
-		time += _get_frame_duration(animation_base, frame)
-
-	return animation
 
 
 func _get_animation_length(animation_base: StringName) -> float:
