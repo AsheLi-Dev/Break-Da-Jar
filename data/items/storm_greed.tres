@@ -6,7 +6,7 @@
 [sub_resource type="Resource" id="Resource_damage"]
 script = ExtResource("2_stat")
 stat_name = &"chain_lightning_damage_scale_override"
-operation = &"set"
+operation = &"set_or_add_one"
 value = 1.5
 
 [sub_resource type="Resource" id="Resource_containers"]
@@ -19,7 +19,7 @@ value = 1.0
 script = ExtResource("1_def")
 id = &"storm_greed"
 display_name = "Storm Greed"
-description = "Your Chain Lightning deals 150% ATK damage, but it can chain to containers."
+description = "Your Chain Lightning deals 150% ATK damage and can chain to containers. Extra copies add 100% ATK Chain Lightning damage."
 category = &"attack"
 rarity = &"legendary"
 effects = Array[Resource]([SubResource("Resource_damage"), SubResource("Resource_containers")])

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "One monitor handles all copies. Duration is min(1.0s +0.2s per extra copy, 3.0s)."
+effect_type = &"periodic_invincibility"
+value = 1.0
+duration = 3.0
+damage_scale = 0.2
+internal_cooldown = 15.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"phase_aegis"
+display_name = "Phase Aegis"
+description = "Every 15 seconds, become invincible for 1 second. Extra copies add 0.2 seconds, up to 3 seconds."
+category = &"defense"
+rarity = &"rare"
+tags = Array[StringName]([&"Invincibility", &"Defense", &"Timed"])
+effects = Array[Resource]([SubResource("Resource_effect")])

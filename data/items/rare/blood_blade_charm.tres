@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "One monitor handles all copies. Every copy adds one extra blade released 0.5s after the previous blade."
+effect_type = &"periodic_blood_blade"
+value = 0.5
+duration = 0.5
+radius = 300.0
+chance = 0.5
+damage_scale = 400.0
+internal_cooldown = 5.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"blood_blade_charm"
+display_name = "Blood Blade Charm"
+description = "Every 5 seconds, launch a piercing Blood Blade at the nearest enemy within 300px. It lasts 0.5 seconds, deals 50% ATK damage to each enemy hit, and applies Bleeding. Extra copies add one additional Blood Blade, released 0.5 seconds after the previous one."
+category = &"attack"
+rarity = &"rare"
+tags = Array[StringName]([&"Blood", &"AutoCast", &"Bleeding", &"Damage"])
+effects = Array[Resource]([SubResource("Resource_effect")])

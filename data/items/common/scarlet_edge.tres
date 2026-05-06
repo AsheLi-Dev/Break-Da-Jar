@@ -5,15 +5,16 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_stat")
-stat_name = &"critical_chance"
+stat_name = &"bleeding_direct_damage_bonus"
 operation = &"add"
-value = 0.1
+value = 0.2
 
 [resource]
 script = ExtResource("1_def")
-id = &"hunters_eye"
-display_name = "Hunter's Eye"
-description = "+10% Critical Chance."
+id = &"scarlet_edge"
+display_name = "Scarlet Edge"
+description = "Deal 20% increased direct damage to bleeding enemies."
 category = &"attack"
 rarity = &"common"
+tags = Array[StringName]([&"Bleeding", &"DamageMultiplier"])
 effects = Array[Resource]([SubResource("Resource_effect")])

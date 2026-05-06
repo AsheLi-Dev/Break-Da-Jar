@@ -5,18 +5,22 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_sequence_scaled"
+stacking_notes = "One listener handles all copies. First copy triggers Chain Lightning twice; extra copies add 1 trigger. Triggers are 0.5s apart."
 event_name = &"enemy_killed"
 effect_type = &"chain_lightning_on_bleeding_death"
 damage_scale = 0.5
 chain_count = 3
+max_stacks = 2
 radius = 180.0
+chance = 0.5
 internal_cooldown = 0.05
 
 [resource]
 script = ExtResource("1_def")
 id = &"bloodbolt_covenant"
 display_name = "Bloodbolt Covenant"
-description = "When a Bleeding enemy dies, trigger Chain Lightning from its position."
+description = "When a Bleeding enemy dies, trigger Chain Lightning twice from its position, 0.5 seconds apart. Extra copies add 1 additional trigger."
 category = &"attack"
 rarity = &"legendary"
 effects = Array[Resource]([SubResource("Resource_effect")])

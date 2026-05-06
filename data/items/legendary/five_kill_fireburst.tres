@@ -5,22 +5,22 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
-stacking_rule = &"shared_counter_scaled_effect"
-stacking_notes = "All copies share one 5-kill counter; each copy adds 2 fireballs per trigger."
+stacking_rule = &"shared_sequence_scaled"
+stacking_notes = "One listener handles all copies. On each kill, first copy releases 2 fireballs; extra copies add 1 fireball. Fireballs are released 0.5s apart."
 event_name = &"enemy_killed"
-effect_type = &"fireballs_every_n_kills"
-max_stacks = 5
+effect_type = &"fireball_sequence_on_poisoned_death"
 chain_count = 2
 radius = 600.0
+chance = 0.5
 damage_scale = 1.0
 duplicate_projectile_spread_degrees = 10.0
 
 [resource]
 script = ExtResource("1_def")
 id = &"five_kill_fireburst"
-display_name = "Five-Kill Fireburst"
-description = "Every 5 enemy kills, release 2 fireballs at nearby enemies."
+display_name = "Plague Fire"
+description = "When a Poisoned enemy dies, release 2 fireballs at nearby enemies, 0.5 seconds apart. Extra copies add 1 additional fireball."
 category = &"attack"
 rarity = &"legendary"
-tags = Array[StringName]([&"OnKill", &"Fireball"])
+tags = Array[StringName]([&"Poison", &"OnKill", &"Fireball"])
 effects = Array[Resource]([SubResource("Resource_effect")])

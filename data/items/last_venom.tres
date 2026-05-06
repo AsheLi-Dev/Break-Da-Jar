@@ -5,15 +5,18 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_poison_transfer_scaled"
+stacking_notes = "One listener handles all copies. First copy transfers poison to the nearest 2 other enemies; extra copies add 1 additional nearest target."
 event_name = &"enemy_killed"
 effect_type = &"poison_transfer_on_death"
+max_stacks = 2
 radius = 240.0
 
 [resource]
 script = ExtResource("1_def")
 id = &"last_venom"
 display_name = "Last Venom"
-description = "When a Poisoned enemy dies, the nearest enemy receives its remaining Poison stacks."
+description = "When a Poisoned enemy dies, the nearest 2 other enemies receive its remaining Poison stacks. Extra copies add 1 additional nearest target."
 category = &"attack"
 rarity = &"legendary"
 effects = Array[Resource]([SubResource("Resource_effect")])

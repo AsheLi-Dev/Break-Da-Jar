@@ -20,6 +20,8 @@ signal stat_changed(stat_name: StringName, value: Variant)
 @export var low_hp_direct_damage_bonus: float = 0.0
 @export var nearby_direct_damage_bonus: float = 0.0
 @export var distant_direct_damage_bonus: float = 0.0
+@export var bleeding_direct_damage_bonus: float = 0.0
+@export var bleeding_damage_bonus: float = 0.0
 @export var bleed_chance: float = 0.0
 @export var poison_chance: float = 0.0
 @export var lifesteal: float = 0.0
@@ -39,6 +41,11 @@ func apply_modifier(stat_name: StringName, operation: StringName, value: float) 
 			_set_stat(stat_name, _get_numeric_stat(stat_name) * value)
 		&"multiply_add":
 			_add_stat(stat_name, _get_numeric_stat(stat_name) * value)
+		&"set_or_add_one":
+			if _get_numeric_stat(stat_name) < 0.0:
+				_set_stat(stat_name, value)
+			else:
+				_add_stat(stat_name, 1.0)
 		_:
 			_add_stat(stat_name, value)
 
@@ -126,6 +133,12 @@ func _add_stat(stat_name: StringName, value: float) -> void:
 		&"distant_direct_damage_bonus":
 			distant_direct_damage_bonus = maxf(0.0, distant_direct_damage_bonus + value)
 			_emit_change(stat_name, distant_direct_damage_bonus)
+		&"bleeding_direct_damage_bonus":
+			bleeding_direct_damage_bonus = maxf(0.0, bleeding_direct_damage_bonus + value)
+			_emit_change(stat_name, bleeding_direct_damage_bonus)
+		&"bleeding_damage_bonus":
+			bleeding_damage_bonus = maxf(0.0, bleeding_damage_bonus + value)
+			_emit_change(stat_name, bleeding_damage_bonus)
 		&"bleed_chance":
 			bleed_chance = clampf(bleed_chance + value, 0.0, 1.0)
 			_emit_change(stat_name, bleed_chance)
@@ -206,6 +219,10 @@ func _get_numeric_stat(stat_name: StringName) -> float:
 			return nearby_direct_damage_bonus
 		&"distant_direct_damage_bonus":
 			return distant_direct_damage_bonus
+		&"bleeding_direct_damage_bonus":
+			return bleeding_direct_damage_bonus
+		&"bleeding_damage_bonus":
+			return bleeding_damage_bonus
 		&"bleed_chance":
 			return bleed_chance
 		&"poison_chance":

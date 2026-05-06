@@ -48,7 +48,7 @@ func apply_status_effect(id: StringName, source_player: Node = null) -> void:
 
 func apply_bleeding(source_player: Node = null) -> void:
 	bleeding_time_left = bleeding_duration
-	if source_player != null:
+	if source_player != null and is_instance_valid(source_player):
 		status_owner_player = source_player
 	print("Bleeding applied to %s" % owner_enemy.name)
 
@@ -60,7 +60,7 @@ func apply_poison(source_player: Node = null) -> void:
 func apply_poison_stacks(amount: int, source_player: Node = null) -> void:
 	poison_stacks = clampi(poison_stacks + amount, 0, poison_max_stacks)
 	poison_time_left = poison_duration
-	if source_player != null:
+	if source_player != null and is_instance_valid(source_player):
 		status_owner_player = source_player
 	print("Poison applied to %s stacks=%d" % [owner_enemy.name, poison_stacks])
 
@@ -80,13 +80,33 @@ func has_status(id: StringName) -> bool:
 
 
 func _apply_dot_tick() -> void:
+	var damage_source := _get_valid_status_owner()
 	if bleeding_time_left > 0.0:
 		var bleed_damage: float = maxf(1.0, owner_enemy.max_hp * bleeding_max_hp_damage_per_second)
-		owner_enemy.take_damage(bleed_damage, status_owner_player, {"source": "bleeding", "direct": false})
+		bleed_damage *= _get_bleeding_damage_multiplier(damage_source)
+		owner_enemy.take_damage(bleed_damage, damage_source, {"source": "bleeding", "direct": false})
 
 	if owner_enemy == null or owner_enemy.is_dead:
 		return
 
 	if poison_time_left > 0.0 and poison_stacks > 0:
 		var poison_damage: float = poison_damage_per_stack * float(poison_stacks)
-		owner_enemy.take_damage(poison_damage, status_owner_player, {"source": "poison", "direct": false})
+		owner_enemy.take_damage(poison_damage, damage_source, {"source": "poison", "direct": false})
+
+
+func _get_valid_status_owner() -> Node:
+	if status_owner_player != null and is_instance_valid(status_owner_player):
+		return status_owner_player
+
+	status_owner_player = null
+	return null
+
+
+func _get_bleeding_damage_multiplier(source: Node) -> float:
+	if source == null or not source.has_method("get_stats"):
+		return 1.0
+
+	var stats: StatsComponent = source.get_stats()
+	if stats == null:
+		return 1.0
+	return maxf(1.0 + stats.bleeding_damage_bonus, 0.0)

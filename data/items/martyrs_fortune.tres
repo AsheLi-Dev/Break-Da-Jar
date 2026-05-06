@@ -5,16 +5,19 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_missing_hp_scaled"
+stacking_notes = "One listener handles all copies. First copy gives +8 Luck per 10 missing HP; extra copies add +2 Luck per 10 missing HP."
 event_name = &"hp_changed"
 effect_type = &"missing_hp_stat_bonus"
 stat_name = &"luck"
-value = 2.0
+value = 8.0
+damage_scale = 2.0
 
 [resource]
 script = ExtResource("1_def")
 id = &"martyrs_fortune"
 display_name = "Martyr's Fortune"
-description = "For every 10 missing HP, gain +2 Luck."
+description = "For every 10 missing HP, gain +8 Luck. Extra copies add +2 Luck per 10 missing HP."
 category = &"utility"
 rarity = &"legendary"
 effects = Array[Resource]([SubResource("Resource_effect")])

@@ -129,6 +129,10 @@ func _on_player_event(arg1: Variant = null, arg2: Variant = null, arg3: Variant 
 			_heal_over_time_after_damage_taken(float(arg1))
 		&"fireballs_every_n_kills":
 			_fireballs_every_n_kills()
+		&"fireball_sequence_on_kill":
+			_fireball_sequence_on_kill()
+		&"fireball_sequence_on_poisoned_death":
+			_fireball_sequence_on_poisoned_death(arg1)
 		&"summon_turrets_on_round_start":
 			_summon_turrets(maxi(chain_count, 1))
 		&"stat_bonus_every_n_kills_shared":
@@ -177,6 +181,10 @@ func _is_pickup_effect() -> bool:
 		return true
 	if effect_type == &"stationary_attack_speed":
 		return true
+	if effect_type == &"auto_holy_flame_laser":
+		return true
+	if _is_periodic_runtime_effect():
+		return true
 	return effect_type == &"periodic_timed_stat_buff"
 
 
@@ -190,6 +198,22 @@ func _apply_pickup_effect() -> void:
 			_add_runtime_effect_node()
 		&"stationary_attack_speed":
 			_add_runtime_effect_node()
+		&"auto_holy_flame_laser":
+			_add_runtime_effect_node()
+		&"periodic_auto_fireball":
+			_add_runtime_effect_node()
+		&"periodic_chain_lightning":
+			_add_runtime_effect_node()
+		&"periodic_blood_claw":
+			_add_runtime_effect_node()
+		&"periodic_blood_blade":
+			_add_runtime_effect_node()
+		&"periodic_explosive_trap":
+			_add_runtime_effect_node()
+		&"periodic_invincibility":
+			_add_runtime_effect_node()
+		&"periodic_damage_shield":
+			_add_runtime_effect_node()
 		&"periodic_timed_stat_buff":
 			_add_runtime_effect_node()
 
@@ -197,7 +221,11 @@ func _apply_pickup_effect() -> void:
 func _is_shared_runtime_effect() -> bool:
 	if stacking_rule == &"shared_runtime_scaled":
 		return true
-	return effect_type == &"nearby_enemy_attack_speed" or effect_type == &"stationary_attack_speed"
+	return effect_type == &"nearby_enemy_attack_speed" or effect_type == &"stationary_attack_speed" or effect_type == &"auto_holy_flame_laser" or _is_periodic_runtime_effect()
+
+
+func _is_periodic_runtime_effect() -> bool:
+	return effect_type == &"periodic_auto_fireball" or effect_type == &"periodic_chain_lightning" or effect_type == &"periodic_blood_claw" or effect_type == &"periodic_blood_blade" or effect_type == &"periodic_explosive_trap" or effect_type == &"periodic_invincibility" or effect_type == &"periodic_damage_shield"
 
 
 func _add_runtime_effect_node() -> void:
@@ -217,6 +245,7 @@ func _add_runtime_effect_node() -> void:
 		duration,
 		max_stacks,
 		radius,
+		chance,
 		damage_scale,
 		internal_cooldown
 	)
@@ -258,8 +287,23 @@ func _spread_bleeding_on_death(enemy: Variant) -> void:
 func _chain_lightning_on_bleeding_death(enemy: Variant) -> void:
 	if not _enemy_has_status(enemy, &"bleeding"):
 		return
-	print("Bloodbolt Covenant triggers")
-	_trigger_chain_lightning(_extract_position(enemy), [enemy])
+
+	var origin := _extract_position(enemy)
+	var trigger_count := 1
+	if stacking_rule == &"shared_sequence_scaled":
+		trigger_count = maxi(max_stacks, 1) + maxi(_get_item_count() - 1, 0)
+
+	for index in range(trigger_count):
+		if index > 0:
+			await owner_player.get_tree().create_timer(maxf(chance, 0.0)).timeout
+		if owner_player == null or not is_instance_valid(owner_player):
+			return
+
+		var excludes := []
+		if enemy is Object and is_instance_valid(enemy):
+			excludes.append(enemy)
+		if _trigger_chain_lightning(origin, excludes):
+			print("Bloodbolt Covenant triggers")
 
 
 func _poison_transfer_on_death(enemy: Variant) -> void:
@@ -269,10 +313,25 @@ func _poison_transfer_on_death(enemy: Variant) -> void:
 	if stacks <= 0:
 		return
 
-	var nearest := _get_nearest_enemy(_extract_position(enemy), radius, [enemy])
-	if nearest != null and nearest.has_method("apply_poison_stacks"):
-		nearest.apply_poison_stacks(stacks, owner_player)
-		print("Last Venom transfers poison stacks=%d" % stacks)
+	var origin := _extract_position(enemy)
+	var exclude := [enemy]
+	var transfer_count := maxi(max_stacks, 1)
+	if stacking_rule == &"shared_poison_transfer_scaled":
+		transfer_count += maxi(_get_item_count() - 1, 0)
+
+	var did_transfer := false
+	for index in range(transfer_count):
+		var target := _get_nearest_enemy(origin, radius, exclude)
+		if target == null:
+			break
+
+		exclude.append(target)
+		if target.has_method("apply_poison_stacks"):
+			target.apply_poison_stacks(stacks, owner_player)
+			did_transfer = true
+
+	if did_transfer:
+		print("Last Venom transfers poison stacks=%d targets=%d" % [stacks, exclude.size() - 1])
 
 
 func _fireball_on_dash(direction_value: Variant) -> void:
@@ -292,7 +351,10 @@ func _fireball_on_dash(direction_value: Variant) -> void:
 
 func _update_missing_hp_bonus(current_hp: int, max_hp: int) -> void:
 	var missing: int = maxi(0, max_hp - current_hp)
-	var bonus: float = floori(float(missing) / 10.0) * value
+	var value_per_step := value
+	if stacking_rule == &"shared_missing_hp_scaled":
+		value_per_step += damage_scale * float(maxi(_get_item_count() - 1, 0))
+	var bonus: float = floori(float(missing) / 10.0) * value_per_step
 	var buffs := _get_buffs()
 	if buffs != null:
 		buffs.set_dynamic_stat_bonus(_get_instance_buff_id(), stat_name, bonus)
@@ -450,9 +512,15 @@ func _uses_shared_stack_listener() -> bool:
 		return true
 	if stacking_rule == &"shared_counter_scaled_effect":
 		return true
+	if stacking_rule == &"shared_sequence_scaled":
+		return true
 	if stacking_rule == &"shared_limited_trigger_scaled_by_copies":
 		return true
 	if stacking_rule == &"shared_trigger_scaled_by_copies":
+		return true
+	if stacking_rule == &"shared_missing_hp_scaled":
+		return true
+	if stacking_rule == &"shared_poison_transfer_scaled":
 		return true
 	if stacking_rule == &"summon_count_by_stat_per_copy":
 		return true
@@ -515,6 +583,37 @@ func _release_fireballs_from_player(count: int) -> bool:
 			target_position = origin + (target.global_position - origin).rotated(deg_to_rad(_get_spread_angle(index, count)))
 		_launch_fireball(origin, target_position)
 	return true
+
+
+func _fireball_sequence_on_kill() -> void:
+	if fireburst_deferred:
+		return
+
+	fireburst_deferred = true
+	call_deferred("_release_fireball_sequence")
+
+
+func _fireball_sequence_on_poisoned_death(enemy: Variant) -> void:
+	if not _enemy_has_status(enemy, &"poison"):
+		return
+	_fireball_sequence_on_kill()
+
+
+func _release_fireball_sequence() -> void:
+	var fireball_count := maxi(chain_count, 1)
+	if stacking_rule == &"shared_sequence_scaled":
+		fireball_count += maxi(_get_item_count() - 1, 0)
+
+	for index in range(fireball_count):
+		if index > 0:
+			await owner_player.get_tree().create_timer(maxf(chance, 0.0)).timeout
+		if owner_player == null or not is_instance_valid(owner_player):
+			fireburst_deferred = false
+			return
+		if not _release_fireballs_from_player(1):
+			break
+
+	fireburst_deferred = false
 
 
 func _pop_nearest_target(targets: Array[Node2D], origin: Vector2) -> Node2D:

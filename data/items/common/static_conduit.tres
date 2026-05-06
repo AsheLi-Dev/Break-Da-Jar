@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "One monitor handles all copies. Damage is 50% ATK +30% ATK per extra copy."
+effect_type = &"periodic_chain_lightning"
+value = 0.5
+max_stacks = 3
+radius = 600.0
+damage_scale = 0.3
+internal_cooldown = 5.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"static_conduit"
+display_name = "Static Conduit"
+description = "When an enemy is within 600px, trigger Chain Lightning every 5 seconds for 50% ATK damage. Extra copies add 30% ATK damage."
+category = &"attack"
+rarity = &"common"
+tags = Array[StringName]([&"ChainLightning", &"AutoCast", &"Damage"])
+effects = Array[Resource]([SubResource("Resource_effect")])

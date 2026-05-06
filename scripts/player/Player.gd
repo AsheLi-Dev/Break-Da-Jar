@@ -72,6 +72,8 @@ var hp: float
 @export var attack_edge_animation_fps: float = 15.0
 @export var attack_fast_animation_fps: float = 36.0
 @export var attack_move_speed_multiplier: float = 0.5
+@export var melee_attack_radius: float = 200.0
+@export var melee_telegraph_color: Color = Color(1.0, 0.9, 0.28, 0.22)
 
 # Holy shockwave tuning. Area2D applies damage and knockback explicitly.
 @export var shockwave_damage: float = 18.0
@@ -106,6 +108,13 @@ var hp: float
 @export var animation_fps: float = 15.0
 @export var movement_bounds_enabled: bool = false
 @export var movement_bounds: Rect2 = Rect2()
+@export var hurt_slow_time_scale: float = 0.35
+@export var hurt_slow_duration: float = 0.2
+@export var hurt_zoom_factor: float = 1.14
+@export var hurt_zoom_duration: float = 0.18
+@export var hurt_flash_color: Color = Color(1.0, 0.05, 0.02, 0.28)
+@export var hurt_flash_duration: float = 0.16
+@export var hurt_feedback_cooldown: float = 1.0
 
 var slow_multiplier: float = 1.0
 var slow_remaining: float = 0.0
@@ -127,6 +136,7 @@ var next_attack_after_slide_ready: bool = false
 var next_attack_damage_bonus: float = 0.0
 var shop_price_multiplier: float = 1.0
 var extra_rare_shop_jars_pending: int = 0
+var damage_shield_active: bool = false
 var state: int = State.NORMAL
 var facing_direction: Vector2 = Vector2.RIGHT
 var animation_direction: Vector2 = Vector2.RIGHT
@@ -143,6 +153,7 @@ var is_invincible: bool = false
 
 var gun_pivot: Node2D
 var muzzle: Marker2D
+var melee_telegraph_visual: Polygon2D
 var shockwave_area: Area2D
 var shockwave_collision: CollisionShape2D
 var shockwave_visual: Polygon2D
@@ -161,6 +172,10 @@ var pending_attack_target_position: Vector2 = Vector2.ZERO
 var slide_sfx: AudioStream
 var action_direction_locked: bool = false
 var action_animation_direction: Vector2 = Vector2.RIGHT
+var hurt_slow_restore_token: int = 0
+var hurt_slow_original_time_scale: float = 1.0
+var hurt_slow_active: bool = false
+var hurt_feedback_cooldown_remaining: float = 0.0
 
 
 func _ready() -> void:
@@ -170,6 +185,10 @@ func _ready() -> void:
 	saved_collision_mask = collision_mask
 	_ensure_placeholder_nodes()
 	hp_changed.emit(roundi(hp), roundi(max_hp))
+
+
+func _exit_tree() -> void:
+	_force_restore_hurt_slow_motion()
 
 
 func _physics_process(delta: float) -> void:
@@ -199,6 +218,9 @@ func _physics_process(delta: float) -> void:
 
 
 func take_damage(amount: float) -> void:
+	if damage_shield_active:
+		damage_shield_active = false
+		return
 	if is_invincible:
 		return
 	if stats != null and randf() < 1.0 - stats.dodge_chance_multiplier:
@@ -212,6 +234,7 @@ func take_damage(amount: float) -> void:
 	hp = maxf(0.0, hp - final_damage)
 	hp_changed.emit(roundi(hp), roundi(max_hp))
 	damage_taken.emit(final_damage)
+	_play_hurt_impact_feedback()
 	if hp <= 0.0:
 		die()
 
@@ -245,6 +268,22 @@ func get_temporary_buffs() -> TemporaryBuffComponent:
 
 func get_base_attack_damage() -> float:
 	return projectile_damage
+
+
+func grant_timed_invincibility(duration: float) -> void:
+	if duration <= 0.0:
+		return
+
+	invincible_remaining = maxf(invincible_remaining, duration)
+	is_invincible = true
+
+
+func grant_damage_shield() -> void:
+	damage_shield_active = true
+
+
+func has_damage_shield() -> bool:
+	return damage_shield_active
 
 
 func gain_experience(amount: int) -> void:
@@ -456,6 +495,70 @@ func _start_camera_shake(magnitude: float, duration: float) -> void:
 		current_camera.call("start_shake", magnitude, duration)
 
 
+func _play_hurt_impact_feedback() -> void:
+	if hurt_feedback_cooldown_remaining > 0.0:
+		return
+
+	hurt_feedback_cooldown_remaining = hurt_feedback_cooldown
+	_start_camera_shake(6.0, hurt_zoom_duration)
+	var current_camera := get_viewport().get_camera_2d()
+	if current_camera != null and current_camera.has_method("start_zoom_in"):
+		current_camera.call("start_zoom_in", hurt_zoom_factor, hurt_zoom_duration)
+	_flash_hurt_screen()
+	_start_hurt_slow_motion()
+
+
+func _start_hurt_slow_motion() -> void:
+	hurt_slow_restore_token += 1
+	var restore_token := hurt_slow_restore_token
+	if not hurt_slow_active:
+		hurt_slow_original_time_scale = Engine.time_scale
+	hurt_slow_active = true
+	Engine.time_scale = minf(Engine.time_scale, hurt_slow_time_scale)
+	var tree := get_tree()
+	if tree == null:
+		return
+	tree.create_timer(hurt_slow_duration, true, false, true).timeout.connect(_restore_hurt_slow_motion.bind(restore_token))
+
+
+func _restore_hurt_slow_motion(restore_token: int) -> void:
+	if restore_token != hurt_slow_restore_token:
+		return
+	_force_restore_hurt_slow_motion()
+
+
+func _force_restore_hurt_slow_motion() -> void:
+	if not hurt_slow_active:
+		return
+
+	Engine.time_scale = hurt_slow_original_time_scale
+	hurt_slow_active = false
+
+
+func _flash_hurt_screen() -> void:
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+
+	var layer := CanvasLayer.new()
+	layer.name = "HurtFlash"
+	layer.layer = 100
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	tree.current_scene.add_child(layer)
+
+	var rect := ColorRect.new()
+	rect.color = hurt_flash_color
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(rect)
+
+	var tween := layer.create_tween()
+	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.set_ignore_time_scale(true)
+	tween.tween_property(rect, "color:a", 0.0, hurt_flash_duration)
+	tween.finished.connect(Callable(layer, "queue_free"))
+
+
 func notify_enemy_killed(enemy: Node) -> void:
 	if talent_heal_on_kill_enabled:
 		heal(5.0)
@@ -475,6 +578,7 @@ func apply_slow(multiplier: float, duration: float) -> void:
 
 
 func die() -> void:
+	_force_restore_hurt_slow_motion()
 	queue_free()
 
 
@@ -482,6 +586,7 @@ func _update_timers(delta: float) -> void:
 	fire_cooldown_remaining = maxf(0.0, fire_cooldown_remaining - delta)
 	shockwave_cooldown_remaining = maxf(0.0, shockwave_cooldown_remaining - delta)
 	dash_cooldown_remaining = maxf(0.0, dash_cooldown_remaining - delta)
+	hurt_feedback_cooldown_remaining = maxf(0.0, hurt_feedback_cooldown_remaining - delta)
 	slide_window_remaining = maxf(0.0, slide_window_remaining - delta)
 	invincible_remaining = maxf(0.0, invincible_remaining - delta)
 	slow_remaining = maxf(0.0, slow_remaining - delta)
@@ -627,6 +732,7 @@ func _try_fire_projectile() -> void:
 	pending_attack_projectile = true
 	pending_attack_target_position = get_global_mouse_position()
 	_play_action_animation_with_direction(&"attack", _get_action_animation_time(&"attack"), facing_direction)
+	_show_melee_telegraph(facing_direction)
 
 
 func _try_cast_shockwave() -> void:
@@ -877,6 +983,7 @@ func _play_sprite_animation(animation_name: StringName, force_restart: bool = fa
 
 	if current_animation == &"attack" and animation_name != &"attack":
 		pending_attack_projectile = false
+		_hide_melee_telegraph()
 
 	current_animation = animation_name
 	current_animation_name = tree_animation_name
@@ -898,7 +1005,8 @@ func _maybe_spawn_attack_projectile() -> void:
 		return
 
 	pending_attack_projectile = false
-	_spawn_holy_bolt_at(pending_attack_target_position)
+	_hide_melee_telegraph()
+	_perform_melee_attack_at(pending_attack_target_position)
 
 
 func _get_attack_projectile_time() -> float:
@@ -936,6 +1044,7 @@ func _cancel_current_action() -> void:
 	action_animation_elapsed = 0.0
 	pending_attack_projectile = false
 	action_direction_locked = false
+	_hide_melee_telegraph()
 
 
 func _spawn_holy_bolt_at(target_position: Vector2) -> void:
@@ -954,6 +1063,58 @@ func _spawn_holy_bolt_at(target_position: Vector2) -> void:
 	projectile.setup(direction, projectile_damage, projectile_speed, projectile_lifetime, &"enemy")
 	projectile.enable_boomerang(self, projectile_max_distance, projectile_return_delay, projectile_catch_distance)
 	attack_started.emit(muzzle.global_position, direction, {"source": "projectile", "direct": true})
+
+
+func _perform_melee_attack_at(target_position: Vector2) -> void:
+	var direction: Vector2 = target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	var melee_radius := melee_attack_radius
+	var attack_info := {"source": "player_attack", "direct": true, "allow_procs": true}
+	attack_started.emit(global_position, direction, attack_info)
+
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		var enemy_2d := enemy as Node2D
+		if enemy_2d == null or not _is_target_in_melee_arc(enemy_2d.global_position, direction, melee_radius):
+			continue
+		if enemy.has_method("take_damage"):
+			deal_player_damage_to_enemy(enemy, projectile_damage, attack_info.duplicate())
+
+	for container in get_tree().get_nodes_in_group("container"):
+		var container_2d := container as Node2D
+		if container_2d == null or not _is_target_in_melee_arc(container_2d.global_position, direction, melee_radius):
+			continue
+		if container.has_method("take_damage"):
+			container.take_damage(projectile_damage, {"source": "player_attack", "owner": self})
+
+
+func _is_target_in_melee_arc(target_position: Vector2, direction: Vector2, radius: float) -> bool:
+	var offset := target_position - global_position
+	if offset.length_squared() > radius * radius:
+		return false
+	if offset.length_squared() <= 0.001:
+		return true
+	return direction.dot(offset.normalized()) >= 0.0
+
+
+func _show_melee_telegraph(direction: Vector2) -> void:
+	if melee_telegraph_visual == null:
+		return
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+
+	melee_telegraph_visual.polygon = _semicircle_polygon(melee_attack_radius, 24)
+	melee_telegraph_visual.rotation = direction.angle()
+	melee_telegraph_visual.color = melee_telegraph_color
+	melee_telegraph_visual.visible = true
+
+
+func _hide_melee_telegraph() -> void:
+	if melee_telegraph_visual != null:
+		melee_telegraph_visual.visible = false
 
 
 func emit_container_broken(container: Node, attack_info: Dictionary = {}) -> void:
@@ -1181,6 +1342,8 @@ func _get_conditional_direct_damage_multiplier(enemy: Node) -> float:
 		multiplier *= 1.0 + stats.nearby_direct_damage_bonus
 	if stats.distant_direct_damage_bonus > 0.0 and distance >= 360.0:
 		multiplier *= 1.0 + stats.distant_direct_damage_bonus
+	if stats.bleeding_direct_damage_bonus > 0.0 and _enemy_has_status(enemy, &"bleeding"):
+		multiplier *= 1.0 + stats.bleeding_direct_damage_bonus
 	return multiplier
 
 
@@ -1209,6 +1372,10 @@ func _get_distance_to_enemy(enemy: Node) -> float:
 	if enemy_2d == null:
 		return 0.0
 	return global_position.distance_to(enemy_2d.global_position)
+
+
+func _enemy_has_status(enemy: Node, status_id: StringName) -> bool:
+	return enemy != null and enemy.has_method("has_status") and enemy.has_status(status_id)
 
 
 func _try_trigger_talent_fireball(enemy: Node) -> void:
@@ -1434,6 +1601,16 @@ func _ensure_placeholder_nodes() -> void:
 	shockwave_visual.polygon = _circle_polygon(shockwave_radius, 36)
 	shockwave_visual.visible = false
 
+	melee_telegraph_visual = get_node_or_null("MeleeTelegraphVisual") as Polygon2D
+	if melee_telegraph_visual == null:
+		melee_telegraph_visual = Polygon2D.new()
+		melee_telegraph_visual.name = "MeleeTelegraphVisual"
+		add_child(melee_telegraph_visual)
+		move_child(melee_telegraph_visual, 0)
+	melee_telegraph_visual.color = melee_telegraph_color
+	melee_telegraph_visual.polygon = _semicircle_polygon(melee_attack_radius, 24)
+	melee_telegraph_visual.visible = false
+
 
 func _ensure_stats_and_items() -> void:
 	if stats == null:
@@ -1493,6 +1670,16 @@ func _circle_polygon(radius: float, points: int) -> PackedVector2Array:
 	var polygon: PackedVector2Array = PackedVector2Array()
 	for point in range(points):
 		var angle: float = TAU * float(point) / float(points)
+		polygon.append(Vector2(cos(angle), sin(angle)) * radius)
+
+	return polygon
+
+
+func _semicircle_polygon(radius: float, points: int) -> PackedVector2Array:
+	var polygon: PackedVector2Array = PackedVector2Array()
+	polygon.append(Vector2.ZERO)
+	for point in range(points + 1):
+		var angle: float = -PI * 0.5 + PI * float(point) / float(maxi(points, 1))
 		polygon.append(Vector2(cos(angle), sin(angle)) * radius)
 
 	return polygon
