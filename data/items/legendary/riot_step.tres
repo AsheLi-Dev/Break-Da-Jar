@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "Surrounded means enemies within 220px. Each surrounding enemy grants one dodge layer; each copy adds +1% dodge per layer and +2 max layers. Layers stack multiplicatively by failure rate."
+effect_type = &"surrounded_stat_bonus"
+stat_name = &"dodge_chance_multiplier"
+value = -0.03
+duration = 5.0
+max_stacks = 2
+damage_scale = 0.01
+
+[resource]
+script = ExtResource("1_def")
+id = &"riot_step"
+display_name = "Riot Step"
+description = "Gain one dodge layer per surrounding enemy within 220px. Each layer gives 3% dodge, up to 5 layers. Extra copies add +1% dodge per layer and +2 max layers. Layers stack multiplicatively."
+category = &"defense"
+rarity = &"legendary"
+tags = Array[StringName]([&"Surrounded", &"Dodge"])
+effects = Array[Resource]([SubResource("Resource_effect")])

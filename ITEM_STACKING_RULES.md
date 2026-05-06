@@ -25,8 +25,9 @@ Item effects default to `stacking_rule = "linear"` unless a resource says otherw
 - `solar_ember`, `chain_judgment`, `merciful_tally`: `chance_multiplicative`
 - `bone_graft_totem`: `shared_counter_cap_per_copy`
 - `blood_renewal_idol`: `shared_trigger_scaled_by_copies`
+- `crowd_crown`: first copy grants +3 surrounded enemy count; extra copies grant +1.
 - `dragonheart_aerie`: `summon_count_by_stat_per_copy`
-- `surrounded_tempo`: `shared_runtime_scaled`
+- `surrounded_tempo`, `iron_ring_ward`, `packbreaker_brand`, `blood_tide_nail`, `crisis_pulse`, `riot_step`: `shared_runtime_scaled`
 - `stillness_trigger`: `shared_runtime_scaled`
 - `five_kill_fireburst`: `shared_counter_scaled_effect`
 - `level_up_turret_core`, `round_start_turret_battery`: `linear_summon_count`

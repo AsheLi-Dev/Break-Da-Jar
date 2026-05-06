@@ -1,6 +1,8 @@
 extends ItemEffect
 class_name EventEffect
 
+const EFFECT_TARGETING := preload("res://systems/items/effects/EffectTargeting.gd")
+const EFFECT_TYPES := preload("res://systems/items/effects/ItemEffectTypes.gd")
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
 const FIRE_DRAGON_SCENE := preload("res://scenes/summons/FireDragon.tscn")
 const HEALING_OVER_TIME_SCRIPT := preload("res://systems/combat/HealingOverTimeEffect.gd")
@@ -173,19 +175,23 @@ func _clear_cooldown() -> void:
 func _is_pickup_effect() -> bool:
 	if stacking_rule == &"pickup_once":
 		return true
-	if effect_type == &"shop_price_multiplier":
+	if effect_type == EFFECT_TYPES.SHOP_PRICE_MULTIPLIER:
 		return true
-	if effect_type == &"queue_extra_rare_shop_jar":
+	if effect_type == EFFECT_TYPES.QUEUE_EXTRA_RARE_SHOP_JAR:
 		return true
-	if effect_type == &"nearby_enemy_attack_speed":
+	if effect_type == EFFECT_TYPES.FIRST_COPY_STAT_BONUS:
 		return true
-	if effect_type == &"stationary_attack_speed":
+	if effect_type == EFFECT_TYPES.NEARBY_ENEMY_ATTACK_SPEED:
 		return true
-	if effect_type == &"auto_holy_flame_laser":
+	if effect_type == EFFECT_TYPES.SURROUNDED_STAT_BONUS:
+		return true
+	if effect_type == EFFECT_TYPES.STATIONARY_ATTACK_SPEED:
+		return true
+	if effect_type == EFFECT_TYPES.AUTO_HOLY_FLAME_LASER:
 		return true
 	if _is_periodic_runtime_effect():
 		return true
-	return effect_type == &"periodic_timed_stat_buff"
+	return effect_type == EFFECT_TYPES.PERIODIC_TIMED_STAT_BUFF
 
 
 func _apply_pickup_effect() -> void:
@@ -194,7 +200,11 @@ func _apply_pickup_effect() -> void:
 			_apply_shop_price_multiplier()
 		&"queue_extra_rare_shop_jar":
 			_queue_extra_rare_shop_jar()
+		&"first_copy_stat_bonus":
+			_apply_first_copy_stat_bonus()
 		&"nearby_enemy_attack_speed":
+			_add_runtime_effect_node()
+		&"surrounded_stat_bonus":
 			_add_runtime_effect_node()
 		&"stationary_attack_speed":
 			_add_runtime_effect_node()
@@ -221,11 +231,16 @@ func _apply_pickup_effect() -> void:
 func _is_shared_runtime_effect() -> bool:
 	if stacking_rule == &"shared_runtime_scaled":
 		return true
-	return effect_type == &"nearby_enemy_attack_speed" or effect_type == &"stationary_attack_speed" or effect_type == &"auto_holy_flame_laser" or _is_periodic_runtime_effect()
+	return [
+		EFFECT_TYPES.NEARBY_ENEMY_ATTACK_SPEED,
+		EFFECT_TYPES.STATIONARY_ATTACK_SPEED,
+		EFFECT_TYPES.SURROUNDED_STAT_BONUS,
+		EFFECT_TYPES.AUTO_HOLY_FLAME_LASER,
+	].has(effect_type) or _is_periodic_runtime_effect()
 
 
 func _is_periodic_runtime_effect() -> bool:
-	return effect_type == &"periodic_auto_fireball" or effect_type == &"periodic_chain_lightning" or effect_type == &"periodic_blood_claw" or effect_type == &"periodic_blood_blade" or effect_type == &"periodic_explosive_trap" or effect_type == &"periodic_invincibility" or effect_type == &"periodic_damage_shield"
+	return EFFECT_TYPES.is_periodic_runtime(effect_type)
 
 
 func _add_runtime_effect_node() -> void:
@@ -262,6 +277,18 @@ func _add_round_buff() -> void:
 	var buffs := _get_buffs()
 	if buffs != null:
 		buffs.add_round_stat_buff(_get_instance_buff_id(), stat_name, value, max_stacks)
+
+
+func _apply_first_copy_stat_bonus() -> void:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return
+
+	var stats: StatsComponent = owner_player.get_stats()
+	if stats == null:
+		return
+
+	var bonus: float = value if item_stack_index == 0 else damage_scale
+	stats.apply_modifier(stat_name, &"add", bonus)
 
 
 func _apply_lifesteal(damage_dealt: float) -> void:
@@ -524,11 +551,11 @@ func _uses_shared_stack_listener() -> bool:
 		return true
 	if stacking_rule == &"summon_count_by_stat_per_copy":
 		return true
-	if effect_type == &"stat_bonus_every_n_kills_shared":
+	if effect_type == EFFECT_TYPES.STAT_BONUS_EVERY_N_KILLS_SHARED:
 		return true
-	if effect_type == &"lose_current_hp_percent_then_heal_over_time":
+	if effect_type == EFFECT_TYPES.LOSE_CURRENT_HP_PERCENT_THEN_HEAL_OVER_TIME:
 		return true
-	return effect_type == &"fire_dragons_per_max_hp"
+	return effect_type == EFFECT_TYPES.FIRE_DRAGONS_PER_MAX_HP
 
 
 func _get_item_count() -> int:
@@ -961,40 +988,12 @@ func _enemy_has_status(enemy: Variant, id: StringName) -> bool:
 
 
 func _get_enemies_near(origin: Vector2, search_radius: float, exclude: Array = []) -> Array[Node2D]:
-	var result: Array[Node2D] = []
-	for enemy in owner_player.get_tree().get_nodes_in_group("enemy"):
-		var enemy_2d := enemy as Node2D
-		if enemy_2d == null or exclude.has(enemy) or not is_instance_valid(enemy_2d):
-			continue
-		if enemy_2d.global_position.distance_to(origin) <= search_radius:
-			result.append(enemy_2d)
-	return result
+	return EFFECT_TARGETING.enemies_near(owner_player, origin, search_radius, exclude)
 
 
 func _get_nearest_enemy(origin: Vector2, search_radius: float, exclude: Array = []) -> Node2D:
-	var best: Node2D
-	var best_distance: float = INF
-	for enemy in _get_enemies_near(origin, search_radius, exclude):
-		var distance: float = enemy.global_position.distance_to(origin)
-		if distance < best_distance:
-			best_distance = distance
-			best = enemy
-	return best
+	return EFFECT_TARGETING.nearest_enemy(owner_player, origin, search_radius, exclude)
 
 
 func _get_nearest_container(origin: Vector2, search_radius: float, exclude: Array = []) -> Node2D:
-	var best: Node2D
-	var best_distance: float = INF
-	for container in owner_player.get_tree().get_nodes_in_group("container"):
-		var container_2d := container as Node2D
-		if container_2d == null or exclude.has(container) or not is_instance_valid(container_2d):
-			continue
-		if container_2d is BreakableContainer and container_2d.is_breaking:
-			continue
-		if container_2d is BreakableContainer and container_2d.is_shop_container:
-			continue
-		var distance: float = container_2d.global_position.distance_to(origin)
-		if distance <= search_radius and distance < best_distance:
-			best_distance = distance
-			best = container_2d
-	return best
+	return EFFECT_TARGETING.nearest_container(owner_player, origin, search_radius, exclude)

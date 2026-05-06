@@ -8,18 +8,17 @@ script = ExtResource("2_event")
 stacking_rule = &"shared_runtime_scaled"
 stacking_notes = "Surrounded means enemies within 220px. One monitor reads copy count; extra copies add +50% per-enemy effect and +50% cap."
 effect_type = &"surrounded_stat_bonus"
-stat_name = &"attack_speed_bonus"
-value = 0.05
-duration = 0.25
-radius = 220.0
-damage_scale = 0.025
+stat_name = &"attack_damage_bonus"
+value = 0.04
+duration = 0.2
+damage_scale = 0.02
 
 [resource]
 script = ExtResource("1_def")
-id = &"surrounded_tempo"
-display_name = "Surrounded Tempo"
-description = "Gain 5% attack speed per surrounding enemy within 220px, up to 25%. Extra copies increase the per-enemy bonus and cap by 50%."
+id = &"packbreaker_brand"
+display_name = "Packbreaker Brand"
+description = "Gain +4% attack damage per surrounding enemy within 220px, up to +20%. Extra copies increase the per-enemy bonus and cap by 50%."
 category = &"attack"
-rarity = &"common"
-tags = Array[StringName]([&"Nearby", &"AttackSpeed"])
+rarity = &"rare"
+tags = Array[StringName]([&"Surrounded", &"Damage"])
 effects = Array[Resource]([SubResource("Resource_effect")])

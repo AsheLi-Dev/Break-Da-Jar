@@ -18,7 +18,8 @@ Use this file to assign stacking rules per effect or per item.
 | `stat_bonus_every_n_kills_shared` | `bone_graft_totem` | shared kill counter, cap +50 max HP per copy |
 | `lose_current_hp_percent_then_heal_over_time` | `blood_renewal_idol` | lose HP once, healing scales by copies |
 | `fire_dragons_per_max_hp` | `dragonheart_aerie` | dragon count = floor(max HP / 100) * copies |
-| `nearby_enemy_attack_speed` | `surrounded_tempo` | one monitor, special per-copy scaling |
+| `first_copy_stat_bonus` | `crowd_crown` | first copy adds +3 surrounded enemy count; extra copies add +1 |
+| `surrounded_stat_bonus` | `surrounded_tempo`, `iron_ring_ward`, `packbreaker_brand`, `blood_tide_nail`, `crisis_pulse`, `riot_step` | one monitor reads copy count; non-dodge copies add +50% per-layer effect and +50% cap; `riot_step` uses per-layer multiplicative dodge |
 | `stationary_attack_speed` | `stillness_trigger` | one monitor, value stacks, duration does not |
 
 ## Needs Your Rule

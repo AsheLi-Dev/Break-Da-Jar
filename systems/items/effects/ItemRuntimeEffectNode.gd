@@ -1,6 +1,7 @@
 extends Node
 class_name ItemRuntimeEffectNode
 
+const EFFECT_TARGETING := preload("res://systems/items/effects/EffectTargeting.gd")
 const EXPLOSIVE_TRAP_SCRIPT := preload("res://systems/combat/ExplosiveTrap.gd")
 const BLOOD_CLAW_SCRIPT := preload("res://systems/combat/BloodClawStrike.gd")
 const BLOOD_BLADE_SCRIPT := preload("res://systems/combat/BloodBladeProjectile.gd")
@@ -79,7 +80,9 @@ func _process(delta: float) -> void:
 
 	match effect_type:
 		&"nearby_enemy_attack_speed":
-			_update_nearby_enemy_attack_speed()
+			_update_surrounded_stat_bonus()
+		&"surrounded_stat_bonus":
+			_update_surrounded_stat_bonus()
 		&"stationary_attack_speed":
 			_update_stationary_attack_speed(delta)
 		&"periodic_timed_stat_buff":
@@ -102,21 +105,30 @@ func _process(delta: float) -> void:
 			_update_periodic_damage_shield(delta)
 
 
-func _update_nearby_enemy_attack_speed() -> void:
+func _update_surrounded_stat_bonus() -> void:
 	var owner_2d := owner_player as Node2D
 	if owner_2d == null:
 		return
 
-	var enemies_nearby: int = 0
-	for enemy in owner_player.get_tree().get_nodes_in_group("enemy"):
-		var enemy_2d := enemy as Node2D
-		if enemy_2d != null and is_instance_valid(enemy_2d) and enemy_2d.global_position.distance_to(owner_2d.global_position) <= radius:
-			enemies_nearby += 1
+	var surrounding_enemy_count: int = EFFECT_TARGETING.enemies_surrounding(owner_player, owner_2d.global_position).size()
+	surrounding_enemy_count += _get_surrounded_enemy_count_bonus()
 
 	var item_count: int = _get_item_count()
+	if stat_name == &"dodge_chance_multiplier" and value < 0.0:
+		var dodge_chance_per_layer: float = absf(value) + damage_scale * float(maxi(item_count - 1, 0))
+		var max_layers: int = maxi(int(round(duration)) + maxi(item_count - 1, 0) * maxi(max_stacks, 0), 0)
+		var layers: int = mini(surrounding_enemy_count, max_layers)
+		_set_dynamic_bonus(pow(1.0 - dodge_chance_per_layer, float(layers)) - 1.0)
+		return
+
 	var per_enemy_bonus: float = value + damage_scale * float(maxi(item_count - 1, 0))
-	var cap: float = duration * float(item_count)
-	_set_dynamic_bonus(minf(float(enemies_nearby) * per_enemy_bonus, cap))
+	var cap: float = duration * (1.0 + 0.5 * float(maxi(item_count - 1, 0)))
+	var wanted_bonus: float = float(surrounding_enemy_count) * per_enemy_bonus
+	if wanted_bonus >= 0.0:
+		wanted_bonus = minf(wanted_bonus, cap)
+	else:
+		wanted_bonus = maxf(wanted_bonus, -cap)
+	_set_dynamic_bonus(wanted_bonus)
 
 
 func _update_stationary_attack_speed(delta: float) -> void:
@@ -426,17 +438,7 @@ func _get_base_attack_damage() -> float:
 
 
 func _get_nearest_enemy(origin: Vector2, search_radius: float, exclude: Array = []) -> Node2D:
-	var best: Node2D
-	var best_distance := INF
-	for enemy in owner_player.get_tree().get_nodes_in_group("enemy"):
-		var enemy_2d := enemy as Node2D
-		if enemy_2d == null or not is_instance_valid(enemy_2d) or exclude.has(enemy):
-			continue
-		var distance := enemy_2d.global_position.distance_to(origin)
-		if distance <= search_radius and distance < best_distance:
-			best = enemy_2d
-			best_distance = distance
-	return best
+	return EFFECT_TARGETING.nearest_enemy(owner_player, origin, search_radius, exclude)
 
 
 func _spawn_chain_lightning_vfx(start_position: Vector2, end_position: Vector2) -> void:
@@ -631,3 +633,13 @@ func _get_item_count() -> int:
 	if owner_player != null and owner_player.has_method("get_item_count"):
 		return maxi(int(owner_player.get_item_count(item_id)), 1)
 	return 1
+
+
+func _get_surrounded_enemy_count_bonus() -> int:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return 0
+
+	var stats: StatsComponent = owner_player.get_stats()
+	if stats == null:
+		return 0
+	return maxi(stats.surrounded_enemy_count_bonus, 0)

@@ -26,6 +26,7 @@ signal stat_changed(stat_name: StringName, value: Variant)
 @export var poison_chance: float = 0.0
 @export var lifesteal: float = 0.0
 @export var dodge_chance_multiplier: float = 1.0
+@export var surrounded_enemy_count_bonus: int = 0
 @export var chain_lightning_chance: float = 0.0
 @export var fireball_chance: float = 0.0
 @export var chain_lightning_damage_scale_override: float = -1.0
@@ -151,6 +152,9 @@ func _add_stat(stat_name: StringName, value: float) -> void:
 		&"dodge_chance_multiplier":
 			dodge_chance_multiplier = clampf(dodge_chance_multiplier + value, 0.0, 1.0)
 			_emit_change(stat_name, dodge_chance_multiplier)
+		&"surrounded_enemy_count_bonus":
+			surrounded_enemy_count_bonus = maxi(0, surrounded_enemy_count_bonus + int(round(value)))
+			_emit_change(stat_name, surrounded_enemy_count_bonus)
 		&"chain_lightning_chance":
 			chain_lightning_chance = clampf(chain_lightning_chance + value, 0.0, 1.0)
 			_emit_change(stat_name, chain_lightning_chance)
@@ -231,6 +235,8 @@ func _get_numeric_stat(stat_name: StringName) -> float:
 			return lifesteal
 		&"dodge_chance_multiplier":
 			return dodge_chance_multiplier
+		&"surrounded_enemy_count_bonus":
+			return surrounded_enemy_count_bonus
 		&"chain_lightning_chance":
 			return chain_lightning_chance
 		&"fireball_chance":
