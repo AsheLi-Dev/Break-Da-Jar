@@ -113,6 +113,7 @@ func die() -> void:
 	warning_cone.visible = false
 	collision_layer = 0
 	collision_mask = 0
+	_disable_hitbox()
 	died.emit(self)
 	_start_action_animation(&"die", _get_full_animation_time())
 	get_tree().create_timer(_get_full_animation_time()).timeout.connect(queue_free)
@@ -172,6 +173,16 @@ func _try_damage_player(body: Node) -> void:
 		body.call("take_damage", damage)
 
 
+func _disable_hitbox() -> void:
+	var hitbox := get_node_or_null("Hitbox") as Area2D
+	if hitbox == null:
+		return
+
+	hitbox.set_deferred("monitorable", false)
+	hitbox.set_deferred("collision_layer", 0)
+	hitbox.set_deferred("collision_mask", 0)
+
+
 func _ensure_melee_nodes() -> void:
 	var cone_polygon: PackedVector2Array = _make_cone_polygon(cone_radius, deg_to_rad(cone_angle_degrees), 12)
 
@@ -191,6 +202,8 @@ func _ensure_melee_nodes() -> void:
 		add_child(attack_area)
 	attack_area.monitoring = false
 	attack_area.monitorable = false
+	attack_area.collision_mask = 0
+	attack_area.set_collision_mask_value(7, true)
 	if not attack_area.body_entered.is_connected(_on_attack_body_entered):
 		attack_area.body_entered.connect(_on_attack_body_entered)
 

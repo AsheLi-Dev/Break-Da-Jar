@@ -116,6 +116,7 @@ func die() -> void:
 	shout_hitbox.monitoring = false
 	collision_layer = 0
 	collision_mask = 0
+	_disable_hitbox()
 	died.emit(self)
 	_play_brute_animation(&"die", true)
 	get_tree().create_timer(_get_full_animation_time()).timeout.connect(queue_free)
@@ -287,6 +288,16 @@ func _try_damage_player(body: Node, attack_damage: float) -> void:
 			body.call("apply_slow", shout_slow_multiplier, shout_slow_duration)
 
 
+func _disable_hitbox() -> void:
+	var hitbox := get_node_or_null("Hitbox") as Area2D
+	if hitbox == null:
+		return
+
+	hitbox.set_deferred("monitorable", false)
+	hitbox.set_deferred("collision_layer", 0)
+	hitbox.set_deferred("collision_mask", 0)
+
+
 func _fire_radial_projectiles() -> void:
 	var count: int = maxi(projectile_count, 1)
 	for index in range(count):
@@ -304,6 +315,9 @@ func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectil
 		projectile = Projectile.new()
 
 	projectile.global_position = spawn_position
+	projectile.collision_mask = 0
+	projectile.set_collision_mask_value(1, true)
+	projectile.set_collision_mask_value(7, true)
 	get_tree().current_scene.add_child(projectile)
 	projectile.direction = direction
 	return projectile
@@ -341,6 +355,8 @@ func _ensure_elite_nodes() -> void:
 		add_child(shout_hitbox)
 	shout_hitbox.monitoring = false
 	shout_hitbox.monitorable = false
+	shout_hitbox.collision_mask = 0
+	shout_hitbox.set_collision_mask_value(7, true)
 	if not shout_hitbox.body_entered.is_connected(_on_shout_body_entered):
 		shout_hitbox.body_entered.connect(_on_shout_body_entered)
 
@@ -373,6 +389,8 @@ func _get_or_create_area(area_name: StringName, radius: float) -> Area2D:
 
 	area.monitoring = false
 	area.monitorable = false
+	area.collision_mask = 0
+	area.set_collision_mask_value(7, true)
 
 	var collision := area.get_node_or_null("CollisionShape2D") as CollisionShape2D
 	if collision == null:

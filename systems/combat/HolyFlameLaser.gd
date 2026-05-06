@@ -88,8 +88,22 @@ func _apply_damage() -> void:
 		elif body.is_in_group("container"):
 			_damage_container(body)
 	for area in get_overlapping_areas():
-		if area.is_in_group("container"):
+		var enemy := _get_enemy_target(area)
+		if enemy != null:
+			_damage_enemy(enemy)
+		elif area.is_in_group("container"):
 			_damage_container(area)
+
+
+func _get_enemy_target(node: Node) -> Node:
+	if node.is_in_group("enemy") and node.has_method("take_damage"):
+		return node
+
+	var parent := node.get_parent()
+	if parent != null and parent.is_in_group("enemy") and parent.has_method("take_damage"):
+		return parent
+
+	return null
 
 
 func _damage_enemy(enemy: Node) -> void:

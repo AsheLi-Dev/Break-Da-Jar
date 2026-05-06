@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[node name="UrnShadow" type="Polygon2D"]
+position = Vector2(0, 23)
+scale = Vector2(0.68700445, 1)
+z_index = -1
+color = Color(0.02, 0.025, 0.02, 0.28)
+offset = Vector2(0, 22.825)
+polygon = PackedVector2Array(-30, 0, -21, -6, 0, -8, 21, -6, 30, 0, 21, 6, 0, 8, -21, 6)

@@ -109,6 +109,7 @@ func die() -> void:
 	aim_line.visible = false
 	collision_layer = 0
 	collision_mask = 0
+	_disable_hitbox()
 	died.emit(self)
 	_start_action_animation(&"die", _get_full_animation_time(&"die"))
 	get_tree().create_timer(_get_full_animation_time(&"die")).timeout.connect(queue_free)
@@ -162,9 +163,22 @@ func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectil
 	var projectile := ACID_PROJECTILE_SCRIPT.new() as Projectile
 
 	projectile.global_position = spawn_position
+	projectile.collision_mask = 0
+	projectile.set_collision_mask_value(1, true)
+	projectile.set_collision_mask_value(7, true)
 	get_tree().current_scene.add_child(projectile)
 	projectile.direction = direction
 	return projectile
+
+
+func _disable_hitbox() -> void:
+	var hitbox := get_node_or_null("Hitbox") as Area2D
+	if hitbox == null:
+		return
+
+	hitbox.set_deferred("monitorable", false)
+	hitbox.set_deferred("collision_layer", 0)
+	hitbox.set_deferred("collision_mask", 0)
 
 
 func _get_local_aim_line_end() -> Vector2:

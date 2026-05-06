@@ -84,6 +84,7 @@ shop_next_round={
 2d_physics/layer_4="Attack Hitbox"
 2d_physics/layer_5="Enemy Projectile"
 2d_physics/layer_6="Container"
+2d_physics/layer_7="Player Body"
 
 [physics]
 

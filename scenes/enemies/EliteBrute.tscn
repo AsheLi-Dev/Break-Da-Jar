@@ -1,72 +1,81 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://dc13030o7itfy"]
 
-[ext_resource type="Script" path="res://scripts/enemies/EliteBrute.gd" id="1_elite"]
+[ext_resource type="Script" uid="uid://bigqtqo4vw86g" path="res://scripts/enemies/EliteBrute.gd" id="1_elite"]
 [ext_resource type="PackedScene" path="res://scenes/projectiles/Projectile.tscn" id="2_projectile"]
-[ext_resource type="Texture2D" path="res://assets/zombies/elite brute zombie/Idle.png" id="3_idle"]
+[ext_resource type="Texture2D" uid="uid://bsuwd0s6nbb0c" path="res://assets/zombies/elite brute zombie/Idle.png" id="3_idle"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 24.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hitbox"]
 radius = 24.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_melee"]
 radius = 105.0
 
-[node name="EliteBrute" type="CharacterBody2D" groups=["enemy"]]
-collision_layer = 2
-collision_mask = 1
+[node name="EliteBrute" type="CharacterBody2D" unique_id=322836498 groups=["enemy"]]
+collision_layer = 0
 script = ExtResource("1_elite")
+projectile_scene = ExtResource("2_projectile")
 max_hp = 120.0
 move_speed = 78.0
 damage = 10.0
 attack_cooldown = 1.2
-projectile_scene = ExtResource("2_projectile")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1696849183]
 shape = SubResource("CircleShape2D_body")
 
-[node name="DebugBody" type="Polygon2D" parent="."]
+[node name="Hitbox" type="Area2D" parent="." unique_id=1869173514]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox" unique_id=490588158]
+position = Vector2(5.19, 0)
+scale = Vector2(1.08, 1.96)
+shape = SubResource("CircleShape2D_hitbox")
+
+[node name="DebugBody" type="Polygon2D" parent="." unique_id=1785994131]
 visible = false
 color = Color(0.42, 0.22, 0.5, 1)
 polygon = PackedVector2Array(24, 0, 22.5526, 8.20848, 18.3851, 15.4269, 12, 20.7846, 4.16756, 23.6354, -4.16756, 23.6354, -12, 20.7846, -18.3851, 15.4269, -22.5526, 8.20848, -24, 0, -22.5526, -8.20848, -18.3851, -15.4269, -12, -20.7846, -4.16756, -23.6354, 4.16756, -23.6354, 12, -20.7846, 18.3851, -15.4269, 22.5526, -8.20848)
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=407480447]
 texture = ExtResource("3_idle")
-centered = true
 region_enabled = true
 region_rect = Rect2(0, 0, 192, 192)
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("..")
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=630525230]
 
-[node name="AnimationTree" type="AnimationTree" parent="."]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1353008750]
 anim_player = NodePath("../AnimationPlayer")
 
-[node name="MeleeWarning" type="Polygon2D" parent="."]
+[node name="MeleeWarning" type="Polygon2D" parent="." unique_id=1161957245]
 visible = false
 color = Color(1, 0.15, 0, 0.22)
 
-[node name="MeleeHitbox" type="Area2D" parent="."]
+[node name="MeleeHitbox" type="Area2D" parent="." unique_id=1446185223]
 collision_layer = 8
-collision_mask = 1
+collision_mask = 64
 monitoring = false
 monitorable = false
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="MeleeHitbox"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="MeleeHitbox" unique_id=1588182768]
 shape = SubResource("CircleShape2D_melee")
 
-[node name="ShoutWarning" type="Polygon2D" parent="."]
+[node name="ShoutWarning" type="Polygon2D" parent="." unique_id=964411454]
 visible = false
 color = Color(0.45, 0.9, 1, 0.22)
 
-[node name="ShoutHitbox" type="Area2D" parent="."]
+[node name="ShoutHitbox" type="Area2D" parent="." unique_id=80069256]
 collision_layer = 8
-collision_mask = 1
+collision_mask = 64
 monitoring = false
 monitorable = false
 
-[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="ShoutHitbox"]
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="ShoutHitbox" unique_id=1083297645]
 
-[node name="RangedWarning" type="Line2D" parent="."]
+[node name="RangedWarning" type="Line2D" parent="." unique_id=682399959]
 visible = false
+points = PackedVector2Array(0, 0, 260, 0)
 width = 8.0
 default_color = Color(0.5, 1, 0.1, 0.55)
-points = PackedVector2Array(0, 0, 260, 0)

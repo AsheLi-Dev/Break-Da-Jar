@@ -35,6 +35,8 @@ func _ready() -> void:
 	_ensure_nodes()
 	if not body_entered.is_connected(_on_body_entered):
 		body_entered.connect(_on_body_entered)
+	if not area_entered.is_connected(_on_area_entered):
+		area_entered.connect(_on_area_entered)
 
 
 func _physics_process(delta: float) -> void:
@@ -48,19 +50,38 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node) -> void:
-	if ending or not body.is_in_group("enemy") or hit_bodies.has(body):
+	_try_damage_enemy(body)
+
+
+func _on_area_entered(area: Area2D) -> void:
+	_try_damage_enemy(_get_enemy_target(area))
+
+
+func _try_damage_enemy(enemy: Node) -> void:
+	if ending or enemy == null or not enemy.is_in_group("enemy") or hit_bodies.has(enemy):
 		return
-	if not body.has_method("take_damage"):
+	if not enemy.has_method("take_damage"):
 		return
 
-	hit_bodies.append(body)
+	hit_bodies.append(enemy)
 	if owner_player != null and is_instance_valid(owner_player) and owner_player.has_method("deal_player_damage_to_enemy"):
-		owner_player.deal_player_damage_to_enemy(body, damage, {"source": "blood_blade", "direct": true, "allow_procs": false})
+		owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": "blood_blade", "direct": true, "allow_procs": false})
 	else:
-		body.call("take_damage", damage)
-	if body.has_method("apply_status_effect"):
+		enemy.call("take_damage", damage)
+	if enemy.has_method("apply_status_effect"):
 		var status_owner: Node = owner_player if owner_player != null and is_instance_valid(owner_player) else null
-		body.apply_status_effect(&"bleeding", status_owner)
+		enemy.apply_status_effect(&"bleeding", status_owner)
+
+
+func _get_enemy_target(node: Node) -> Node:
+	if node.is_in_group("enemy") and node.has_method("take_damage"):
+		return node
+
+	var parent := node.get_parent()
+	if parent != null and parent.is_in_group("enemy") and parent.has_method("take_damage"):
+		return parent
+
+	return null
 
 
 func _ensure_nodes() -> void:

@@ -1,58 +1,67 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://desk6sldfecu5"]
 
-[ext_resource type="Script" path="res://scripts/enemies/ZombieMelee.gd" id="1_melee"]
-[ext_resource type="Texture2D" path="res://assets/zombies/melee zombie 1/Idle.png" id="2_idle"]
+[ext_resource type="Script" uid="uid://bu6m811jrbvyv" path="res://scripts/enemies/ZombieMelee.gd" id="1_melee"]
+[ext_resource type="Texture2D" uid="uid://bq5msga7hch7r" path="res://assets/zombies/melee zombie 1/Idle.png" id="2_idle"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 18.0
 
+[sub_resource type="CircleShape2D" id="CircleShape2D_hitbox"]
+radius = 19.0
+
 [sub_resource type="Gradient" id="Gradient_forward"]
 colors = PackedColorArray(0.08, 0.1, 0.08, 1, 0.08, 0.1, 0.08, 0)
 
-[node name="ZombieMelee" type="CharacterBody2D" groups=["enemy"]]
-collision_layer = 2
-collision_mask = 1
+[node name="ZombieMelee" type="CharacterBody2D" unique_id=747009817 groups=["enemy"]]
+collision_layer = 0
 script = ExtResource("1_melee")
 max_hp = 40.0
 move_speed = 105.0
 damage = 10.0
 attack_cooldown = 0.9
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=433839621]
 shape = SubResource("CircleShape2D_body")
 
-[node name="DebugBody" type="Polygon2D" parent="."]
+[node name="Hitbox" type="Area2D" parent="." unique_id=132863009]
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox" unique_id=78516164]
+position = Vector2(3.915, 2.335)
+scale = Vector2(0.85, 1.62)
+shape = SubResource("CircleShape2D_hitbox")
+
+[node name="DebugBody" type="Polygon2D" parent="." unique_id=873680506]
 visible = false
 color = Color(0.52, 0.56, 0.46, 1)
 polygon = PackedVector2Array(18, 0, 16.9145, 6.15636, 13.7888, 11.5702, 9, 15.5885, 3.12567, 17.7265, -3.12567, 17.7265, -9, 15.5885, -13.7888, 11.5702, -16.9145, 6.15636, -18, 0, -16.9145, -6.15636, -13.7888, -11.5702, -9, -15.5885, -3.12567, -17.7265, 3.12567, -17.7265, 9, -15.5885, 13.7888, -11.5702, 16.9145, -6.15636)
 
-[node name="DebugForward" type="Line2D" parent="."]
+[node name="DebugForward" type="Line2D" parent="." unique_id=680297515]
 visible = false
+points = PackedVector2Array(0, 0, 24, 0)
 width = 3.0
 default_color = Color(0.05, 0.05, 0.05, 1)
-points = PackedVector2Array(0, 0, 24, 0)
 gradient = SubResource("Gradient_forward")
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1478246389]
 texture = ExtResource("2_idle")
-centered = true
 region_enabled = true
 region_rect = Rect2(0, 0, 128, 128)
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("..")
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=440467808]
 
-[node name="AnimationTree" type="AnimationTree" parent="."]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=703187635]
 anim_player = NodePath("../AnimationPlayer")
 
-[node name="AttackWarning" type="Polygon2D" parent="."]
+[node name="AttackWarning" type="Polygon2D" parent="." unique_id=1174628023]
 visible = false
 color = Color(1, 0.25, 0.08, 0.28)
 
-[node name="AttackHitbox" type="Area2D" parent="."]
+[node name="AttackHitbox" type="Area2D" parent="." unique_id=297810892]
 collision_layer = 8
-collision_mask = 1
+collision_mask = 64
 monitoring = false
 monitorable = false
 
-[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="AttackHitbox"]
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="AttackHitbox" unique_id=780037071]

@@ -1,0 +1,34 @@
+[gd_scene format=3 uid="uid://c4ykguvnuo6g"]
+
+[ext_resource type="PackedScene" path="res://scenes/containers/UrnShadow.tscn" id="1_urn_shadow"]
+[ext_resource type="Texture2D" uid="uid://c0m1b0ds8jviv" path="res://assets/containers/Urn G/urn-G-main-static-00.png" id="2_urn"]
+[ext_resource type="Texture2D" uid="uid://cro876snpsjw6" path="res://assets/containers/Barrel B/barrel-B-main-static-00.png" id="3_barrel"]
+[ext_resource type="Texture2D" uid="uid://b8wvjveql7663" path="res://assets/containers/Tomb A/tomb-A-main-static-00.png" id="4_tomb"]
+[ext_resource type="PackedScene" path="res://scenes/containers/BarrelShadow.tscn" id="5_barrel_shadow"]
+
+[node name="ContainerShadowPreview" type="Node2D" unique_id=671636768]
+
+[node name="UrnPreview" type="Node2D" parent="." unique_id=1845984572]
+position = Vector2(160, 180)
+
+[node name="Shadow" parent="UrnPreview" unique_id=365170835 instance=ExtResource("1_urn_shadow")]
+
+[node name="Sprite2D" type="Sprite2D" parent="UrnPreview" unique_id=665400115]
+scale = Vector2(2, 2)
+texture = ExtResource("2_urn")
+
+[node name="BarrelPreview" type="Node2D" parent="." unique_id=1662942952]
+position = Vector2(360, 180)
+
+[node name="Shadow" parent="BarrelPreview" unique_id=944133307 instance=ExtResource("5_barrel_shadow")]
+
+[node name="Sprite2D" type="Sprite2D" parent="BarrelPreview" unique_id=747649412]
+scale = Vector2(2, 2)
+texture = ExtResource("3_barrel")
+
+[node name="TombPreview" type="Node2D" parent="." unique_id=1775948265]
+position = Vector2(600, 180)
+
+[node name="Sprite2D" type="Sprite2D" parent="TombPreview" unique_id=101630279]
+scale = Vector2(2, 2)
+texture = ExtResource("4_tomb")

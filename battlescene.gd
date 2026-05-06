@@ -26,9 +26,10 @@ const CONTAINER_GRID_MIN_INDEX := 3
 const CONTAINER_GRID_MAX_INDEX := 12
 const CONTAINER_COLLISION_RADIUS := 18.0
 
-const SHOP_CONTAINER_COUNT := 3
-const SHOP_CONTAINER_START := PLAY_AREA_CENTER + Vector2(-150, 120)
-const SHOP_CONTAINER_SPACING := Vector2(150, 0)
+const SHOP_CONTAINER_COUNT := 6
+const SHOP_CONTAINER_COLUMNS := 3
+const SHOP_CONTAINER_START := PLAY_AREA_CENTER + Vector2(-280, 40)
+const SHOP_CONTAINER_SPACING := Vector2(280, 240)
 const SHOP_CONTAINER_MAX_HP := 12.0
 
 const MELEE_ZOMBIE_GOLD := 3
@@ -49,6 +50,14 @@ const BATTLE_BGM: AudioStream = preload("res://assets/sfx/junipersona-to-the-dea
 const SHOP_INSUFFICIENT_GOLD_SFX: AudioStream = preload("res://assets/sfx/Error_1.wav")
 const TALENT_UNLOCK_SFX: AudioStream = preload("res://assets/sfx/Confirm_7.wav")
 const ARENA_TEXTURE: Texture2D = preload("res://assets/map/arena tiles.png")
+const URN_SHADOW_SCENE: PackedScene = preload("res://scenes/containers/UrnShadow.tscn")
+const BARREL_SHADOW_SCENE: PackedScene = preload("res://scenes/containers/BarrelShadow.tscn")
+const SKULL_DECOR_TEXTURES: Array[Texture2D] = [
+	preload("res://assets/map/skull1.png"),
+	preload("res://assets/map/skull2.png"),
+	preload("res://assets/map/small skull1.png"),
+	preload("res://assets/map/small skull2.png"),
+]
 
 enum Phase {
 	COMBAT,
@@ -150,6 +159,7 @@ func _create_background() -> void:
 	add_child(blocked_area)
 
 	_create_arena_tile_map()
+	_create_arena_edge_decorations()
 	_create_arena_walls()
 
 
@@ -206,6 +216,41 @@ func _fill_arena_tiles(arena: TileMapLayer) -> void:
 			arena.set_cell(Vector2i(max_x - 1 + x, y), ARENA_TILE_SOURCE_ID, Vector2i(8 + x, y))
 			arena.set_cell(Vector2i(x, max_y - 1 + y), ARENA_TILE_SOURCE_ID, Vector2i(x, 8 + y))
 			arena.set_cell(Vector2i(max_x - 1 + x, max_y - 1 + y), ARENA_TILE_SOURCE_ID, Vector2i(8 + x, 8 + y))
+
+
+func _create_arena_edge_decorations() -> void:
+	var decorations := Node2D.new()
+	decorations.name = "ArenaEdgeDecorations"
+	decorations.z_index = -90
+	add_child(decorations)
+
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], PLAY_AREA_RECT.position + Vector2(245, 150), -0.18, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[3], PLAY_AREA_RECT.position + Vector2(620, 130), 0.12, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[1], Vector2(PLAY_AREA_RECT.end.x - 210, PLAY_AREA_RECT.position.y + 155), 0.2, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(PLAY_AREA_RECT.position.x + 150, PLAY_AREA_RECT.position.y + 420), 0.3, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], Vector2(PLAY_AREA_RECT.end.x - 145, PLAY_AREA_RECT.position.y + 540), -0.22, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[3], Vector2(PLAY_AREA_RECT.position.x + 140, PLAY_AREA_RECT.end.y - 430), -0.08, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(PLAY_AREA_RECT.end.x - 155, PLAY_AREA_RECT.end.y - 320), 0.16, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[1], Vector2(PLAY_AREA_RECT.position.x + 330, PLAY_AREA_RECT.end.y - 150), -0.25, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(PLAY_AREA_RECT.position.x + 820, PLAY_AREA_RECT.end.y - 140), 0.18, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], Vector2(PLAY_AREA_RECT.end.x - 390, PLAY_AREA_RECT.end.y - 150), 0.08, 2.0, true)
+
+
+func _add_arena_edge_decoration(
+	parent: Node2D,
+	texture: Texture2D,
+	decoration_position: Vector2,
+	decoration_rotation: float,
+	decoration_scale: float,
+	flip_h: bool
+) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = texture
+	sprite.global_position = decoration_position
+	sprite.rotation = decoration_rotation
+	sprite.scale = Vector2(decoration_scale, decoration_scale)
+	sprite.flip_h = flip_h
+	parent.add_child(sprite)
 
 
 func _create_arena_walls() -> void:
@@ -268,6 +313,9 @@ func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate() as Player
 	player.name = "Player"
 	player.global_position = PLAYER_POSITION
+	player.set_collision_layer_value(1, false)
+	player.set_collision_layer_value(7, true)
+	player.collision_mask = 0
 	player.set_collision_mask_value(1, true)
 	_scale_actor_body(player)
 	player.movement_bounds_enabled = true
@@ -489,6 +537,8 @@ func _create_base_container(container_position: Vector2, container_name: String)
 
 
 func _add_container_sprite(container: BreakableContainer, modulate_color: Color) -> void:
+	_add_container_shadow(container)
+
 	var sprite := Sprite2D.new()
 	sprite.name = "Sprite2D"
 	sprite.texture = container.static_texture
@@ -496,6 +546,23 @@ func _add_container_sprite(container: BreakableContainer, modulate_color: Color)
 	sprite.scale = CHARACTER_SPRITE_SCALE
 	sprite.modulate = modulate_color
 	container.add_child(sprite)
+
+
+func _add_container_shadow(container: BreakableContainer) -> void:
+	if container.container_type == ContainerType.TOMB:
+		return
+
+	var shadow_scene := URN_SHADOW_SCENE
+	match container.container_type:
+		ContainerType.BARREL:
+			shadow_scene = BARREL_SHADOW_SCENE
+
+	var shadow := shadow_scene.instantiate() as Node2D
+	if shadow == null:
+		return
+
+	shadow.name = "Shadow"
+	container.add_child(shadow)
 
 
 func _add_shop_label(container: BreakableContainer, category: int, tier: int, price: int) -> void:
@@ -733,17 +800,26 @@ func _enter_shop_phase() -> void:
 func _spawn_shop_containers() -> void:
 	_clear_shop_containers()
 	for index in range(SHOP_CONTAINER_COUNT):
-		var position: Vector2 = SHOP_CONTAINER_START + SHOP_CONTAINER_SPACING * float(index)
+		var position: Vector2 = _get_shop_container_position(index)
 		var container := _create_shop_container(position, index + 1)
 		shop_containers.append(container)
 		add_child(container)
 	var extra_rare_count: int = player.consume_extra_rare_shop_jars() if is_instance_valid(player) else 0
 	for extra_index in range(extra_rare_count):
 		var index: int = SHOP_CONTAINER_COUNT + extra_index
-		var position: Vector2 = SHOP_CONTAINER_START + SHOP_CONTAINER_SPACING * float(index)
+		var position: Vector2 = _get_shop_container_position(index)
 		var container := _create_shop_container(position, index + 1, ShopCategory.BROWN, ShopTier.RARE)
 		shop_containers.append(container)
 		add_child(container)
+
+
+func _get_shop_container_position(index: int) -> Vector2:
+	var column: int = index % SHOP_CONTAINER_COLUMNS
+	var row: int = floori(float(index) / float(SHOP_CONTAINER_COLUMNS))
+	return SHOP_CONTAINER_START + Vector2(
+		SHOP_CONTAINER_SPACING.x * float(column),
+		SHOP_CONTAINER_SPACING.y * float(row)
+	)
 
 
 func _advance_from_shop() -> void:

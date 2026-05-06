@@ -41,6 +41,8 @@ func _ready() -> void:
 	_ensure_nodes()
 	if not body_entered.is_connected(_on_body_entered):
 		body_entered.connect(_on_body_entered)
+	if not area_entered.is_connected(_on_area_entered):
+		area_entered.connect(_on_area_entered)
 
 
 func _physics_process(delta: float) -> void:
@@ -52,6 +54,12 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body.is_in_group(target_group) or _is_wall_body(body):
+		explode()
+
+
+func _on_area_entered(area: Area2D) -> void:
+	var parent := area.get_parent()
+	if area.is_in_group(target_group) or (parent != null and parent.is_in_group(target_group)):
 		explode()
 
 

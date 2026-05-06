@@ -91,20 +91,37 @@ func _make_sprite_frames() -> SpriteFrames:
 func _apply_damage() -> void:
 	var heal_weight := 0.0
 	for body in get_overlapping_bodies():
-		if not body.is_in_group("enemy") or damaged_bodies.has(body):
-			continue
-		if not body.has_method("take_damage"):
-			continue
-
-		damaged_bodies.append(body)
-		if owner_player != null and is_instance_valid(owner_player) and owner_player.has_method("deal_player_damage_to_enemy"):
-			owner_player.deal_player_damage_to_enemy(body, damage, {"source": "blood_claw", "direct": true, "allow_procs": false})
-		else:
-			body.call("take_damage", damage)
-		heal_weight += elite_heal_weight if _is_elite_enemy(body) else 1.0
+		heal_weight += _try_damage_enemy(body)
+	for area in get_overlapping_areas():
+		heal_weight += _try_damage_enemy(_get_enemy_target(area))
 
 	if heal_weight > 0.0 and owner_player != null and is_instance_valid(owner_player) and owner_player.has_method("heal"):
 		owner_player.call("heal", heal_per_hit * heal_weight)
+
+
+func _try_damage_enemy(enemy: Node) -> float:
+	if enemy == null or not enemy.is_in_group("enemy") or damaged_bodies.has(enemy):
+		return 0.0
+	if not enemy.has_method("take_damage"):
+		return 0.0
+
+	damaged_bodies.append(enemy)
+	if owner_player != null and is_instance_valid(owner_player) and owner_player.has_method("deal_player_damage_to_enemy"):
+		owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": "blood_claw", "direct": true, "allow_procs": false})
+	else:
+		enemy.call("take_damage", damage)
+	return elite_heal_weight if _is_elite_enemy(enemy) else 1.0
+
+
+func _get_enemy_target(node: Node) -> Node:
+	if node.is_in_group("enemy") and node.has_method("take_damage"):
+		return node
+
+	var parent := node.get_parent()
+	if parent != null and parent.is_in_group("enemy") and parent.has_method("take_damage"):
+		return parent
+
+	return null
 
 
 func _is_elite_enemy(enemy: Node) -> bool:

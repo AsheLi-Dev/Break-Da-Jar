@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[node name="BarrelShadow" type="Polygon2D"]
+position = Vector2(0, 25)
+scale = Vector2(0.75257313, 0.98157394)
+z_index = -1
+color = Color(0.018, 0.022, 0.018, 0.32)
+offset = Vector2(0, 33.415)
+polygon = PackedVector2Array(-42, 0, -30, -8, 0, -10, 30, -8, 42, 0, 30, 8, 0, 10, -30, 8)

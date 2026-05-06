@@ -1,8 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://dmiomy5l0sna5"]
 
-[ext_resource type="Script" path="res://scripts/player/Player.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://dbgrwswuiwg5q" path="res://scripts/player/Player.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://scenes/projectiles/Projectile.tscn" id="2_projectile"]
-[ext_resource type="Texture2D" path="res://assets/heroes/paladin/idle.png" id="3_idle"]
+[ext_resource type="Texture2D" uid="uid://c4oauencqgmkw" path="res://assets/heroes/paladin/idle.png" id="3_idle"]
+[ext_resource type="Texture2D" uid="uid://o7xhhsaqdr16" path="res://assets/heroes/paladin/ability.png" id="4_ability"]
+[ext_resource type="Texture2D" uid="uid://mqtssr7d6ell" path="res://assets/vfx/holy spell/HolyNova_spritesheet.png" id="5_holy_nova"]
+[ext_resource type="Texture2D" uid="uid://8sje010cy4o0" path="res://assets/vfx/holy spell/HolySlash_A_spritesheet.png" id="6_holy_slash"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 14.0
@@ -10,46 +13,80 @@ radius = 14.0
 [sub_resource type="CircleShape2D" id="CircleShape2D_shockwave"]
 radius = 118.0
 
-[node name="Player" type="CharacterBody2D" groups=["player"]]
-collision_layer = 1
-collision_mask = 6
+[node name="Player" type="CharacterBody2D" unique_id=2098698995 groups=["player"]]
+collision_layer = 64
 script = ExtResource("1_player")
 projectile_scene = ExtResource("2_projectile")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=830973316]
 shape = SubResource("CircleShape2D_player")
 
-[node name="DebugBody" type="Polygon2D" parent="."]
-visible = false
+[node name="DebugBody" type="Polygon2D" parent="." unique_id=2113872586]
 color = Color(0.92, 0.88, 0.52, 1)
 polygon = PackedVector2Array(18, 0, 7, 13, -12, 10, -16, 0, -12, -10, 7, -13)
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1920854766]
 texture = ExtResource("3_idle")
-centered = true
 region_enabled = true
 region_rect = Rect2(0, 0, 128, 128)
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("..")
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1204286830]
 
-[node name="AnimationTree" type="AnimationTree" parent="."]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=115173300]
 anim_player = NodePath("../AnimationPlayer")
 
-[node name="GunPivot" type="Node2D" parent="."]
+[node name="GunPivot" type="Node2D" parent="." unique_id=928929283]
 
-[node name="Muzzle" type="Marker2D" parent="GunPivot"]
+[node name="Muzzle" type="Marker2D" parent="GunPivot" unique_id=1708684801]
 position = Vector2(28, 0)
 
-[node name="ShockwaveArea" type="Area2D" parent="."]
+[node name="MeleeAttack" type="Node2D" parent="." unique_id=1847289398]
+
+[node name="HitboxArea" type="Area2D" parent="MeleeAttack" unique_id=2140994847]
 collision_layer = 0
 collision_mask = 2
+monitoring = false
 monitorable = false
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="ShockwaveArea"]
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="MeleeAttack/HitboxArea" unique_id=170142886]
+polygon = PackedVector2Array(0, 0, 0, -200, 39.0181, -196.157, 76.5367, -184.776, 111.114, -166.294, 141.421, -141.421, 166.294, -111.114, 184.776, -76.5367, 196.157, -39.0181, 200, 0, 196.157, 39.0181, 184.776, 76.5367, 166.294, 111.114, 141.421, 141.421, 111.114, 166.294, 76.5367, 184.776, 39.0181, 196.157, 0, 200)
+
+[node name="EffectDamagePreview" type="Sprite2D" parent="MeleeAttack" unique_id=722352227]
+modulate = Color(1, 0.95, 0.55, 0.42)
+position = Vector2(28.59, -13.925)
+scale = Vector2(5.442, 7.86)
+texture = ExtResource("6_holy_slash")
+region_enabled = true
+region_rect = Rect2(64, 0, 64, 64)
+
+[node name="ShockwaveAttack" type="Node2D" parent="." unique_id=155831904]
+
+[node name="HitboxArea" type="Area2D" parent="ShockwaveAttack" unique_id=728020196]
+collision_layer = 0
+collision_mask = 2
+monitoring = false
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ShockwaveAttack/HitboxArea" unique_id=835920263]
+position = Vector2(17.4, 30.42)
+scale = Vector2(1.515, 0.574)
 shape = SubResource("CircleShape2D_shockwave")
 
-[node name="ShockwaveVisual" type="Polygon2D" parent="."]
+[node name="PreviewFrame" type="Sprite2D" parent="ShockwaveAttack" unique_id=1810504069]
+modulate = Color(1, 1, 1, 0.45)
+texture = ExtResource("4_ability")
+region_enabled = true
+region_rect = Rect2(1024, 0, 128, 128)
+
+[node name="EffectDamagePreview" type="Sprite2D" parent="ShockwaveAttack" unique_id=1019226993]
+modulate = Color(0.6, 0.9, 1, 0.42)
+position = Vector2(21.62, -24.835)
+scale = Vector2(4.575, 5.485)
+texture = ExtResource("5_holy_nova")
+region_enabled = true
+region_rect = Rect2(384, 0, 128, 64)
+
+[node name="ShockwaveVisual" type="Polygon2D" parent="." unique_id=1736506370]
 visible = false
 color = Color(1, 0.96, 0.42, 0.22)
 polygon = PackedVector2Array(118, 0, 116.207, 20.4933, 110.872, 40.364, 102.158, 59.0084, 90.3308, 75.86, 75.86, 90.3308, 59.0084, 102.158, 40.364, 110.872, 20.4933, 116.207, 0, 118, -20.4933, 116.207, -40.364, 110.872, -59.0084, 102.158, -75.86, 90.3308, -90.3308, 75.86, -102.158, 59.0084, -110.872, 40.364, -116.207, 20.4933, -118, 0, -116.207, -20.4933, -110.872, -40.364, -102.158, -59.0084, -90.3308, -75.86, -75.86, -90.3308, -59.0084, -102.158, -40.364, -110.872, -20.4933, -116.207)

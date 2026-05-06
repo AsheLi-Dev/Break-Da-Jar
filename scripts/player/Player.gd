@@ -11,6 +11,7 @@ const SHOCKWAVE_EFFECT_FPS := 10.0
 const SHOCKWAVE_WINDUP_LUNGE_DISTANCE := 72.0
 const SHOCKWAVE_HIT_OFFSET := 60.0
 const SLIDE_END_FPS := 30.0
+const MELEE_TELEGRAPH_RADIUS_SCALE := 0.9
 
 const ABILITY_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/ability.png")
 const ATTACK_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack.png")
@@ -18,7 +19,11 @@ const ATTACK_ALT_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attac
 const DIRECTIONAL_ANIMATION_LIBRARY_BUILDER := preload("res://scripts/player/DirectionalAnimationLibraryBuilder.gd")
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
 const FLOATING_TEXT_SCRIPT := preload("res://systems/combat/FloatingText.gd")
-const HOLY_SPELL_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HeavensFury_spritesheet.png")
+const HOLY_SPELL_FRAME_SIZE := Vector2i(128, 64)
+const HOLY_SPELL_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HolyNova_spritesheet.png")
+const HOLY_SLASH_FRAME_SIZE := Vector2i(64, 64)
+const HOLY_SLASH_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HolySlash_A_spritesheet.png")
+const HOLY_SLASH_FPS := 24.0
 const IDLE_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/idle.png")
 const LEVEL_UP_EFFECT_TEXTURE: Texture2D = preload("res://assets/vfx/Level Up Effect/Level Up Effect Spritesheet.png")
 const ROLLING_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/rolling.png")
@@ -156,8 +161,15 @@ var is_invincible: bool = false
 var gun_pivot: Node2D
 var muzzle: Marker2D
 var melee_telegraph_visual: Polygon2D
+var melee_attack_root: Node2D
+var melee_hitbox_area: Area2D
+var melee_hitbox_polygon: CollisionPolygon2D
+var melee_effect_damage_preview: Sprite2D
+var shockwave_attack_root: Node2D
 var shockwave_area: Area2D
 var shockwave_collision: CollisionShape2D
+var shockwave_preview_frame: Sprite2D
+var shockwave_effect_damage_preview: Sprite2D
 var shockwave_visual: Polygon2D
 var sprite: Sprite2D
 var animation_player: AnimationPlayer
@@ -171,6 +183,7 @@ var action_animation_remaining: float = 0.0
 var action_animation_elapsed: float = 0.0
 var pending_attack_projectile: bool = false
 var pending_attack_target_position: Vector2 = Vector2.ZERO
+var pending_shockwave_target_position: Vector2 = Vector2.ZERO
 var slide_sfx: AudioStream
 var action_direction_locked: bool = false
 var action_animation_direction: Vector2 = Vector2.RIGHT
@@ -721,6 +734,7 @@ func _try_fire_projectile() -> void:
 	pending_attack_target_position = get_global_mouse_position()
 	_play_action_animation_with_direction(&"attack", _get_action_animation_time(&"attack"), facing_direction)
 	_show_melee_telegraph(facing_direction)
+	_queue_holy_slash_effect(facing_direction)
 
 
 func _try_cast_shockwave() -> void:
@@ -731,12 +745,13 @@ func _try_cast_shockwave() -> void:
 	_interrupt_slide_for_attack()
 
 	shockwave_cooldown_remaining = shockwave_cooldown
+	pending_shockwave_target_position = get_global_mouse_position()
 	_play_action_animation_with_direction(&"ability", _get_action_animation_time(&"ability"), facing_direction)
 	get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_start_shockwave_effect)
 
 
 func _start_shockwave_effect() -> void:
-	var shockwave_center := global_position + action_animation_direction * SHOCKWAVE_HIT_OFFSET
+	var shockwave_center := _get_shockwave_center()
 	shockwave_visual.visible = true
 	shockwave_visual.global_position = shockwave_center
 	_play_holy_spell_effect(shockwave_center)
@@ -746,12 +761,13 @@ func _start_shockwave_effect() -> void:
 
 
 func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
+	var active_radius := _get_shockwave_radius()
 
 	for body in get_tree().get_nodes_in_group("enemy"):
 		if not body.is_in_group("enemy"):
 			continue
 		var body_2d: Node2D = body as Node2D
-		if body_2d == null or body_2d.global_position.distance_to(shockwave_center) > shockwave_radius:
+		if body_2d == null or body_2d.global_position.distance_to(shockwave_center) > active_radius:
 			continue
 
 		if body.has_method("take_damage"):
@@ -765,12 +781,46 @@ func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
 
 	for container in get_tree().get_nodes_in_group("container"):
 		var container_2d := container as Node2D
-		if container_2d == null or container_2d.global_position.distance_to(shockwave_center) > shockwave_radius:
+		if container_2d == null or container_2d.global_position.distance_to(shockwave_center) > active_radius:
 			continue
 		if container is BreakableContainer and container.is_shop_container:
 			continue
 		if container.has_method("take_damage"):
 			container.take_damage(shockwave_damage, {"source": "player_attack", "owner": self})
+
+
+func _get_shockwave_center() -> Vector2:
+	var local_offset := Vector2.ZERO
+	if shockwave_attack_root != null:
+		local_offset = shockwave_attack_root.position
+		if shockwave_area != null:
+			local_offset += shockwave_area.position
+		if shockwave_collision != null:
+			local_offset += shockwave_collision.position
+
+	return pending_shockwave_target_position + local_offset
+
+
+func _get_shockwave_direction_angle() -> float:
+	return 0.0
+
+
+func _get_direction_angle(direction: Vector2) -> float:
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	if direction.length_squared() <= 0.001:
+		return 0.0
+
+	return direction.angle()
+
+
+func _get_shockwave_radius() -> float:
+	if shockwave_collision != null:
+		var circle_shape := shockwave_collision.shape as CircleShape2D
+		if circle_shape != null:
+			return circle_shape.radius * maxf(absf(shockwave_collision.scale.x), absf(shockwave_collision.scale.y))
+
+	return shockwave_radius
 
 
 func _get_shockwave_hit_time() -> float:
@@ -1060,23 +1110,43 @@ func _perform_melee_attack_at(target_position: Vector2) -> void:
 	else:
 		direction = direction.normalized()
 
-	var melee_radius := melee_attack_radius
 	var attack_info := {"source": "player_attack", "direct": true, "allow_procs": true}
 	attack_started.emit(global_position, direction, attack_info)
 
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		var enemy_2d := enemy as Node2D
-		if enemy_2d == null or not _is_target_in_melee_arc(enemy_2d.global_position, direction, melee_radius):
+		if enemy_2d == null or not _is_target_in_melee_hitbox(enemy_2d.global_position, direction):
 			continue
 		if enemy.has_method("take_damage"):
 			deal_player_damage_to_enemy(enemy, projectile_damage, attack_info.duplicate())
 
 	for container in get_tree().get_nodes_in_group("container"):
 		var container_2d := container as Node2D
-		if container_2d == null or not _is_target_in_melee_arc(container_2d.global_position, direction, melee_radius):
+		if container_2d == null or not _is_target_in_melee_hitbox(container_2d.global_position, direction):
 			continue
 		if container.has_method("take_damage"):
 			container.take_damage(projectile_damage, {"source": "player_attack", "owner": self})
+
+
+func _is_target_in_melee_hitbox(target_position: Vector2, direction: Vector2) -> bool:
+	if melee_hitbox_polygon == null:
+		return _is_target_in_melee_arc(target_position, direction, melee_attack_radius)
+
+	var local_offset := Vector2.ZERO
+	if melee_attack_root != null:
+		local_offset += melee_attack_root.position
+	if melee_hitbox_area != null:
+		local_offset += melee_hitbox_area.position
+	local_offset += melee_hitbox_polygon.position
+
+	var angle := _get_direction_angle(direction)
+	var local_target := target_position - (global_position + local_offset.rotated(angle))
+	local_target = local_target.rotated(-angle)
+	local_target = Vector2(
+		local_target.x / maxf(absf(melee_hitbox_polygon.scale.x), 0.001),
+		local_target.y / maxf(absf(melee_hitbox_polygon.scale.y), 0.001)
+	)
+	return _is_point_in_polygon(local_target, melee_hitbox_polygon.polygon)
 
 
 func _is_target_in_melee_arc(target_position: Vector2, direction: Vector2, radius: float) -> bool:
@@ -1088,16 +1158,39 @@ func _is_target_in_melee_arc(target_position: Vector2, direction: Vector2, radiu
 	return direction.dot(offset.normalized()) >= 0.0
 
 
+func _is_point_in_polygon(point: Vector2, polygon: PackedVector2Array) -> bool:
+	if polygon.size() < 3:
+		return false
+
+	var inside := false
+	var previous_index := polygon.size() - 1
+	for index in range(polygon.size()):
+		var current := polygon[index]
+		var previous := polygon[previous_index]
+		var intersects := (current.y > point.y) != (previous.y > point.y)
+		if intersects:
+			var crossing_x := (previous.x - current.x) * (point.y - current.y) / (previous.y - current.y) + current.x
+			if point.x < crossing_x:
+				inside = not inside
+		previous_index = index
+
+	return inside
+
+
 func _show_melee_telegraph(direction: Vector2) -> void:
 	if melee_telegraph_visual == null:
 		return
 	if direction.length_squared() <= 0.001:
 		direction = facing_direction
 
-	melee_telegraph_visual.polygon = _semicircle_polygon(melee_attack_radius, 24)
+	melee_telegraph_visual.polygon = _semicircle_polygon(_get_melee_telegraph_radius(), 24)
 	melee_telegraph_visual.rotation = direction.angle()
 	melee_telegraph_visual.color = melee_telegraph_color
 	melee_telegraph_visual.visible = true
+
+
+func _get_melee_telegraph_radius() -> float:
+	return melee_attack_radius * MELEE_TELEGRAPH_RADIUS_SCALE
 
 
 func _hide_melee_telegraph() -> void:
@@ -1146,8 +1239,46 @@ func _play_level_up_effect() -> void:
 
 
 func _play_holy_spell_effect(spawn_position: Vector2) -> void:
-	var effect_scale := Vector2.ONE * (shockwave_radius * 2.0 / float(FRAME_SIZE.x))
-	_play_spritesheet_effect(HOLY_SPELL_TEXTURE, &"holy_spell", spawn_position, SHOCKWAVE_EFFECT_FPS, effect_scale)
+	var effect_position := spawn_position
+	var effect_scale := Vector2.ONE * (_get_shockwave_radius() * 2.0 / float(HOLY_SPELL_FRAME_SIZE.x))
+	if shockwave_effect_damage_preview != null:
+		effect_position += shockwave_effect_damage_preview.position.rotated(_get_shockwave_direction_angle())
+		effect_scale = shockwave_effect_damage_preview.scale
+	_play_spritesheet_effect(HOLY_SPELL_TEXTURE, &"holy_spell", effect_position, SHOCKWAVE_EFFECT_FPS, effect_scale, HOLY_SPELL_FRAME_SIZE)
+
+
+func _queue_holy_slash_effect(direction: Vector2) -> void:
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	direction = direction.normalized()
+
+	var delay := maxf(_get_attack_projectile_time() - 1.0 / HOLY_SLASH_FPS, 0.0)
+	get_tree().create_timer(delay).timeout.connect(_play_holy_slash_effect.bind(global_position, direction))
+
+
+func _play_holy_slash_effect(spawn_position: Vector2, direction: Vector2) -> void:
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	direction = direction.normalized()
+
+	var effect_position := spawn_position + direction * (melee_attack_radius * 0.5)
+	var effect_scale := Vector2.ONE * (melee_attack_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
+	if melee_effect_damage_preview != null:
+		var local_offset := Vector2.ZERO
+		if melee_attack_root != null:
+			local_offset += melee_attack_root.position
+		local_offset += melee_effect_damage_preview.position
+		effect_position = spawn_position + local_offset.rotated(direction.angle())
+		effect_scale = melee_effect_damage_preview.scale
+	_play_spritesheet_effect(
+		HOLY_SLASH_TEXTURE,
+		&"holy_slash",
+		effect_position,
+		HOLY_SLASH_FPS,
+		effect_scale,
+		HOLY_SLASH_FRAME_SIZE,
+		direction.angle()
+	)
 
 
 func _play_spritesheet_effect(
@@ -1155,18 +1286,20 @@ func _play_spritesheet_effect(
 	animation_name: StringName,
 	spawn_position: Vector2,
 	fps: float,
-	effect_scale: Vector2 = Vector2.ONE
+	effect_scale: Vector2 = Vector2.ONE,
+	frame_size: Vector2i = FRAME_SIZE,
+	effect_rotation: float = 0.0
 ) -> void:
 	var sprite_frames := SpriteFrames.new()
 	sprite_frames.add_animation(animation_name)
 	sprite_frames.set_animation_loop(animation_name, false)
 	sprite_frames.set_animation_speed(animation_name, fps)
 
-	var frame_count := int(effect_texture.get_width() / FRAME_SIZE.x)
+	var frame_count := int(effect_texture.get_width() / frame_size.x)
 	for frame_index in range(frame_count):
 		var frame_texture := AtlasTexture.new()
 		frame_texture.atlas = effect_texture
-		frame_texture.region = Rect2(frame_index * FRAME_SIZE.x, 0, FRAME_SIZE.x, FRAME_SIZE.y)
+		frame_texture.region = Rect2(frame_index * frame_size.x, 0, frame_size.x, frame_size.y)
 		sprite_frames.add_frame(animation_name, frame_texture)
 
 	var effect := AnimatedSprite2D.new()
@@ -1174,6 +1307,7 @@ func _play_spritesheet_effect(
 	effect.animation = animation_name
 	effect.centered = true
 	effect.scale = effect_scale
+	effect.rotation = effect_rotation
 	effect.z_index = 20
 	get_parent().add_child(effect)
 	effect.global_position = spawn_position
@@ -1469,12 +1603,57 @@ func _ensure_placeholder_nodes() -> void:
 		muzzle.position = Vector2(28.0, 0.0)
 		gun_pivot.add_child(muzzle)
 
-	shockwave_area = get_node_or_null("ShockwaveArea") as Area2D
+	melee_attack_root = get_node_or_null("MeleeAttack") as Node2D
+	if melee_attack_root == null:
+		melee_attack_root = Node2D.new()
+		melee_attack_root.name = "MeleeAttack"
+		add_child(melee_attack_root)
+
+	melee_hitbox_area = melee_attack_root.get_node_or_null("HitboxArea") as Area2D
+	if melee_hitbox_area == null:
+		melee_hitbox_area = Area2D.new()
+		melee_hitbox_area.name = "HitboxArea"
+		melee_attack_root.add_child(melee_hitbox_area)
+	melee_hitbox_area.monitoring = false
+	melee_hitbox_area.monitorable = false
+	melee_hitbox_area.collision_mask = 0
+	melee_hitbox_area.set_collision_mask_value(enemy_collision_layer_number, true)
+	melee_hitbox_area.set_collision_mask_value(jar_collision_layer_number, true)
+
+	melee_hitbox_polygon = melee_hitbox_area.get_node_or_null("CollisionPolygon2D") as CollisionPolygon2D
+	if melee_hitbox_polygon == null:
+		melee_hitbox_polygon = CollisionPolygon2D.new()
+		melee_hitbox_polygon.name = "CollisionPolygon2D"
+		melee_hitbox_area.add_child(melee_hitbox_polygon)
+	if melee_hitbox_polygon.polygon.is_empty():
+		melee_hitbox_polygon.polygon = _semicircle_polygon(melee_attack_radius, 24)
+
+	melee_effect_damage_preview = melee_attack_root.get_node_or_null("EffectDamagePreview") as Sprite2D
+	if melee_effect_damage_preview == null:
+		melee_effect_damage_preview = Sprite2D.new()
+		melee_effect_damage_preview.name = "EffectDamagePreview"
+		melee_effect_damage_preview.position = Vector2(melee_attack_radius * 0.5, 0.0)
+		melee_effect_damage_preview.scale = Vector2.ONE * (melee_attack_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
+		melee_attack_root.add_child(melee_effect_damage_preview)
+	melee_effect_damage_preview.texture = HOLY_SLASH_TEXTURE
+	melee_effect_damage_preview.centered = true
+	melee_effect_damage_preview.region_enabled = true
+	melee_effect_damage_preview.region_rect = _get_holy_slash_damage_preview_region()
+	melee_effect_damage_preview.modulate = Color(1.0, 0.95, 0.55, 0.42)
+	melee_effect_damage_preview.visible = false
+
+	shockwave_attack_root = get_node_or_null("ShockwaveAttack") as Node2D
+	if shockwave_attack_root == null:
+		shockwave_attack_root = Node2D.new()
+		shockwave_attack_root.name = "ShockwaveAttack"
+		add_child(shockwave_attack_root)
+
+	shockwave_area = shockwave_attack_root.get_node_or_null("HitboxArea") as Area2D
 	if shockwave_area == null:
 		shockwave_area = Area2D.new()
-		shockwave_area.name = "ShockwaveArea"
-		add_child(shockwave_area)
-	shockwave_area.monitoring = true
+		shockwave_area.name = "HitboxArea"
+		shockwave_attack_root.add_child(shockwave_area)
+	shockwave_area.monitoring = false
 	shockwave_area.monitorable = false
 	shockwave_area.collision_mask = 0
 	shockwave_area.set_collision_mask_value(enemy_collision_layer_number, true)
@@ -1486,7 +1665,32 @@ func _ensure_placeholder_nodes() -> void:
 		shockwave_area.add_child(shockwave_collision)
 	var shockwave_shape: CircleShape2D = CircleShape2D.new()
 	shockwave_shape.radius = shockwave_radius
-	shockwave_collision.shape = shockwave_shape
+	if shockwave_collision.shape == null:
+		shockwave_collision.shape = shockwave_shape
+
+	shockwave_preview_frame = shockwave_attack_root.get_node_or_null("PreviewFrame") as Sprite2D
+	if shockwave_preview_frame == null:
+		shockwave_preview_frame = Sprite2D.new()
+		shockwave_preview_frame.name = "PreviewFrame"
+		shockwave_attack_root.add_child(shockwave_preview_frame)
+	shockwave_preview_frame.texture = ABILITY_TEXTURE
+	shockwave_preview_frame.centered = true
+	shockwave_preview_frame.region_enabled = true
+	shockwave_preview_frame.region_rect = _get_shockwave_preview_region()
+	shockwave_preview_frame.modulate = Color(1.0, 1.0, 1.0, 0.45)
+	shockwave_preview_frame.visible = false
+
+	shockwave_effect_damage_preview = shockwave_attack_root.get_node_or_null("EffectDamagePreview") as Sprite2D
+	if shockwave_effect_damage_preview == null:
+		shockwave_effect_damage_preview = Sprite2D.new()
+		shockwave_effect_damage_preview.name = "EffectDamagePreview"
+		shockwave_attack_root.add_child(shockwave_effect_damage_preview)
+	shockwave_effect_damage_preview.texture = HOLY_SPELL_TEXTURE
+	shockwave_effect_damage_preview.centered = true
+	shockwave_effect_damage_preview.region_enabled = true
+	shockwave_effect_damage_preview.region_rect = _get_shockwave_effect_damage_preview_region()
+	shockwave_effect_damage_preview.modulate = Color(0.6, 0.9, 1.0, 0.42)
+	shockwave_effect_damage_preview.visible = false
 
 	shockwave_visual = get_node_or_null("ShockwaveVisual") as Polygon2D
 	if shockwave_visual == null:
@@ -1494,7 +1698,7 @@ func _ensure_placeholder_nodes() -> void:
 		shockwave_visual.name = "ShockwaveVisual"
 		add_child(shockwave_visual)
 	shockwave_visual.color = Color(1.0, 0.96, 0.42, 0.22)
-	shockwave_visual.polygon = _circle_polygon(shockwave_radius, 36)
+	shockwave_visual.polygon = _circle_polygon(_get_shockwave_radius(), 36)
 	shockwave_visual.visible = false
 
 	melee_telegraph_visual = get_node_or_null("MeleeTelegraphVisual") as Polygon2D
@@ -1504,8 +1708,25 @@ func _ensure_placeholder_nodes() -> void:
 		add_child(melee_telegraph_visual)
 		move_child(melee_telegraph_visual, 0)
 	melee_telegraph_visual.color = melee_telegraph_color
-	melee_telegraph_visual.polygon = _semicircle_polygon(melee_attack_radius, 24)
+	melee_telegraph_visual.polygon = _semicircle_polygon(_get_melee_telegraph_radius(), 24)
 	melee_telegraph_visual.visible = false
+
+
+func _get_shockwave_preview_region() -> Rect2:
+	var frame_index := clampi(SHOCKWAVE_HIT_FRAME - 1, 0, FRAMES_PER_DIRECTION - 1)
+	return Rect2(Vector2(frame_index * FRAME_SIZE.x, 0.0), Vector2(FRAME_SIZE))
+
+
+func _get_shockwave_effect_damage_preview_region() -> Rect2:
+	var frame_count := maxi(int(HOLY_SPELL_TEXTURE.get_width() / HOLY_SPELL_FRAME_SIZE.x), 1)
+	var frame_index := clampi(SHOCKWAVE_EFFECT_DAMAGE_FRAME - 1, 0, frame_count - 1)
+	return Rect2(Vector2(frame_index * HOLY_SPELL_FRAME_SIZE.x, 0.0), Vector2(HOLY_SPELL_FRAME_SIZE))
+
+
+func _get_holy_slash_damage_preview_region() -> Rect2:
+	var frame_count := maxi(int(HOLY_SLASH_TEXTURE.get_width() / HOLY_SLASH_FRAME_SIZE.x), 1)
+	var frame_index := clampi(1, 0, frame_count - 1)
+	return Rect2(Vector2(frame_index * HOLY_SLASH_FRAME_SIZE.x, 0.0), Vector2(HOLY_SLASH_FRAME_SIZE))
 
 
 func _ensure_stats_and_items() -> void:

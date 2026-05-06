@@ -28,6 +28,7 @@ var boomerang_state: int = BoomerangState.OUTBOUND
 var return_delay_remaining: float = 0.0
 var outbound_hit_targets: Array[Node] = []
 var return_hit_targets: Array[Node] = []
+var impact_resolved: bool = false
 
 
 func _ready() -> void:
@@ -37,6 +38,8 @@ func _ready() -> void:
 	_ensure_placeholder_nodes()
 	if not body_entered.is_connected(_on_body_entered):
 		body_entered.connect(_on_body_entered)
+	if not area_entered.is_connected(_on_area_entered):
+		area_entered.connect(_on_area_entered)
 
 
 func setup(new_direction: Vector2, new_damage: float, new_speed: float = -1.0, new_lifetime: float = -1.0, new_target_group: StringName = &"player") -> void:
@@ -80,55 +83,84 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node) -> void:
-	if _try_damage_target_body(body):
+	if impact_resolved:
+		return
+
+	if _try_damage_target_node(body):
 		if not boomerang_enabled:
+			impact_resolved = true
 			queue_free()
 		return
 
 	if hit_walls and _is_wall_body(body):
+		impact_resolved = true
 		queue_free()
 
 
-func _try_damage_target_body(body: Node) -> bool:
-	if not body.is_in_group(target_group) or not body.has_method("take_damage"):
+func _on_area_entered(area: Area2D) -> void:
+	if impact_resolved:
+		return
+
+	if _try_damage_target_node(area):
+		if not boomerang_enabled:
+			impact_resolved = true
+			queue_free()
+
+
+func _try_damage_target_node(node: Node) -> bool:
+	var target := _get_damage_target(node)
+	if target == null:
 		return false
 
 	if boomerang_enabled:
-		return _try_damage_boomerang_target(body)
+		return _try_damage_boomerang_target(target)
 
-	_damage_target_body(body)
+	_damage_target_body(target)
 	return true
 
 
-func _try_damage_boomerang_target(body: Node) -> bool:
+func _get_damage_target(node: Node) -> Node:
+	if node.is_in_group(target_group) and node.has_method("take_damage"):
+		return node
+
+	var parent := node.get_parent()
+	if parent != null and parent.is_in_group(target_group) and parent.has_method("take_damage"):
+		return parent
+
+	return null
+
+
+func _try_damage_boomerang_target(target: Node) -> bool:
 	var hit_targets: Array[Node] = return_hit_targets
 	if boomerang_state != BoomerangState.RETURNING:
 		hit_targets = outbound_hit_targets
 
-	if hit_targets.has(body):
+	if hit_targets.has(target):
 		return false
 
-	hit_targets.append(body)
-	_damage_target_body(body)
+	hit_targets.append(target)
+	_damage_target_body(target)
 	if boomerang_state == BoomerangState.OUTBOUND:
 		_start_return_delay()
 	return true
 
 
-func _damage_target_body(body: Node) -> void:
+func _damage_target_body(target: Node) -> void:
 	var can_use_owner_damage: bool = target_group == &"enemy" and owner_player != null and is_instance_valid(owner_player)
 	if can_use_owner_damage:
 		can_use_owner_damage = owner_player.has_method("deal_player_damage_to_enemy")
 
 	if can_use_owner_damage:
-		owner_player.deal_player_damage_to_enemy(body, damage, {"source": "projectile", "direct": true, "allow_procs": true})
+		owner_player.deal_player_damage_to_enemy(target, damage, {"source": "projectile", "direct": true, "allow_procs": true})
 	else:
-		body.call("take_damage", damage)
+		target.call("take_damage", damage)
 
 
 func _damage_overlapping_targets() -> void:
 	for body in get_overlapping_bodies():
-		_try_damage_target_body(body)
+		_try_damage_target_node(body)
+	for area in get_overlapping_areas():
+		_try_damage_target_node(area)
 
 
 func _update_boomerang_state(delta: float) -> void:

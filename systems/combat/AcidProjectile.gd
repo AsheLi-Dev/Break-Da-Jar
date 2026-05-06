@@ -24,7 +24,7 @@ func _process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node) -> void:
-	if _try_damage_target_body(body):
+	if _try_damage_target_node(body):
 		_spawn_acid_splash()
 		if not boomerang_enabled:
 			queue_free()
