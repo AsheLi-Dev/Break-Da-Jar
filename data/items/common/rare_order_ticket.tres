@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"pickup_once"
+stacking_notes = "Each copy queues one extra rare jar for the next shop refresh when obtained."
 effect_type = &"queue_extra_rare_shop_jar"
 value = 1.0
 max_stacks = 1

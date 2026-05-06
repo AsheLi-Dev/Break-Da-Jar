@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "One monitor reads copy count; copies increase attack speed, not stationary time or linger duration."
 effect_type = &"stationary_attack_speed"
 stat_name = &"attack_speed_bonus"
 value = 0.2

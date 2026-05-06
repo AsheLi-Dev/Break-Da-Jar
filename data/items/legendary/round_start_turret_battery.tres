@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"linear_summon_count"
+stacking_notes = "Each copy listens independently and summons two more turrets at round start."
 event_name = &"round_started"
 effect_type = &"summon_turrets_on_round_start"
 duration = 15.0

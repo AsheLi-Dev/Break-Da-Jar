@@ -5,6 +5,10 @@ const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
 const FIRE_DRAGON_SCENE := preload("res://scenes/summons/FireDragon.tscn")
 const HEALING_OVER_TIME_SCRIPT := preload("res://systems/combat/HealingOverTimeEffect.gd")
 const ITEM_RUNTIME_EFFECT_SCRIPT := preload("res://systems/items/effects/ItemRuntimeEffectNode.gd")
+const LIGHTNING_CHAIN_TEXTURE_PATH := "res://assets/vfx/lightning spell/lightning chain 256x256.png"
+const LIGHTNING_CHAIN_FRAME_SIZE := Vector2(256.0, 256.0)
+const LIGHTNING_CHAIN_SFX_PATH := "res://assets/sfx/dragon-studio-lightning-spell-386163.mp3"
+const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const SMALL_TURRET_SCENE := preload("res://scenes/summons/SmallTurret.tscn")
 
 @export var event_name: StringName
@@ -25,6 +29,9 @@ const SMALL_TURRET_SCENE := preload("res://scenes/summons/SmallTurret.tscn")
 @export var lightning_vfx_lifetime: float = 0.12
 @export var lightning_vfx_width: float = 7.0
 @export var lightning_vfx_color: Color = Color(0.45, 0.85, 1.0, 0.95)
+@export var lightning_vfx_animation_fps: float = 20.0
+@export var lightning_vfx_height_scale: float = 2.0
+@export var lightning_sfx_volume_db: float = -2.0
 @export var container_proc_delay: float = 0.12
 @export var duplicate_projectile_spread_degrees: float = 8.0
 @export var dash_fireball_auto_aim_radius: float = 600.0
@@ -40,6 +47,8 @@ var fireburst_deferred: bool = false
 var applied_shared_stat_bonus: float = 0.0
 var fire_dragons: Array[Node] = []
 var accumulated_hp_loss: float = 0.0
+var lightning_chain_texture: Texture2D
+var lightning_chain_sfx: AudioStream
 
 
 func configure_instance(new_item_id: StringName, new_effect_index: int, new_stack_index: int) -> void:
@@ -80,7 +89,7 @@ func _on_player_event(arg1: Variant = null, arg2: Variant = null, arg3: Variant 
 		return
 	if cooldown_remaining > 0.0:
 		return
-	if randf() > chance:
+	if randf() > _get_effective_chance():
 		return
 
 	if internal_cooldown > 0.0:
@@ -158,6 +167,8 @@ func _clear_cooldown() -> void:
 
 
 func _is_pickup_effect() -> bool:
+	if stacking_rule == &"pickup_once":
+		return true
 	if effect_type == &"shop_price_multiplier":
 		return true
 	if effect_type == &"queue_extra_rare_shop_jar":
@@ -184,6 +195,8 @@ func _apply_pickup_effect() -> void:
 
 
 func _is_shared_runtime_effect() -> bool:
+	if stacking_rule == &"shared_runtime_scaled":
+		return true
 	return effect_type == &"nearby_enemy_attack_speed" or effect_type == &"stationary_attack_speed"
 
 
@@ -372,7 +385,10 @@ func _refund_gold_on_shop_container_break(gold_cost_value: Variant) -> void:
 	if gold_cost <= 0 or owner_player == null or not owner_player.has_method("add_gold"):
 		return
 
-	var refund: int = floori(float(gold_cost) * value)
+	var refund_rate: float = value
+	if stacking_rule == &"shared_limited_trigger_scaled_by_copies":
+		refund_rate *= float(_get_item_count())
+	var refund: int = floori(float(gold_cost) * refund_rate)
 	if refund <= 0:
 		refund = 1
 	runtime_trigger_count += 1
@@ -428,6 +444,18 @@ func _lose_current_hp_percent_then_heal_over_time() -> void:
 
 
 func _uses_shared_stack_listener() -> bool:
+	if stacking_rule == &"chance_multiplicative":
+		return true
+	if stacking_rule == &"shared_counter_cap_per_copy":
+		return true
+	if stacking_rule == &"shared_counter_scaled_effect":
+		return true
+	if stacking_rule == &"shared_limited_trigger_scaled_by_copies":
+		return true
+	if stacking_rule == &"shared_trigger_scaled_by_copies":
+		return true
+	if stacking_rule == &"summon_count_by_stat_per_copy":
+		return true
 	if effect_type == &"stat_bonus_every_n_kills_shared":
 		return true
 	if effect_type == &"lose_current_hp_percent_then_heal_over_time":
@@ -439,6 +467,12 @@ func _get_item_count() -> int:
 	if owner_player != null and owner_player.has_method("get_item_count"):
 		return maxi(int(owner_player.get_item_count(item_id)), 1)
 	return 1
+
+
+func _get_effective_chance() -> float:
+	if stacking_rule == &"chance_multiplicative":
+		return 1.0 - pow(1.0 - clampf(chance, 0.0, 1.0), float(_get_item_count()))
+	return chance
 
 
 func _fireballs_every_n_kills() -> void:
@@ -456,7 +490,10 @@ func _release_pending_fireburst() -> void:
 	var threshold: int = maxi(max_stacks, 1)
 	while kill_counter >= threshold:
 		kill_counter -= threshold
-		if not _release_fireballs_from_player(maxi(chain_count, 1)):
+		var fireball_count: int = maxi(chain_count, 1)
+		if stacking_rule == &"shared_counter_scaled_effect":
+			fireball_count *= _get_item_count()
+		if not _release_fireballs_from_player(fireball_count):
 			break
 
 
@@ -655,6 +692,7 @@ func _trigger_chain_lightning(origin: Vector2, already_hit: Array = []) -> bool:
 		elif target.has_method("take_damage"):
 			target.take_damage(damage, {"source": "chain_lightning", "owner": owner_player})
 	if did_hit:
+		_play_chain_lightning_sfx(origin)
 		print("Chain lightning triggers")
 	return did_hit
 
@@ -662,47 +700,79 @@ func _trigger_chain_lightning(origin: Vector2, already_hit: Array = []) -> bool:
 func _spawn_chain_lightning_vfx(start_position: Vector2, end_position: Vector2) -> void:
 	if owner_player == null or owner_player.get_tree().current_scene == null:
 		return
+	var distance: float = start_position.distance_to(end_position)
+	if distance <= 0.001:
+		return
+	var lightning_texture: Texture2D = _get_lightning_chain_texture()
+	if lightning_texture == null:
+		return
 
-	var line := Line2D.new()
-	line.name = "ChainLightningVFX"
-	line.global_position = Vector2.ZERO
-	line.width = lightning_vfx_width
-	line.default_color = lightning_vfx_color
-	line.joint_mode = Line2D.LINE_JOINT_SHARP
-	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	line.end_cap_mode = Line2D.LINE_CAP_ROUND
-	line.z_index = 200
-	line.add_point(start_position)
-	line.add_point(_get_lightning_midpoint(start_position, end_position, -10.0))
-	line.add_point(_get_lightning_midpoint(start_position, end_position, 10.0))
-	line.add_point(end_position)
-	owner_player.get_tree().current_scene.add_child(line)
+	var sprite_frames := SpriteFrames.new()
+	var animation_name := &"default"
+	sprite_frames.add_animation(animation_name)
+	sprite_frames.set_animation_loop(animation_name, false)
+	sprite_frames.set_animation_speed(animation_name, lightning_vfx_animation_fps)
 
-	var core := Line2D.new()
-	core.name = "ChainLightningCore"
-	core.width = maxf(2.0, lightning_vfx_width * 0.35)
-	core.default_color = Color(1.0, 1.0, 1.0, 1.0)
-	core.joint_mode = Line2D.LINE_JOINT_SHARP
-	core.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	core.end_cap_mode = Line2D.LINE_CAP_ROUND
-	core.z_index = 201
-	for point in line.points:
-		core.add_point(point)
-	line.add_child(core)
+	var frame_count: int = int(lightning_texture.get_height() / LIGHTNING_CHAIN_FRAME_SIZE.y)
+	for frame_index in range(frame_count):
+		var frame_texture := AtlasTexture.new()
+		frame_texture.atlas = lightning_texture
+		frame_texture.region = Rect2(
+			0.0,
+			float(frame_index) * LIGHTNING_CHAIN_FRAME_SIZE.y,
+			LIGHTNING_CHAIN_FRAME_SIZE.x,
+			LIGHTNING_CHAIN_FRAME_SIZE.y
+		)
+		sprite_frames.add_frame(animation_name, frame_texture)
 
-	var tween := line.create_tween()
-	tween.tween_property(line, "modulate:a", 0.0, lightning_vfx_lifetime)
-	tween.finished.connect(line.queue_free)
+	var effect := AnimatedSprite2D.new()
+	effect.name = "ChainLightningVFX"
+	effect.sprite_frames = sprite_frames
+	effect.rotation = (end_position - start_position).angle()
+	effect.scale = Vector2(distance / LIGHTNING_CHAIN_FRAME_SIZE.x, lightning_vfx_height_scale)
+	effect.z_index = 200
+	effect.modulate.a = lightning_vfx_color.a
+	owner_player.get_tree().current_scene.add_child(effect)
+	effect.global_position = start_position.lerp(end_position, 0.5)
+	effect.play(animation_name)
+	effect.animation_finished.connect(Callable(effect, "queue_free"))
 
 
-func _get_lightning_midpoint(start_position: Vector2, end_position: Vector2, side_offset: float) -> Vector2:
-	var along: Vector2 = end_position - start_position
-	if along.length_squared() <= 0.001:
-		return start_position
+func _get_lightning_chain_texture() -> Texture2D:
+	if lightning_chain_texture != null:
+		return lightning_chain_texture
 
-	var normal: Vector2 = along.normalized().orthogonal()
-	var progress: float = 0.35 if side_offset < 0.0 else 0.68
-	return start_position.lerp(end_position, progress) + normal * side_offset
+	var image := Image.load_from_file(LIGHTNING_CHAIN_TEXTURE_PATH)
+	if image == null or image.is_empty():
+		push_warning("Failed to load chain lightning texture: %s" % LIGHTNING_CHAIN_TEXTURE_PATH)
+		return null
+
+	lightning_chain_texture = ImageTexture.create_from_image(image)
+	return lightning_chain_texture
+
+
+func _play_chain_lightning_sfx(position: Vector2) -> void:
+	if owner_player == null or owner_player.get_tree().current_scene == null:
+		return
+	var stream: AudioStream = _get_lightning_chain_sfx()
+	if stream == null:
+		return
+	SFX_PLAYER.play_2d(owner_player.get_tree().current_scene, stream, position, lightning_sfx_volume_db, 0.98, 1.04)
+
+
+func _get_lightning_chain_sfx() -> AudioStream:
+	if lightning_chain_sfx != null:
+		return lightning_chain_sfx
+
+	var stream := load(LIGHTNING_CHAIN_SFX_PATH) as AudioStream
+	if stream == null and FileAccess.file_exists(LIGHTNING_CHAIN_SFX_PATH):
+		stream = AudioStreamMP3.load_from_file(LIGHTNING_CHAIN_SFX_PATH)
+	if stream == null:
+		push_warning("Failed to load chain lightning SFX: %s" % LIGHTNING_CHAIN_SFX_PATH)
+		return null
+
+	lightning_chain_sfx = stream
+	return lightning_chain_sfx
 
 
 func _launch_fireball(start_position: Vector2, target_position: Vector2) -> void:
@@ -764,11 +834,14 @@ func _get_player_position() -> Vector2:
 
 
 func _extract_position(position_source: Variant) -> Vector2:
+	if position_source is Vector2:
+		return position_source
+	if not position_source is Object:
+		return _get_player_position()
+
 	var node := position_source as Node2D
 	if node != null:
 		return node.global_position
-	if position_source is Vector2:
-		return position_source
 	return _get_player_position()
 
 

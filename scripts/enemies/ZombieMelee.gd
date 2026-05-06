@@ -16,9 +16,9 @@ const VISUAL_VARIANT_DIRS: Array[String] = [
 ]
 
 # Melee attack tuning. Telegraph shows before the hitbox turns on.
-@export var attack_range: float = 58.0
+@export var attack_range: float = 116.0
 @export var cone_angle_degrees: float = 80.0
-@export var cone_radius: float = 72.0
+@export var cone_radius: float = 144.0
 @export var warning_color: Color = Color(1.0, 0.25, 0.08, 0.28)
 @export var animation_fps: float = 15.0
 @export var take_damage_animation_time: float = 0.2
@@ -92,6 +92,7 @@ func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {
 	last_attack_info = attack_info
 	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
+	_update_hp_bar()
 	if hp <= 0.0:
 		die()
 		return old_hp
@@ -106,6 +107,8 @@ func die() -> void:
 
 	is_dead = true
 	_notify_player_kill_once()
+	_play_death_sfx()
+	_hide_hp_bar()
 	attack_area.monitoring = false
 	warning_cone.visible = false
 	collision_layer = 0

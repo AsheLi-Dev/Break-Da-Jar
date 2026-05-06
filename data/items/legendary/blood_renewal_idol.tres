@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_trigger_scaled_by_copies"
+stacking_notes = "Round start HP loss happens once; healing multiplier scales by copies."
 event_name = &"round_started"
 effect_type = &"lose_current_hp_percent_then_heal_over_time"
 value = 0.5

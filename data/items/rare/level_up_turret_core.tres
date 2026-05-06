@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"linear_summon_count"
+stacking_notes = "Each copy listens independently and summons one more turret on level up."
 event_name = &"player_leveled_up"
 effect_type = &"summon_turret_on_level_up"
 duration = 10.0

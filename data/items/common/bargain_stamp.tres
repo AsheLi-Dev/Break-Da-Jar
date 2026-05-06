@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"multiplicative"
+stacking_notes = "Each copy multiplies shop jar prices by 0.9."
 effect_type = &"shop_price_multiplier"
 value = 0.9
 

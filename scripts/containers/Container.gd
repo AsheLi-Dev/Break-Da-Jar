@@ -1,6 +1,11 @@
 extends Area2D
 class_name BreakableContainer
 
+const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
+const CRATE_BREAK_SFX: AudioStream = preload("res://assets/sfx/crate_break.mp3")
+const JAR_BREAK_SFX: AudioStream = preload("res://assets/sfx/jar_break.mp3")
+const TOMB_BREAK_SFX: AudioStream = preload("res://assets/sfx/tomb_break.mp3")
+
 signal break_finished(container: BreakableContainer, container_type: int, spawn_position: Vector2)
 signal broken(container: BreakableContainer, attack_info: Dictionary)
 
@@ -66,6 +71,7 @@ func break_open() -> void:
 		return
 
 	is_breaking = true
+	_play_break_sfx()
 	broken.emit(self, last_attack_info)
 	set_deferred("monitoring", false)
 	set_deferred("monitorable", false)
@@ -95,3 +101,16 @@ func _get_current_static_texture() -> Texture2D:
 		return damaged_texture
 
 	return static_texture
+
+
+func _play_break_sfx() -> void:
+	var stream := JAR_BREAK_SFX
+	if container_type == 1:
+		stream = CRATE_BREAK_SFX
+	elif container_type == 2:
+		stream = TOMB_BREAK_SFX
+
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	SFX_PLAYER.play_2d(parent, stream, global_position, -2.0, 0.94, 1.08)

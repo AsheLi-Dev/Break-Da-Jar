@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_counter_cap_per_copy"
+stacking_notes = "All copies share one kill counter; each copy adds +50 max HP cap."
 event_name = &"enemy_killed"
 effect_type = &"stat_bonus_every_n_kills_shared"
 stat_name = &"max_hp"

@@ -5,14 +5,28 @@ const FRAME_SIZE := Vector2i(128, 128)
 const FRAMES_PER_DIRECTION := 15
 const DIRECTION_COUNT := 8
 const ATTACK_PROJECTILE_FRAME := 7
+const SHOCKWAVE_HIT_FRAME := 9
+const SHOCKWAVE_EFFECT_DAMAGE_FRAME := 4
+const SHOCKWAVE_EFFECT_FPS := 10.0
+const SHOCKWAVE_WINDUP_LUNGE_DISTANCE := 72.0
+const SHOCKWAVE_HIT_OFFSET := 60.0
+const SLIDE_END_FPS := 30.0
 
 const ABILITY_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/ability.png")
 const ATTACK_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack.png")
 const ATTACK_ALT_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack_alt.png")
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
+const FLOATING_TEXT_SCRIPT := preload("res://systems/combat/FloatingText.gd")
+const HOLY_SPELL_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HeavensFury_spritesheet.png")
 const IDLE_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/idle.png")
+const LEVEL_UP_EFFECT_TEXTURE: Texture2D = preload("res://assets/vfx/Level Up Effect/Level Up Effect Spritesheet.png")
 const ROLLING_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/rolling.png")
+const SLIDE_END_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/slideend.png")
+const SLIDE_SFX_PATH := "res://assets/sfx/slide.mp3"
+const SLIDE_START_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/slidestart.png")
 const RUN_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/run.png")
+const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
+const ENEMY_HURT_SFX: AudioStream = preload("res://assets/sfx/enemy_hurt.wav")
 
 signal attack_hit(enemy: Node, damage_dealt: float, attack_info: Dictionary)
 signal attack_started(origin: Vector2, direction: Vector2, attack_info: Dictionary)
@@ -68,7 +82,7 @@ var hp: float
 
 # Dash is a short reposition. Slide is the invincible enemy-pass-through followup.
 @export var dash_speed: float = 560.0
-@export var dash_duration: float = 0.1
+@export var dash_duration: float = 0.2
 @export var dash_cooldown: float = 0.75
 @export var dash_smear_count: int = 5
 @export var dash_smear_lifetime: float = 0.14
@@ -79,9 +93,10 @@ var hp: float
 @export var dash_forward_smear_distance: float = 14.0
 @export var dash_forward_smear_lifetime: float = 0.08
 @export var dash_forward_smear_alpha: float = 0.18
-@export var slide_speed: float = 620.0
-@export var slide_duration: float = 0.28
-@export var slide_cancel_window: float = 0.1
+@export var slide_speed: float = 480.0
+@export var slide_duration: float = 0.5
+@export var slide_cancel_window: float = 0.3
+@export var slide_sfx_volume_db: float = -4.0
 @export var invincible_time: float = 0.3
 
 # Collision mask bit for enemies. Layer numbers are 1-based in the editor.
@@ -143,6 +158,7 @@ var action_animation_remaining: float = 0.0
 var action_animation_elapsed: float = 0.0
 var pending_attack_projectile: bool = false
 var pending_attack_target_position: Vector2 = Vector2.ZERO
+var slide_sfx: AudioStream
 var action_direction_locked: bool = false
 var action_animation_direction: Vector2 = Vector2.RIGHT
 
@@ -382,6 +398,8 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 	if damage_dealt <= 0.0:
 		damage_dealt = final_damage
 
+	_play_enemy_hit_feedback(enemy, damage_dealt, attack_info)
+
 	if bool(attack_info.get("direct", true)):
 		_apply_attack_status_procs(enemy)
 		if stats != null and stats.lifesteal > 0.0:
@@ -394,6 +412,48 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 		attack_hit.emit(enemy, damage_dealt, attack_info)
 
 	return damage_dealt
+
+
+func _play_enemy_hit_feedback(enemy: Node, damage_dealt: float, attack_info: Dictionary) -> void:
+	var enemy_2d := enemy as Node2D
+	if enemy_2d == null:
+		return
+
+	var is_critical := bool(attack_info.get("critical", false))
+	_spawn_damage_popup(enemy_2d.global_position + Vector2(0.0, -42.0), roundi(damage_dealt), is_critical)
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	SFX_PLAYER.play_2d(parent, ENEMY_HURT_SFX, enemy_2d.global_position, -3.0, 0.94, 1.12)
+	if is_critical:
+		_start_camera_shake(4.0, 0.1)
+
+	if bool(attack_info.get("direct", true)) and String(attack_info.get("source", "")) != "shockwave":
+		if enemy.has_method("apply_knockback"):
+			var knockback_direction := (enemy_2d.global_position - global_position).normalized()
+			if knockback_direction.length_squared() <= 0.001:
+				knockback_direction = facing_direction
+			enemy.call("apply_knockback", knockback_direction * 125.0)
+
+
+func _spawn_damage_popup(spawn_position: Vector2, amount: int, is_critical: bool) -> void:
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	if parent == null:
+		return
+
+	var popup := FLOATING_TEXT_SCRIPT.new() as FloatingText
+	var color := Color(1.0, 0.88, 0.24) if is_critical else Color(0.95, 0.97, 1.0)
+	var scale_value := 1.2 if is_critical else 1.0
+	popup.setup(str(amount), spawn_position, color, scale_value)
+	parent.add_child(popup)
+
+
+func _start_camera_shake(magnitude: float, duration: float) -> void:
+	var current_camera := get_viewport().get_camera_2d()
+	if current_camera != null and current_camera.has_method("start_shake"):
+		current_camera.call("start_shake", magnitude, duration)
 
 
 func notify_enemy_killed(enemy: Node) -> void:
@@ -431,6 +491,13 @@ func _update_timers(delta: float) -> void:
 
 
 func _update_normal_movement(delta: float) -> void:
+	if _is_shockwave_windup_active():
+		var lunge_speed := SHOCKWAVE_WINDUP_LUNGE_DISTANCE / maxf(_get_shockwave_hit_time(), 0.001)
+		velocity = action_animation_direction * lunge_speed
+		move_and_slide()
+		_clamp_to_movement_bounds()
+		return
+
 	var input_direction: Vector2 = _get_move_input()
 	var target_speed: float = move_speed * slow_multiplier
 	if stats != null:
@@ -497,7 +564,7 @@ func _try_start_slide() -> void:
 	invincible_remaining = maxf(invincible_remaining, invincible_time)
 	is_invincible = true
 	velocity = dash_direction * slide_speed
-	_play_action_animation(&"rolling", _get_full_animation_time())
+	_play_slide_sfx()
 
 	# Slide-through-enemies: temporarily stop colliding with enemy bodies.
 	saved_collision_mask = collision_mask
@@ -506,21 +573,55 @@ func _try_start_slide() -> void:
 
 func _update_slide(delta: float) -> void:
 	slide_time_remaining -= delta
-	velocity = dash_direction * slide_speed
+	var progress: float = _get_slide_progress()
+	var current_slide_speed: float = lerpf(slide_speed, move_speed, progress)
+	velocity = dash_direction * current_slide_speed
 	move_and_slide()
 	_clamp_to_movement_bounds()
 
 	# Optional future upgrade: add a DashHitbox Area2D to damage or knock back enemies along the slide path.
 	if slide_time_remaining <= 0.0:
-		state = State.NORMAL
-		collision_mask = saved_collision_mask
-		_apply_slide_finished_talents()
-		dash_ended.emit(dash_direction)
+		_finish_slide(true)
+
+
+func _get_slide_progress() -> float:
+	return clampf(1.0 - slide_time_remaining / maxf(slide_duration, 0.001), 0.0, 1.0)
+
+
+func _is_slide_attack_cancel_window() -> bool:
+	return state == State.SLIDING and _get_slide_progress() >= 0.5
+
+
+func _can_start_attack_now() -> bool:
+	if state == State.SLIDING:
+		return _is_slide_attack_cancel_window()
+	return _can_cancel_current_action()
+
+
+func _interrupt_slide_for_attack() -> void:
+	if state == State.SLIDING:
+		_finish_slide(false)
+
+
+func _finish_slide(play_recovery: bool) -> void:
+	if state != State.SLIDING:
+		return
+
+	state = State.NORMAL
+	slide_time_remaining = 0.0
+	collision_mask = saved_collision_mask
+	_apply_slide_finished_talents()
+	dash_ended.emit(dash_direction)
+	if play_recovery:
+		_play_action_animation_with_direction(&"slide_end", float(FRAMES_PER_DIRECTION) / SLIDE_END_FPS, dash_direction)
 
 
 func _try_fire_projectile() -> void:
 	if fire_cooldown_remaining > 0.0:
 		return
+	if not _can_start_attack_now():
+		return
+	_interrupt_slide_for_attack()
 
 	fire_cooldown_remaining = _get_fire_interval()
 	pending_attack_projectile = true
@@ -531,28 +632,63 @@ func _try_fire_projectile() -> void:
 func _try_cast_shockwave() -> void:
 	if shockwave_cooldown_remaining > 0.0:
 		return
+	if not _can_start_attack_now():
+		return
+	_interrupt_slide_for_attack()
 
 	shockwave_cooldown_remaining = shockwave_cooldown
-	shockwave_visual.visible = true
-	_play_action_animation_with_direction(&"ability", shockwave_visible_time, facing_direction)
-	get_tree().create_timer(shockwave_visible_time).timeout.connect(_hide_shockwave_visual)
+	_play_action_animation_with_direction(&"ability", _get_action_animation_time(&"ability"), facing_direction)
+	get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_start_shockwave_effect)
 
-	for body in shockwave_area.get_overlapping_bodies():
+
+func _start_shockwave_effect() -> void:
+	var shockwave_center := global_position + action_animation_direction * SHOCKWAVE_HIT_OFFSET
+	shockwave_visual.visible = true
+	shockwave_visual.global_position = shockwave_center
+	_play_holy_spell_effect(shockwave_center)
+	_start_camera_shake(5.0, 0.12)
+	get_tree().create_timer(shockwave_visible_time).timeout.connect(_hide_shockwave_visual)
+	get_tree().create_timer(_get_shockwave_effect_damage_time()).timeout.connect(_perform_shockwave_attack.bind(shockwave_center))
+
+
+func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
+
+	for body in get_tree().get_nodes_in_group("enemy"):
 		if not body.is_in_group("enemy"):
+			continue
+		var body_2d: Node2D = body as Node2D
+		if body_2d == null or body_2d.global_position.distance_to(shockwave_center) > shockwave_radius:
 			continue
 
 		if body.has_method("take_damage"):
 			deal_player_damage_to_enemy(body, shockwave_damage, {"source": "shockwave", "direct": true, "allow_procs": true})
 
 		if body.has_method("apply_knockback"):
-			var body_2d: Node2D = body as Node2D
-			if body_2d == null:
-				continue
-
-			var knockback_direction: Vector2 = (body_2d.global_position - global_position).normalized()
+			var knockback_direction: Vector2 = (body_2d.global_position - shockwave_center).normalized()
 			if knockback_direction.length_squared() <= 0.001:
 				knockback_direction = facing_direction
 			body.call("apply_knockback", knockback_direction * shockwave_knockback)
+
+	for container in get_tree().get_nodes_in_group("container"):
+		var container_2d := container as Node2D
+		if container_2d == null or container_2d.global_position.distance_to(shockwave_center) > shockwave_radius:
+			continue
+		if container is BreakableContainer and container.is_shop_container:
+			continue
+		if container.has_method("take_damage"):
+			container.take_damage(shockwave_damage, {"source": "player_attack", "owner": self})
+
+
+func _get_shockwave_hit_time() -> float:
+	return float(SHOCKWAVE_HIT_FRAME - 1) / animation_fps
+
+
+func _get_shockwave_effect_damage_time() -> float:
+	return float(SHOCKWAVE_EFFECT_DAMAGE_FRAME - 1) / SHOCKWAVE_EFFECT_FPS
+
+
+func _is_shockwave_windup_active() -> bool:
+	return action_animation == &"ability" and action_animation_elapsed < _get_shockwave_hit_time()
 
 
 func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectile:
@@ -637,6 +773,7 @@ func _spawn_forward_dash_smear() -> void:
 func _hide_shockwave_visual() -> void:
 	if is_instance_valid(shockwave_visual):
 		shockwave_visual.visible = false
+		shockwave_visual.position = Vector2.ZERO
 
 
 func _update_facing() -> void:
@@ -669,7 +806,7 @@ func _update_animation_direction() -> void:
 
 
 func _uses_movement_animation_direction() -> bool:
-	return current_animation == &"run" or current_animation == &"rolling"
+	return current_animation == &"run" or current_animation == &"rolling" or current_animation == &"slide_start" or current_animation == &"slide_hold" or current_animation == &"slide_end"
 
 
 func _play_action_animation(animation_name: StringName, duration: float) -> void:
@@ -717,7 +854,7 @@ func _update_sprite_animation(delta: float) -> void:
 
 func _get_locomotion_animation() -> StringName:
 	if state == State.SLIDING:
-		return &"rolling"
+		return &"slide_start" if _get_slide_progress() < 0.5 else &"slide_hold"
 	if state == State.DASHING:
 		if velocity.length_squared() > 16.0:
 			return &"run"
@@ -782,6 +919,8 @@ func _get_fire_interval() -> float:
 func _can_cancel_current_action() -> bool:
 	if action_animation_remaining <= 0.0:
 		return true
+	if action_animation == &"slide_end":
+		return true
 	if action_animation != &"attack":
 		return false
 
@@ -842,8 +981,55 @@ func _get_required_exp_for_next_level() -> int:
 func _level_up() -> void:
 	level += 1
 	pending_talent_points += 1
+	_play_level_up_effect()
 	talent_points_changed.emit(unspent_talent_points, pending_talent_points)
 	player_leveled_up.emit(level)
+
+
+func _play_level_up_effect() -> void:
+	_play_spritesheet_effect(
+		LEVEL_UP_EFFECT_TEXTURE,
+		&"level_up",
+		global_position + Vector2(0.0, -96.0),
+		10.0,
+		Vector2(3.0, 3.0)
+	)
+
+
+func _play_holy_spell_effect(spawn_position: Vector2) -> void:
+	var effect_scale := Vector2.ONE * (shockwave_radius * 2.0 / float(FRAME_SIZE.x))
+	_play_spritesheet_effect(HOLY_SPELL_TEXTURE, &"holy_spell", spawn_position, SHOCKWAVE_EFFECT_FPS, effect_scale)
+
+
+func _play_spritesheet_effect(
+	effect_texture: Texture2D,
+	animation_name: StringName,
+	spawn_position: Vector2,
+	fps: float,
+	effect_scale: Vector2 = Vector2.ONE
+) -> void:
+	var sprite_frames := SpriteFrames.new()
+	sprite_frames.add_animation(animation_name)
+	sprite_frames.set_animation_loop(animation_name, false)
+	sprite_frames.set_animation_speed(animation_name, fps)
+
+	var frame_count := int(effect_texture.get_width() / FRAME_SIZE.x)
+	for frame_index in range(frame_count):
+		var frame_texture := AtlasTexture.new()
+		frame_texture.atlas = effect_texture
+		frame_texture.region = Rect2(frame_index * FRAME_SIZE.x, 0, FRAME_SIZE.x, FRAME_SIZE.y)
+		sprite_frames.add_frame(animation_name, frame_texture)
+
+	var effect := AnimatedSprite2D.new()
+	effect.sprite_frames = sprite_frames
+	effect.animation = animation_name
+	effect.centered = true
+	effect.scale = effect_scale
+	effect.z_index = 20
+	get_parent().add_child(effect)
+	effect.global_position = spawn_position
+	effect.animation_finished.connect(effect.queue_free)
+	effect.play()
 
 
 func _get_talent_definition(node_id: StringName) -> Dictionary:
@@ -1110,10 +1296,44 @@ func _get_animation_texture(animation_name: StringName) -> Texture2D:
 			return ABILITY_TEXTURE
 		&"rolling":
 			return ROLLING_TEXTURE
+		&"slide_start":
+			return SLIDE_START_TEXTURE
+		&"slide_hold":
+			return SLIDE_START_TEXTURE
+		&"slide_end":
+			return SLIDE_END_TEXTURE
 		&"run":
 			return RUN_TEXTURE
 		_:
 			return IDLE_TEXTURE
+
+
+func _play_slide_sfx() -> void:
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	if parent == null:
+		return
+
+	var stream: AudioStream = _get_slide_sfx()
+	if stream == null:
+		return
+	SFX_PLAYER.play_2d(parent, stream, global_position, slide_sfx_volume_db, 1.8, 3.2)
+
+
+func _get_slide_sfx() -> AudioStream:
+	if slide_sfx != null:
+		return slide_sfx
+
+	var stream := load(SLIDE_SFX_PATH) as AudioStream
+	if stream == null and FileAccess.file_exists(SLIDE_SFX_PATH):
+		stream = AudioStreamMP3.load_from_file(SLIDE_SFX_PATH)
+	if stream == null:
+		push_warning("Failed to load slide SFX: %s" % SLIDE_SFX_PATH)
+		return null
+
+	slide_sfx = stream
+	return slide_sfx
 
 
 func _get_direction_row(direction: Vector2) -> int:
@@ -1311,6 +1531,9 @@ func _build_animation_library() -> void:
 		&"attack",
 		&"ability",
 		&"rolling",
+		&"slide_start",
+		&"slide_hold",
+		&"slide_end",
 	]
 
 	for animation_base in animation_bases:
@@ -1329,6 +1552,9 @@ func _build_animation_state_machine() -> void:
 		&"attack",
 		&"ability",
 		&"rolling",
+		&"slide_start",
+		&"slide_hold",
+		&"slide_end",
 	]
 
 	for animation_base in animation_bases:
@@ -1360,8 +1586,9 @@ func _create_direction_animation(animation_base: StringName, row: int) -> Animat
 	var time: float = 0.0
 	var frame_count: int = _get_animation_frame_count(animation_base)
 	for frame in range(frame_count):
+		var frame_column: int = _get_animation_frame_column(animation_base, frame)
 		var region := Rect2(
-			Vector2(frame * FRAME_SIZE.x, row * FRAME_SIZE.y),
+			Vector2(frame_column * FRAME_SIZE.x, row * FRAME_SIZE.y),
 			Vector2(FRAME_SIZE)
 		)
 		animation.track_insert_key(region_track, time, region)
@@ -1381,6 +1608,12 @@ func _get_animation_length(animation_base: StringName) -> float:
 func _get_frame_duration(animation_base: StringName, frame: int) -> float:
 	if animation_base == &"attack":
 		return _get_attack_frame_duration(frame)
+	if animation_base == &"rolling":
+		return dash_duration / float(FRAMES_PER_DIRECTION)
+	if animation_base == &"slide_start" or animation_base == &"slide_hold":
+		return slide_duration * 0.5 / float(FRAMES_PER_DIRECTION)
+	if animation_base == &"slide_end":
+		return 1.0 / SLIDE_END_FPS
 
 	return 1.0 / animation_fps
 
@@ -1420,4 +1653,12 @@ func _get_animation_loop_mode(animation_base: StringName) -> Animation.LoopMode:
 
 
 func _get_animation_frame_count(animation_base: StringName) -> int:
+	if animation_base == &"slide_hold":
+		return 1
 	return FRAMES_PER_DIRECTION
+
+
+func _get_animation_frame_column(animation_base: StringName, frame: int) -> int:
+	if animation_base == &"slide_hold":
+		return FRAMES_PER_DIRECTION - 1
+	return frame

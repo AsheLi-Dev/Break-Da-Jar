@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"chance_multiplicative"
+stacking_notes = "Proc chance stacks as 1 - (1 - 0.1)^copies; one listener handles all copies."
 event_name = &"attack_started"
 effect_type = &"fireball"
 chance = 0.1

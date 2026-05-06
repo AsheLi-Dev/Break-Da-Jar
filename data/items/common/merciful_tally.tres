@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"chance_multiplicative"
+stacking_notes = "Heal chance stacks as 1 - (1 - 0.1)^copies; one listener handles all copies."
 event_name = &"enemy_killed"
 effect_type = &"chance_heal_on_kill"
 value = 5.0

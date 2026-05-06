@@ -5,7 +5,9 @@ const FRAME_SIZE := Vector2i(128, 128)
 const FRAMES_PER_DIRECTION := 15
 const DIRECTION_COUNT := 8
 const PROJECTILE_SPAWN_FRAME := 5
+const AIM_RANDOM_SPREAD_DEGREES := 10.0
 
+const ACID_PROJECTILE_SCRIPT := preload("res://systems/combat/AcidProjectile.gd")
 const ATTACK_TEXTURE: Texture2D = preload("res://assets/zombies/ranged zombie/Attack2.png")
 const DIE_TEXTURE: Texture2D = preload("res://assets/zombies/ranged zombie/Die.png")
 const IDLE_TEXTURE: Texture2D = preload("res://assets/zombies/ranged zombie/Idle.png")
@@ -87,6 +89,7 @@ func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {
 	last_attack_info = attack_info
 	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
+	_update_hp_bar()
 	if hp <= 0.0:
 		die()
 		return old_hp
@@ -101,6 +104,8 @@ func die() -> void:
 
 	is_dead = true
 	_notify_player_kill_once()
+	_play_death_sfx()
+	_hide_hp_bar()
 	aim_line.visible = false
 	collision_layer = 0
 	collision_mask = 0
@@ -126,9 +131,9 @@ func _start_aim() -> void:
 	is_aiming = true
 	attack_elapsed = 0.0
 	projectile_fired = false
-	locked_attack_direction = facing_direction
+	locked_attack_direction = facing_direction.rotated(deg_to_rad(randf_range(-AIM_RANDOM_SPREAD_DEGREES, AIM_RANDOM_SPREAD_DEGREES))).normalized()
 	aim_line.visible = true
-	aim_line.set_point_position(1, locked_attack_direction * aim_line_length)
+	aim_line.set_point_position(1, _get_local_aim_line_end())
 	_start_action_animation(&"attack", _get_full_animation_time(&"attack"))
 
 
@@ -154,16 +159,16 @@ func _fire_projectile() -> void:
 
 
 func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectile:
-	var projectile: Projectile
-	if projectile_scene != null:
-		projectile = projectile_scene.instantiate() as Projectile
-	if projectile == null:
-		projectile = Projectile.new()
+	var projectile := ACID_PROJECTILE_SCRIPT.new() as Projectile
 
 	projectile.global_position = spawn_position
 	get_tree().current_scene.add_child(projectile)
 	projectile.direction = direction
 	return projectile
+
+
+func _get_local_aim_line_end() -> Vector2:
+	return locked_attack_direction.rotated(-global_rotation) * aim_line_length
 
 
 func _ensure_ranged_nodes() -> void:

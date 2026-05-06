@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_stat")
+stacking_rule = &"chance_multiplicative"
+stacking_notes = "Dodge chance is 1 - 0.9^copies."
 stat_name = &"dodge_chance_multiplier"
 operation = &"multiply"
 value = 0.9

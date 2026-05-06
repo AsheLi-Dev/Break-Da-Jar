@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"summon_count_by_stat_per_copy"
+stacking_notes = "One monitor controls fire dragons; count is floor(max HP / 100) * copies."
 event_name = &"hp_changed"
 effect_type = &"fire_dragons_per_max_hp"
 value = 0.5

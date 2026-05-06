@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_limited_trigger_scaled_by_copies"
+stacking_notes = "All copies share one 5-trigger limit; each copy adds +10% refund rate."
 event_name = &"shop_container_broken"
 effect_type = &"refund_gold_on_shop_container_break"
 value = 0.1

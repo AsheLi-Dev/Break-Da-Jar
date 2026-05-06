@@ -1,6 +1,10 @@
 extends CharacterBody2D
 class_name EnemyBase
 
+const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
+const UNDEAD_DEATH_SFX_A: AudioStream = preload("res://assets/sfx/undead_death_bone_break_a.mp3")
+const UNDEAD_DEATH_SFX_B: AudioStream = preload("res://assets/sfx/undead_death_bone_break_b.mp3")
+
 signal died(enemy: EnemyBase)
 
 # Core stats shared by all enemy types. Tune these per enemy scene.
@@ -10,6 +14,7 @@ signal died(enemy: EnemyBase)
 @export var attack_cooldown: float = 1.0
 @export var knockback_friction: float = 1600.0
 @export var is_elite: bool = false
+@export var hp_bar_offset_y: float = -72.0
 
 # The enemy automatically tracks the first node in this group.
 @export var target_group: StringName = &"player"
@@ -23,6 +28,8 @@ var status_effects: StatusEffectComponent
 var last_damage_source: Node
 var last_attack_info: Dictionary = {}
 var kill_notified: bool = false
+var hp_bar_root: Node2D
+var hp_bar_fill: Polygon2D
 
 
 func _ready() -> void:
@@ -31,6 +38,13 @@ func _ready() -> void:
 	_ensure_status_effects()
 	_find_target()
 	_ensure_placeholder_visual()
+	_ensure_hp_bar()
+	_update_hp_bar()
+
+
+func _process(_delta: float) -> void:
+	if not is_dead:
+		_update_hp_bar_position()
 
 
 func _physics_process(delta: float) -> void:
@@ -52,6 +66,7 @@ func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {
 	last_attack_info = attack_info
 	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
+	_update_hp_bar()
 	if hp <= 0.0:
 		die()
 	return old_hp - hp
@@ -63,6 +78,8 @@ func die() -> void:
 
 	is_dead = true
 	_notify_player_kill_once()
+	_play_death_sfx()
+	_hide_hp_bar()
 	died.emit(self)
 	queue_free()
 
@@ -176,6 +193,74 @@ func _ensure_status_effects() -> void:
 		status_effects.name = "StatusEffectComponent"
 		add_child(status_effects)
 	status_effects.setup(self)
+
+
+func _ensure_hp_bar() -> void:
+	hp_bar_root = get_node_or_null("HpBar") as Node2D
+	if hp_bar_root == null:
+		hp_bar_root = Node2D.new()
+		hp_bar_root.name = "HpBar"
+		hp_bar_root.top_level = true
+		hp_bar_root.z_index = 50
+		add_child(hp_bar_root)
+
+	var background := hp_bar_root.get_node_or_null("Background") as Polygon2D
+	if background == null:
+		background = Polygon2D.new()
+		background.name = "Background"
+		background.color = Color(0.08, 0.08, 0.08, 0.78)
+		background.polygon = PackedVector2Array([
+			Vector2(-24.0, -3.0),
+			Vector2(24.0, -3.0),
+			Vector2(24.0, 3.0),
+			Vector2(-24.0, 3.0),
+		])
+		hp_bar_root.add_child(background)
+
+	hp_bar_fill = hp_bar_root.get_node_or_null("Fill") as Polygon2D
+	if hp_bar_fill == null:
+		hp_bar_fill = Polygon2D.new()
+		hp_bar_fill.name = "Fill"
+		hp_bar_fill.color = Color(0.86, 0.12, 0.12, 0.95)
+		hp_bar_root.add_child(hp_bar_fill)
+
+	_update_hp_bar_position()
+
+
+func _update_hp_bar() -> void:
+	if hp_bar_fill == null:
+		return
+
+	var ratio := clampf(hp / maxf(max_hp, 0.001), 0.0, 1.0)
+	var left := -23.0
+	var right := lerpf(left, 23.0, ratio)
+	hp_bar_fill.polygon = PackedVector2Array([
+		Vector2(left, -2.0),
+		Vector2(right, -2.0),
+		Vector2(right, 2.0),
+		Vector2(left, 2.0),
+	])
+
+
+func _update_hp_bar_position() -> void:
+	if hp_bar_root == null:
+		return
+
+	hp_bar_root.global_position = global_position + Vector2(0.0, hp_bar_offset_y)
+	hp_bar_root.global_rotation = 0.0
+
+
+func _hide_hp_bar() -> void:
+	if hp_bar_root != null:
+		hp_bar_root.visible = false
+
+
+func _play_death_sfx() -> void:
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	var stream := UNDEAD_DEATH_SFX_A if randf() < 0.5 else UNDEAD_DEATH_SFX_B
+	SFX_PLAYER.play_2d(parent, stream, global_position, -2.0, 0.88, 1.1)
 
 
 func _notify_player_kill_once() -> void:

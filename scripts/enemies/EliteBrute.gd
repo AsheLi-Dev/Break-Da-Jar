@@ -69,6 +69,7 @@ var animation_state: AnimationNodeStateMachinePlayback
 
 func _ready() -> void:
 	is_elite = true
+	hp_bar_offset_y = -104.0
 	super()
 	_ensure_elite_nodes()
 	_ensure_animation_nodes()
@@ -106,6 +107,8 @@ func die() -> void:
 
 	is_dead = true
 	_notify_player_kill_once()
+	_play_death_sfx()
+	_hide_hp_bar()
 	melee_warning.visible = false
 	shout_warning.visible = false
 	ranged_warning.visible = false

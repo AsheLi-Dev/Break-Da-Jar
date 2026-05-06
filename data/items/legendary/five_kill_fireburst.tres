@@ -5,6 +5,8 @@
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
+stacking_rule = &"shared_counter_scaled_effect"
+stacking_notes = "All copies share one 5-kill counter; each copy adds 2 fireballs per trigger."
 event_name = &"enemy_killed"
 effect_type = &"fireballs_every_n_kills"
 max_stacks = 5
