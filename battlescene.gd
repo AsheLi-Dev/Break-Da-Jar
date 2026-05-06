@@ -16,7 +16,7 @@ const MAX_ROUNDS := 10
 const ROUND_CONTAINER_AUTO_BREAK_TIME := 30.0
 const RANDOM_CONTAINER_BREAK_MIN_TIME := 2.0
 const RANDOM_CONTAINER_BREAK_MAX_TIME := 3.0
-const PLAYER_CONTAINER_GOLD_DROP_CHANCE := 0.3
+const PLAYER_CONTAINER_GOLD_DROP_CHANCE := 0.5
 const PLAYER_CONTAINER_GOLD_DROP_MIN := 1
 const PLAYER_CONTAINER_GOLD_DROP_MAX := 3
 
@@ -35,6 +35,9 @@ const SHOP_CONTAINER_MAX_HP := 12.0
 const MELEE_ZOMBIE_GOLD := 3
 const ACID_ZOMBIE_GOLD := 4
 const ELITE_BRUTE_GOLD := 12
+const MAX_MELEE_ENEMY_ATTACK_TOKENS := 2
+const MAX_RANGED_ENEMY_ATTACK_TOKENS := 1
+const MAX_ELITE_ENEMY_ATTACK_TOKENS := 1
 
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
@@ -91,6 +94,9 @@ var enemies: Array[EnemyBase] = []
 var shop_container_data: Dictionary = {}
 var no_spawn_container_breaks: Dictionary = {}
 var enemy_gold_rewards: Dictionary = {}
+var melee_enemy_attack_tokens: Dictionary = {}
+var ranged_enemy_attack_tokens: Dictionary = {}
+var elite_enemy_attack_tokens: Dictionary = {}
 var phase: int = Phase.COMBAT
 var current_round: int = 1
 var gold: int = 0
@@ -762,6 +768,7 @@ func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
 
 func _on_enemy_died(enemy: EnemyBase) -> void:
 	enemies.erase(enemy)
+	release_enemy_attack_token(enemy)
 	var reward: int = int(enemy_gold_rewards.get(enemy, MELEE_ZOMBIE_GOLD))
 	enemy_gold_rewards.erase(enemy)
 	_spawn_reward_pickup(RewardPickup.KIND_GOLD, reward, enemy.global_position + Vector2(-10.0, 0.0))
@@ -778,6 +785,50 @@ func _spawn_reward_pickup(kind: StringName, amount: int, spawn_position: Vector2
 	var pickup := REWARD_PICKUP_SCRIPT.new() as RewardPickup
 	pickup.setup(kind, amount, spawn_position, player)
 	add_child(pickup)
+
+
+func request_enemy_attack_token(enemy: EnemyBase) -> bool:
+	var token_pool: Dictionary = _get_enemy_attack_token_pool(enemy)
+	if token_pool.has(enemy):
+		return true
+
+	if _get_valid_enemy_attack_token_count(token_pool) >= _get_enemy_attack_token_limit(enemy):
+		return false
+
+	token_pool[enemy] = true
+	return true
+
+
+func release_enemy_attack_token(enemy: EnemyBase) -> void:
+	melee_enemy_attack_tokens.erase(enemy)
+	ranged_enemy_attack_tokens.erase(enemy)
+	elite_enemy_attack_tokens.erase(enemy)
+
+
+func _get_enemy_attack_token_pool(enemy: EnemyBase) -> Dictionary:
+	if enemy is EliteBrute:
+		return elite_enemy_attack_tokens
+	if enemy is AcidZombie:
+		return ranged_enemy_attack_tokens
+
+	return melee_enemy_attack_tokens
+
+
+func _get_enemy_attack_token_limit(enemy: EnemyBase) -> int:
+	if enemy is EliteBrute:
+		return MAX_ELITE_ENEMY_ATTACK_TOKENS
+	if enemy is AcidZombie:
+		return MAX_RANGED_ENEMY_ATTACK_TOKENS
+
+	return MAX_MELEE_ENEMY_ATTACK_TOKENS
+
+
+func _get_valid_enemy_attack_token_count(token_pool: Dictionary) -> int:
+	for enemy in token_pool.keys():
+		if not is_instance_valid(enemy):
+			token_pool.erase(enemy)
+
+	return token_pool.size()
 
 
 func _enter_shop_phase() -> void:
@@ -946,6 +997,7 @@ func _cleanup_enemy_list() -> void:
 		if not is_instance_valid(enemy):
 			enemies.erase(enemy)
 			enemy_gold_rewards.erase(enemy)
+			release_enemy_attack_token(enemy)
 
 
 func _update_hud() -> void:

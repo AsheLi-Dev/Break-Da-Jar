@@ -79,3 +79,6 @@ visible = false
 points = PackedVector2Array(0, 0, 260, 0)
 width = 8.0
 default_color = Color(0.5, 1, 0.1, 0.55)
+
+[node name="GunPoint" type="Marker2D" parent="." unique_id=135591864]
+position = Vector2(25.25, -21.38)

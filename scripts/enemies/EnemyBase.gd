@@ -76,6 +76,7 @@ func die() -> void:
 	if is_dead:
 		return
 
+	release_attack_token()
 	is_dead = true
 	_notify_player_kill_once()
 	_play_death_sfx()
@@ -137,6 +138,20 @@ func move_toward_position(world_position: Vector2, speed: float, delta: float) -
 
 	velocity = offset.normalized() * speed
 	move_and_slide()
+
+
+func try_claim_attack_token() -> bool:
+	var coordinator := get_tree().current_scene
+	if coordinator == null or not coordinator.has_method("request_enemy_attack_token"):
+		return true
+
+	return bool(coordinator.call("request_enemy_attack_token", self))
+
+
+func release_attack_token() -> void:
+	var coordinator := get_tree().current_scene
+	if coordinator != null and coordinator.has_method("release_enemy_attack_token"):
+		coordinator.call("release_enemy_attack_token", self)
 
 
 func _chase_target(delta: float) -> void:

@@ -15,6 +15,9 @@ enum BoomerangState {
 @export var target_group: StringName = &"player"
 @export var hit_walls: bool = true
 @export var debug_color: Color = Color(1.0, 0.82, 0.16)
+@export var visual_style: StringName = &"default"
+@export var bone_afterimage_interval: float = 0.04
+@export var bone_afterimage_lifetime: float = 0.12
 @export var boomerang_enabled: bool = false
 @export var boomerang_max_distance: float = 520.0
 @export var boomerang_return_delay: float = 0.2
@@ -29,6 +32,7 @@ var return_delay_remaining: float = 0.0
 var outbound_hit_targets: Array[Node] = []
 var return_hit_targets: Array[Node] = []
 var impact_resolved: bool = false
+var bone_afterimage_remaining: float = 0.0
 
 
 func _ready() -> void:
@@ -53,6 +57,11 @@ func setup(new_direction: Vector2, new_damage: float, new_speed: float = -1.0, n
 	rotation = direction.angle()
 
 
+func use_bone_spike_visual() -> void:
+	visual_style = &"bone_spike"
+	_apply_visual_style()
+
+
 func enable_boomerang(new_owner: Node, new_max_distance: float, new_return_delay: float, new_catch_distance: float = 22.0, new_return_speed: float = -1.0) -> void:
 	owner_player = new_owner
 	boomerang_enabled = true
@@ -71,6 +80,7 @@ func _physics_process(delta: float) -> void:
 	if boomerang_enabled and boomerang_state == BoomerangState.RETURNING:
 		_update_return_direction()
 
+	_update_bone_afterimage(delta)
 	position += direction * _get_current_speed() * delta
 	age += delta
 
@@ -253,3 +263,122 @@ func _ensure_placeholder_nodes() -> void:
 			Vector2(-5.0, 4.0),
 		])
 		add_child(body)
+
+	_apply_visual_style()
+
+
+func _apply_visual_style() -> void:
+	if visual_style != &"bone_spike":
+		return
+
+	var body := get_node_or_null("DebugBody") as Polygon2D
+	if body != null:
+		body.scale = Vector2(0.72, 0.58)
+		body.color = Color(0.82, 0.79, 0.69, 1.0)
+		body.polygon = PackedVector2Array([
+			Vector2(24.0, -0.3),
+			Vector2(13.0, -1.8),
+			Vector2(4.0, -2.9),
+			Vector2(-4.0, -2.1),
+			Vector2(-11.0, -3.7),
+			Vector2(-18.0, -1.1),
+			Vector2(-13.0, 0.4),
+			Vector2(-20.0, 1.8),
+			Vector2(-9.0, 2.9),
+			Vector2(2.0, 1.7),
+			Vector2(12.0, 2.4),
+		])
+
+	var trail := get_node_or_null("Trail") as Line2D
+	if trail != null:
+		trail.visible = false
+
+	if get_node_or_null("BoneCracks") == null:
+		var cracks := Line2D.new()
+		cracks.name = "BoneCracks"
+		cracks.scale = Vector2(0.72, 0.58)
+		cracks.width = 0.8
+		cracks.default_color = Color(0.30, 0.28, 0.24, 0.72)
+		cracks.add_point(Vector2(9.0, -0.9))
+		cracks.add_point(Vector2(5.0, 1.0))
+		cracks.add_point(Vector2(-1.0, -0.7))
+		cracks.add_point(Vector2(-6.0, 1.6))
+		cracks.add_point(Vector2(-13.0, -0.2))
+		add_child(cracks)
+
+	if get_node_or_null("BoneShard") == null:
+		var shard := Polygon2D.new()
+		shard.name = "BoneShard"
+		shard.scale = Vector2(0.72, 0.58)
+		shard.color = Color(0.70, 0.67, 0.58, 0.95)
+		shard.polygon = PackedVector2Array([
+			Vector2(-6.0, -4.4),
+			Vector2(-1.0, -3.0),
+			Vector2(-4.2, -1.7),
+		])
+		add_child(shard)
+
+	if get_node_or_null("AirCutTrail") == null:
+		var air_cut := Line2D.new()
+		air_cut.name = "AirCutTrail"
+		air_cut.width = 0.9
+		air_cut.default_color = Color(0.86, 0.92, 0.95, 0.14)
+		air_cut.antialiased = true
+		air_cut.add_point(Vector2(-10.0, -1.9))
+		air_cut.add_point(Vector2(-24.0, -3.1))
+		add_child(air_cut)
+
+	if get_node_or_null("AirCutTrailLower") == null:
+		var air_cut_lower := Line2D.new()
+		air_cut_lower.name = "AirCutTrailLower"
+		air_cut_lower.width = 0.7
+		air_cut_lower.default_color = Color(0.86, 0.92, 0.95, 0.10)
+		air_cut_lower.antialiased = true
+		air_cut_lower.add_point(Vector2(-9.0, 1.7))
+		air_cut_lower.add_point(Vector2(-21.0, 2.5))
+		add_child(air_cut_lower)
+
+
+func _update_bone_afterimage(delta: float) -> void:
+	if visual_style != &"bone_spike":
+		return
+
+	bone_afterimage_remaining -= delta
+	if bone_afterimage_remaining > 0.0:
+		return
+
+	bone_afterimage_remaining = bone_afterimage_interval
+	_spawn_bone_afterimage()
+
+
+func _spawn_bone_afterimage() -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var afterimage := Polygon2D.new()
+	afterimage.name = "BoneSpikeAfterimage"
+	afterimage.global_position = global_position - direction.normalized() * 8.0
+	afterimage.global_rotation = rotation + randf_range(-0.05, 0.05)
+	afterimage.scale = Vector2(0.55, 0.42)
+	afterimage.color = Color(0.76, 0.78, 0.73, 0.42)
+	afterimage.polygon = PackedVector2Array([
+		Vector2(24.0, -0.3),
+		Vector2(13.0, -1.8),
+		Vector2(4.0, -2.9),
+		Vector2(-4.0, -2.1),
+		Vector2(-11.0, -3.7),
+		Vector2(-18.0, -1.1),
+		Vector2(-13.0, 0.4),
+		Vector2(-20.0, 1.8),
+		Vector2(-9.0, 2.9),
+		Vector2(2.0, 1.7),
+		Vector2(12.0, 2.4),
+	])
+	afterimage.z_index = 118
+	get_tree().current_scene.add_child(afterimage)
+
+	var tween := afterimage.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(afterimage, "modulate:a", 0.0, bone_afterimage_lifetime)
+	tween.tween_property(afterimage, "scale", Vector2(0.42, 0.32), bone_afterimage_lifetime)
+	tween.finished.connect(Callable(afterimage, "queue_free"))

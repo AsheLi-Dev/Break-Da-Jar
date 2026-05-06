@@ -102,6 +102,7 @@ func die() -> void:
 	if is_dead:
 		return
 
+	release_attack_token()
 	is_dead = true
 	_notify_player_kill_once()
 	_play_death_sfx()
@@ -129,6 +130,9 @@ func _update_spacing(delta: float) -> void:
 
 
 func _start_aim() -> void:
+	if not try_claim_attack_token():
+		return
+
 	is_aiming = true
 	attack_elapsed = 0.0
 	projectile_fired = false
@@ -151,6 +155,7 @@ func _update_aim(delta: float) -> void:
 		is_aiming = false
 		aim_line.visible = false
 		cooldown_remaining = fire_cooldown
+		release_attack_token()
 
 
 func _fire_projectile() -> void:

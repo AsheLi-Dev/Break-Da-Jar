@@ -21,11 +21,15 @@ const VISUAL_VARIANT_DIRS: Array[String] = [
 @export var cone_radius: float = 144.0
 @export var warning_color: Color = Color(1.0, 0.25, 0.08, 0.28)
 @export var animation_fps: float = 15.0
+@export var attack_hold_frame: int = 6
+@export var attack_hold_time: float = 0.18
 @export var take_damage_animation_time: float = 0.2
+@export var post_attack_fatigue_time: float = 0.45
 @export var randomize_visual_variant: bool = true
 @export_range(0, 5, 1) var visual_variant_index: int = 0
 
 var cooldown_remaining: float = 0.0
+var post_attack_fatigue_remaining: float = 0.0
 var attack_phase: StringName = &"idle"
 var attack_elapsed: float = 0.0
 var hit_targets: Array[Node] = []
@@ -60,6 +64,12 @@ func _physics_process(delta: float) -> void:
 
 	_find_target()
 	cooldown_remaining = maxf(0.0, cooldown_remaining - delta)
+
+	if post_attack_fatigue_remaining > 0.0:
+		post_attack_fatigue_remaining = maxf(0.0, post_attack_fatigue_remaining - delta)
+		stop_moving()
+		_update_zombie_animation(delta)
+		return
 
 	if attack_phase != &"idle":
 		_update_attack(delta)
@@ -105,6 +115,7 @@ func die() -> void:
 	if is_dead:
 		return
 
+	release_attack_token()
 	is_dead = true
 	_notify_player_kill_once()
 	_play_death_sfx()
@@ -120,13 +131,16 @@ func die() -> void:
 
 
 func _start_attack() -> void:
+	if not try_claim_attack_token():
+		return
+
 	attack_phase = &"startup"
 	attack_elapsed = 0.0
 	hit_targets.clear()
 	# Warning is visible during windup; no damage happens yet.
 	warning_cone.visible = true
 	attack_area.monitoring = false
-	_start_action_animation(&"attack", _get_full_animation_time())
+	_start_action_animation(&"attack", _get_attack_animation_time())
 
 
 func _update_attack(delta: float) -> void:
@@ -145,11 +159,13 @@ func _update_attack(delta: float) -> void:
 		attack_area.monitoring = false
 		attack_phase = &"recovery"
 
-	if attack_elapsed >= _get_full_animation_time():
+	if attack_elapsed >= _get_attack_animation_time():
 		attack_area.monitoring = false
 		warning_cone.visible = false
 		attack_phase = &"idle"
 		cooldown_remaining = attack_cooldown
+		post_attack_fatigue_remaining = post_attack_fatigue_time
+		release_attack_token()
 
 
 func _on_attack_body_entered(body: Node) -> void:
@@ -349,7 +365,7 @@ func _build_animation_state_machine() -> void:
 
 func _create_direction_animation(animation_base: StringName, row: int) -> Animation:
 	var animation := Animation.new()
-	animation.length = _get_full_animation_time()
+	animation.length = _get_animation_time(animation_base)
 	animation.loop_mode = _get_animation_loop_mode(animation_base)
 
 	var texture_track: int = animation.add_track(Animation.TYPE_VALUE)
@@ -368,7 +384,7 @@ func _create_direction_animation(animation_base: StringName, row: int) -> Animat
 			Vector2(frame * FRAME_SIZE.x, row * FRAME_SIZE.y),
 			Vector2(FRAME_SIZE)
 		)
-		animation.track_insert_key(region_track, float(frame) / animation_fps, region)
+		animation.track_insert_key(region_track, _get_frame_start_time(animation_base, frame), region)
 
 	return animation
 
@@ -406,12 +422,31 @@ func _get_full_animation_time() -> float:
 	return float(FRAMES_PER_DIRECTION) / animation_fps
 
 
+func _get_animation_time(animation_name: StringName) -> float:
+	if animation_name == &"attack":
+		return _get_attack_animation_time()
+
+	return _get_full_animation_time()
+
+
+func _get_attack_animation_time() -> float:
+	return _get_full_animation_time() + maxf(attack_hold_time, 0.0)
+
+
+func _get_frame_start_time(animation_name: StringName, frame: int) -> float:
+	var time := float(frame) / animation_fps
+	if animation_name == &"attack" and frame > attack_hold_frame:
+		time += maxf(attack_hold_time, 0.0)
+
+	return time
+
+
 func _get_attack_active_start_time() -> float:
-	return float(ATTACK_ACTIVE_START_FRAME) / animation_fps
+	return _get_frame_start_time(&"attack", ATTACK_ACTIVE_START_FRAME)
 
 
 func _get_attack_active_end_time() -> float:
-	return float(ATTACK_ACTIVE_END_FRAME + 1) / animation_fps
+	return _get_frame_start_time(&"attack", ATTACK_ACTIVE_END_FRAME + 1)
 
 
 func _get_direction_row(direction: Vector2) -> int:

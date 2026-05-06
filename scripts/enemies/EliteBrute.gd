@@ -36,19 +36,26 @@ enum State {
 @export var shout_damage: float = 5.0
 @export var shout_slow_multiplier: float = 0.7
 @export var shout_slow_duration: float = 2.0
+@export var shout_air_wave_lifetime: float = 0.32
+@export var shout_air_wave_color: Color = Color(0.78, 0.96, 1.0, 0.18)
 @export var projectile_scene: PackedScene
-@export var projectile_speed: float = 330.0
+@export var projectile_speed: float = 550.0
 @export var projectile_lifetime: float = 2.0
 @export var projectile_damage: float = 10.0
-@export var projectile_count: int = 8
+@export var projectile_spread_degrees: float = 15.0
 @export var recovery_time: float = 0.35
 @export var animation_fps: float = 15.0
+@export var melee_attack_hold_frame: int = 6
+@export var ranged_attack_hold_frame: int = 3
+@export var shout_attack_hold_frame: int = 4
+@export var attack_hold_time: float = 0.18
 
 var state: int = State.IDLE
 var state_time: float = 0.0
 var attack_elapsed: float = 0.0
 var cooldown_remaining: float = 0.0
 var projectile_fired: bool = false
+var shout_air_wave_spawned: bool = false
 var hit_targets: Array[Node] = []
 var facing_direction: Vector2 = Vector2.RIGHT
 var locked_attack_direction: Vector2 = Vector2.RIGHT
@@ -105,6 +112,7 @@ func die() -> void:
 	if is_dead:
 		return
 
+	release_attack_token()
 	is_dead = true
 	_notify_player_kill_once()
 	_play_death_sfx()
@@ -147,6 +155,9 @@ func _update_chase(delta: float) -> void:
 
 
 func _start_melee_attack() -> void:
+	if not try_claim_attack_token():
+		return
+
 	_enter_state(State.MELEE_ATTACK)
 	attack_elapsed = 0.0
 	hit_targets.clear()
@@ -172,13 +183,16 @@ func _update_melee_attack(delta: float) -> void:
 	elif melee_hitbox.monitoring:
 		melee_hitbox.monitoring = false
 
-	if attack_elapsed >= _get_full_animation_time():
+	if attack_elapsed >= _get_attack_animation_time(&"melee_attack"):
 		melee_warning.visible = false
 		melee_hitbox.monitoring = false
 		_start_recovery()
 
 
 func _start_ranged_attack() -> void:
+	if not try_claim_attack_token():
+		return
+
 	_enter_state(State.RANGED_ATTACK)
 	attack_elapsed = 0.0
 	projectile_fired = false
@@ -196,17 +210,21 @@ func _update_ranged_attack(delta: float) -> void:
 	if not projectile_fired and attack_elapsed >= _get_projectile_spawn_time():
 		projectile_fired = true
 		ranged_warning.visible = false
-		_fire_radial_projectiles()
+		_fire_spread_projectiles()
 
-	if attack_elapsed >= _get_full_animation_time():
+	if attack_elapsed >= _get_attack_animation_time(&"ranged_attack"):
 		ranged_warning.visible = false
 		_start_recovery()
 
 
 func _start_shout_attack() -> void:
+	if not try_claim_attack_token():
+		return
+
 	_enter_state(State.SHOUT_ATTACK)
 	attack_elapsed = 0.0
 	hit_targets.clear()
+	shout_air_wave_spawned = false
 	locked_attack_direction = facing_direction
 	shout_warning.visible = true
 	shout_hitbox.monitoring = false
@@ -225,17 +243,21 @@ func _update_shout_attack(delta: float) -> void:
 		if not shout_hitbox.monitoring:
 			shout_warning.visible = false
 			shout_hitbox.monitoring = true
+			if not shout_air_wave_spawned:
+				shout_air_wave_spawned = true
+				_spawn_shout_air_wave_vfx()
 			_damage_overlapping_players(shout_hitbox, shout_damage)
 	elif shout_hitbox.monitoring:
 		shout_hitbox.monitoring = false
 
-	if attack_elapsed >= _get_full_animation_time():
+	if attack_elapsed >= _get_attack_animation_time(&"shout_attack"):
 		shout_warning.visible = false
 		shout_hitbox.monitoring = false
 		_start_recovery()
 
 
 func _start_recovery() -> void:
+	release_attack_token()
 	_enter_state(State.RECOVERY)
 	state_time = recovery_time
 	cooldown_remaining = attack_cooldown
@@ -298,13 +320,26 @@ func _disable_hitbox() -> void:
 	hitbox.set_deferred("collision_mask", 0)
 
 
-func _fire_radial_projectiles() -> void:
-	var count: int = maxi(projectile_count, 1)
-	for index in range(count):
-		var angle: float = locked_attack_direction.angle() + TAU * float(index) / float(count)
+func _fire_spread_projectiles() -> void:
+	var base_angle: float = locked_attack_direction.angle()
+	for angle_offset_degrees in [-projectile_spread_degrees, 0.0, projectile_spread_degrees]:
+		var angle: float = base_angle + deg_to_rad(float(angle_offset_degrees))
 		var direction: Vector2 = Vector2(cos(angle), sin(angle))
-		var projectile: Projectile = _spawn_projectile(global_position, direction)
+		var projectile: Projectile = _spawn_projectile(_get_projectile_spawn_position(), direction)
+		if projectile.has_method("use_bone_spike_visual"):
+			projectile.use_bone_spike_visual()
 		projectile.setup(direction, projectile_damage, projectile_speed, projectile_lifetime)
+
+
+func _get_projectile_spawn_position() -> Vector2:
+	var gun_point := get_node_or_null("GunPoint") as Marker2D
+	if gun_point != null:
+		var local_offset: Vector2 = gun_point.position
+		if locked_attack_direction.x < 0.0:
+			local_offset.x = -local_offset.x
+		return global_position + local_offset
+
+	return global_position
 
 
 func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectile:
@@ -314,13 +349,60 @@ func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectil
 	if projectile == null:
 		projectile = Projectile.new()
 
-	projectile.global_position = spawn_position
 	projectile.collision_mask = 0
 	projectile.set_collision_mask_value(1, true)
 	projectile.set_collision_mask_value(7, true)
 	get_tree().current_scene.add_child(projectile)
+	projectile.global_position = spawn_position
 	projectile.direction = direction
 	return projectile
+
+
+func _spawn_shout_air_wave_vfx() -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var effect := Node2D.new()
+	effect.name = "EliteBruteShoutAirWaveVFX"
+	effect.global_position = global_position
+	effect.global_rotation = locked_attack_direction.angle()
+	effect.z_index = 125
+	get_tree().current_scene.add_child(effect)
+
+	var angle: float = deg_to_rad(shout_angle_degrees)
+	var base_radii: Array[float] = [
+		shout_range * 0.34,
+		shout_range * 0.54,
+		shout_range * 0.75,
+		shout_range * 0.92,
+	]
+	for index in range(base_radii.size()):
+		var line := Line2D.new()
+		line.name = "AirRipple%d" % index
+		line.width = lerpf(14.0, 5.0, float(index) / float(maxi(base_radii.size() - 1, 1)))
+		line.default_color = Color(
+			shout_air_wave_color.r,
+			shout_air_wave_color.g,
+			shout_air_wave_color.b,
+			shout_air_wave_color.a * lerpf(1.0, 0.42, float(index) / float(maxi(base_radii.size() - 1, 1)))
+		)
+		line.antialiased = true
+		line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		line.end_cap_mode = Line2D.LINE_CAP_ROUND
+		for point_index in range(13):
+			var t: float = float(point_index) / 12.0
+			var point_angle: float = lerpf(-angle * 0.5, angle * 0.5, t)
+			var ripple: float = sin(t * TAU * 2.0 + float(index) * 1.7) * 5.0
+			var radius: float = base_radii[index] + ripple + randf_range(-4.0, 4.0)
+			line.add_point(Vector2(cos(point_angle), sin(point_angle)) * radius)
+		effect.add_child(line)
+
+	effect.scale = Vector2.ONE * 0.58
+	var tween := effect.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(effect, "scale", Vector2.ONE * 1.08, shout_air_wave_lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(effect, "modulate:a", 0.0, shout_air_wave_lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.finished.connect(Callable(effect, "queue_free"))
 
 
 func _ensure_elite_nodes() -> void:
@@ -498,7 +580,7 @@ func _build_animation_state_machine() -> void:
 
 func _create_direction_animation(animation_base: StringName, row: int) -> Animation:
 	var animation := Animation.new()
-	animation.length = _get_full_animation_time()
+	animation.length = _get_attack_animation_time(animation_base)
 	animation.loop_mode = _get_animation_loop_mode(animation_base)
 
 	var texture_track: int = animation.add_track(Animation.TYPE_VALUE)
@@ -517,7 +599,7 @@ func _create_direction_animation(animation_base: StringName, row: int) -> Animat
 			Vector2(frame * FRAME_SIZE.x, row * FRAME_SIZE.y),
 			Vector2(FRAME_SIZE)
 		)
-		animation.track_insert_key(region_track, float(frame) / animation_fps, region)
+		animation.track_insert_key(region_track, _get_frame_start_time(animation_base, frame), region)
 
 	return animation
 
@@ -567,24 +649,55 @@ func _get_full_animation_time() -> float:
 	return float(FRAMES_PER_DIRECTION) / animation_fps
 
 
+func _get_attack_animation_time(animation_name: StringName) -> float:
+	return _get_full_animation_time() + _get_attack_hold_time(animation_name)
+
+
+func _get_attack_hold_time(animation_name: StringName) -> float:
+	if animation_name == &"melee_attack" or animation_name == &"ranged_attack" or animation_name == &"shout_attack":
+		return maxf(attack_hold_time, 0.0)
+
+	return 0.0
+
+
+func _get_attack_hold_frame(animation_name: StringName) -> int:
+	match animation_name:
+		&"melee_attack":
+			return melee_attack_hold_frame
+		&"ranged_attack":
+			return ranged_attack_hold_frame
+		&"shout_attack":
+			return shout_attack_hold_frame
+
+	return -1
+
+
+func _get_frame_start_time(animation_name: StringName, frame: int) -> float:
+	var time := float(frame) / animation_fps
+	if frame > _get_attack_hold_frame(animation_name):
+		time += _get_attack_hold_time(animation_name)
+
+	return time
+
+
 func _get_projectile_spawn_time() -> float:
-	return float(PROJECTILE_SPAWN_FRAME) / animation_fps
+	return _get_frame_start_time(&"ranged_attack", PROJECTILE_SPAWN_FRAME)
 
 
 func _get_melee_active_start_time() -> float:
-	return float(MELEE_ACTIVE_START_FRAME) / animation_fps
+	return _get_frame_start_time(&"melee_attack", MELEE_ACTIVE_START_FRAME)
 
 
 func _get_melee_active_end_time() -> float:
-	return float(MELEE_ACTIVE_END_FRAME + 1) / animation_fps
+	return _get_frame_start_time(&"melee_attack", MELEE_ACTIVE_END_FRAME + 1)
 
 
 func _get_shout_active_start_time() -> float:
-	return float(SHOUT_ACTIVE_START_FRAME) / animation_fps
+	return _get_frame_start_time(&"shout_attack", SHOUT_ACTIVE_START_FRAME)
 
 
 func _get_shout_active_end_time() -> float:
-	return float(SHOUT_ACTIVE_END_FRAME + 1) / animation_fps
+	return _get_frame_start_time(&"shout_attack", SHOUT_ACTIVE_END_FRAME + 1)
 
 
 func _get_direction_row(direction: Vector2) -> int:
