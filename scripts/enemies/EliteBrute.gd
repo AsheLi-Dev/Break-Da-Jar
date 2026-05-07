@@ -9,6 +9,7 @@ const MELEE_ACTIVE_START_FRAME := 7
 const MELEE_ACTIVE_END_FRAME := 9
 const SHOUT_ACTIVE_START_FRAME := 5
 const SHOUT_ACTIVE_END_FRAME := 9
+const ATTACK_HOLD_SQUASH_SHADER_CODE := "shader_type canvas_item;\nuniform vec2 squash_scale = vec2(1.0, 1.0);\nvoid vertex() { VERTEX *= squash_scale; }\n"
 
 const RANGED_ATTACK_TEXTURE: Texture2D = preload("res://assets/zombies/elite brute zombie/Attack2.png")
 const MELEE_ATTACK_TEXTURE: Texture2D = preload("res://assets/zombies/elite brute zombie/Attack3.png")
@@ -45,10 +46,12 @@ enum State {
 @export var projectile_spread_degrees: float = 15.0
 @export var recovery_time: float = 0.35
 @export var animation_fps: float = 15.0
-@export var melee_attack_hold_frame: int = 6
-@export var ranged_attack_hold_frame: int = 3
-@export var shout_attack_hold_frame: int = 4
+@export var melee_attack_hold_frame: int = 2
+@export var ranged_attack_hold_frame: int = 2
+@export var shout_attack_hold_frame: int = 3
 @export var attack_hold_time: float = 0.18
+@export var attack_hold_squash_scale: Vector2 = Vector2(1.04, 0.95)
+@export var attack_hold_squash_return_speed: float = 18.0
 
 var state: int = State.IDLE
 var state_time: float = 0.0
@@ -69,6 +72,8 @@ var shout_hitbox: Area2D
 var shout_collision: CollisionPolygon2D
 var ranged_warning: Line2D
 var sprite: Sprite2D
+var attack_hold_squash_material: ShaderMaterial
+var current_attack_hold_squash: Vector2 = Vector2.ONE
 var animation_player: AnimationPlayer
 var animation_tree: AnimationTree
 var animation_state: AnimationNodeStateMachinePlayback
@@ -88,6 +93,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if _update_knockback(delta):
+		_update_attack_hold_squash(delta)
 		return
 
 	_find_target()
@@ -107,6 +113,8 @@ func _physics_process(delta: float) -> void:
 		State.RECOVERY:
 			_update_recovery(delta)
 
+	_update_attack_hold_squash(delta)
+
 
 func die() -> void:
 	if is_dead:
@@ -122,6 +130,7 @@ func die() -> void:
 	ranged_warning.visible = false
 	melee_hitbox.monitoring = false
 	shout_hitbox.monitoring = false
+	_reset_attack_hold_squash()
 	collision_layer = 0
 	collision_mask = 0
 	_disable_hitbox()
@@ -258,6 +267,7 @@ func _update_shout_attack(delta: float) -> void:
 
 func _start_recovery() -> void:
 	release_attack_token()
+	_reset_attack_hold_squash()
 	_enter_state(State.RECOVERY)
 	state_time = recovery_time
 	cooldown_remaining = attack_cooldown
@@ -269,6 +279,43 @@ func _update_recovery(delta: float) -> void:
 	state_time -= delta
 	if state_time <= 0.0:
 		_enter_state(State.CHASE)
+
+
+func _update_attack_hold_squash(delta: float) -> void:
+	if attack_hold_squash_material == null:
+		return
+
+	var target_scale := Vector2.ONE
+	var attack_animation := _get_current_attack_animation_name()
+	if attack_animation != &"":
+		var hold_time := _get_attack_hold_time(attack_animation)
+		if hold_time > 0.0:
+			var hold_start := float(_get_attack_hold_frame(attack_animation)) / animation_fps
+			var hold_end := hold_start + hold_time
+			if attack_elapsed >= hold_start and attack_elapsed <= hold_end:
+				var hold_progress := clampf((attack_elapsed - hold_start) / hold_time, 0.0, 1.0)
+				target_scale = Vector2.ONE.lerp(attack_hold_squash_scale, smoothstep(0.0, 1.0, hold_progress))
+
+	var blend := 1.0 - exp(-attack_hold_squash_return_speed * delta)
+	current_attack_hold_squash = current_attack_hold_squash.lerp(target_scale, blend)
+	_set_attack_hold_squash(current_attack_hold_squash)
+
+
+func _reset_attack_hold_squash() -> void:
+	current_attack_hold_squash = Vector2.ONE
+	_set_attack_hold_squash(current_attack_hold_squash)
+
+
+func _get_current_attack_animation_name() -> StringName:
+	match state:
+		State.MELEE_ATTACK:
+			return &"melee_attack"
+		State.RANGED_ATTACK:
+			return &"ranged_attack"
+		State.SHOUT_ATTACK:
+			return &"shout_attack"
+
+	return &""
 
 
 func _enter_state(next_state: int) -> void:
@@ -513,6 +560,7 @@ func _ensure_animation_nodes() -> void:
 	sprite.texture = IDLE_TEXTURE
 	sprite.region_rect = Rect2(Vector2.ZERO, Vector2(FRAME_SIZE))
 	sprite.rotation = -rotation
+	_ensure_attack_hold_squash_material()
 
 	animation_player = get_node_or_null("AnimationPlayer") as AnimationPlayer
 	if animation_player == null:
@@ -533,6 +581,20 @@ func _ensure_animation_nodes() -> void:
 	animation_tree.set("anim_player", NodePath("../AnimationPlayer"))
 	animation_tree.active = true
 	animation_state = animation_tree.get("parameters/playback") as AnimationNodeStateMachinePlayback
+
+
+func _ensure_attack_hold_squash_material() -> void:
+	var shader := Shader.new()
+	shader.code = ATTACK_HOLD_SQUASH_SHADER_CODE
+	attack_hold_squash_material = ShaderMaterial.new()
+	attack_hold_squash_material.shader = shader
+	sprite.material = attack_hold_squash_material
+	_set_attack_hold_squash(Vector2.ONE)
+
+
+func _set_attack_hold_squash(squash_scale: Vector2) -> void:
+	if attack_hold_squash_material != null:
+		attack_hold_squash_material.set_shader_parameter("squash_scale", squash_scale)
 
 
 func _build_animation_library() -> void:

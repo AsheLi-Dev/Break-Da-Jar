@@ -1,0 +1,47 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/UndeadDarkKnight.gd" id="1_dark_knight"]
+[ext_resource type="Texture2D" path="res://assets/zombies/undead dark knight/Idle.png" id="2_idle"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 19.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hitbox"]
+radius = 18.0
+
+[node name="UndeadDarkKnight" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 0
+script = ExtResource("1_dark_knight")
+max_hp = 95.0
+move_speed = 102.0
+damage = 13.0
+attack_cooldown = 5.8
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="Hitbox" type="Area2D" parent="."]
+position = Vector2(2.5, 1.0)
+scale = Vector2(0.95, 1.8)
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("CircleShape2D_hitbox")
+
+[node name="DebugBody" type="Polygon2D" parent="."]
+visible = false
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_idle")
+region_enabled = true
+region_rect = Rect2(0, 0, 128, 128)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+anim_player = NodePath("../AnimationPlayer")
+
+[node name="SlamWarning" type="Polygon2D" parent="."]
+visible = false
+color = Color(1, 0.18, 0, 0.22)

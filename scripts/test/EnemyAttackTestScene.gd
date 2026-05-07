@@ -3,14 +3,20 @@ extends Node2D
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")
+const ZOMBIE_FIREMAN_SCENE: PackedScene = preload("res://scenes/enemies/ZombieFireman.tscn")
 const ELITE_BRUTE_SCENE: PackedScene = preload("res://scenes/enemies/EliteBrute.tscn")
+const ELITE_ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/EliteAcidZombie.tscn")
+const UNDEAD_DARK_KNIGHT_SCENE: PackedScene = preload("res://scenes/enemies/UndeadDarkKnight.tscn")
 
 const DUMMY_POSITION := Vector2(520.0, 360.0)
 
 var enemy_options: Array[Dictionary] = [
 	{"label": "Zombie Melee", "scene": MELEE_ZOMBIE_SCENE, "attacks": ["Attack"]},
 	{"label": "Acid Zombie", "scene": ACID_ZOMBIE_SCENE, "attacks": ["Acid Shot"]},
+	{"label": "Zombie Fireman", "scene": ZOMBIE_FIREMAN_SCENE, "attacks": ["Axe Throw"]},
 	{"label": "Elite Brute", "scene": ELITE_BRUTE_SCENE, "attacks": ["Melee Slam", "Bone Barrage", "Shout"]},
+	{"label": "Elite Acid Zombie", "scene": ELITE_ACID_ZOMBIE_SCENE, "attacks": ["Acid Throw", "Ground Slam", "Mutate Minion"]},
+	{"label": "Undead Dark Knight", "scene": UNDEAD_DARK_KNIGHT_SCENE, "attacks": ["Leap Slam"]},
 ]
 
 var current_enemy: EnemyBase
@@ -157,12 +163,23 @@ func _release_selected_attack() -> void:
 			current_enemy.call("_start_attack")
 		"Acid Shot":
 			current_enemy.call("_start_aim")
+		"Axe Throw":
+			current_enemy.call("_start_aim")
 		"Melee Slam":
 			current_enemy.call("_start_melee_attack")
 		"Bone Barrage":
 			current_enemy.call("_start_ranged_attack")
 		"Shout":
 			current_enemy.call("_start_shout_attack")
+		"Acid Throw":
+			current_enemy.call("_start_ranged_attack")
+		"Ground Slam":
+			current_enemy.call("_start_melee_attack")
+		"Mutate Minion":
+			_ensure_mutation_minion()
+			current_enemy.call("_start_shout_attack")
+		"Leap Slam":
+			current_enemy.call("_start_leap_slam")
 
 	status_label.text = "Released: %s" % attack_name
 
@@ -199,7 +216,25 @@ func _get_enemy_spawn_position() -> Vector2:
 			return DUMMY_POSITION + Vector2(120.0, 0.0)
 		"Shout":
 			return DUMMY_POSITION + Vector2(220.0, 0.0)
-		"Acid Shot", "Bone Barrage":
+		"Acid Shot", "Axe Throw", "Bone Barrage", "Acid Throw":
 			return DUMMY_POSITION + Vector2(300.0, 0.0)
+		"Ground Slam":
+			return DUMMY_POSITION + Vector2(145.0, 0.0)
+		"Mutate Minion":
+			return DUMMY_POSITION + Vector2(260.0, 0.0)
+		"Leap Slam":
+			return DUMMY_POSITION + Vector2(230.0, 0.0)
 
 	return DUMMY_POSITION + Vector2(180.0, 0.0)
+
+
+func _ensure_mutation_minion() -> void:
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if enemy != current_enemy and enemy is ZombieMelee:
+			return
+
+	var minion := MELEE_ZOMBIE_SCENE.instantiate() as ZombieMelee
+	minion.name = "MutationTarget"
+	minion.global_position = DUMMY_POSITION + Vector2(110.0, 120.0)
+	minion.target = dummy_player
+	add_child(minion)

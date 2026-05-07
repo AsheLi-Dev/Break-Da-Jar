@@ -54,3 +54,6 @@ points = PackedVector2Array(0, 0, 280, 0)
 width = 3.0
 default_color = Color(1, 0.1, 0.1, 0.8)
 gradient = SubResource("Gradient_aim")
+
+[node name="GunPoint" type="Marker2D" parent="." unique_id=1292222950]
+position = Vector2(17.31, -14.21)

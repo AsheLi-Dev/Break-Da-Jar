@@ -1,0 +1,56 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/ZombieFireman.gd" id="1_fireman"]
+[ext_resource type="Texture2D" path="res://assets/zombies/Zombie Fireman/Idle 1.png" id="2_idle"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 17.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hitbox"]
+radius = 17.0
+
+[sub_resource type="Gradient" id="Gradient_aim"]
+colors = PackedColorArray(1, 0.35, 0.08, 0.82, 1, 0.35, 0.08, 0)
+
+[node name="ZombieFireman" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 0
+script = ExtResource("1_fireman")
+max_hp = 32.0
+move_speed = 84.0
+damage = 8.0
+attack_cooldown = 1.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="Hitbox" type="Area2D" parent="."]
+position = Vector2(4.9, 1.2)
+scale = Vector2(0.938, 1.921)
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("CircleShape2D_hitbox")
+
+[node name="DebugBody" type="Polygon2D" parent="."]
+visible = false
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_idle")
+region_enabled = true
+region_rect = Rect2(0, 0, 128, 128)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+anim_player = NodePath("../AnimationPlayer")
+
+[node name="AimLine" type="Line2D" parent="."]
+visible = false
+points = PackedVector2Array(0, 0, 310, 0)
+width = 3.0
+default_color = Color(1, 0.35, 0.08, 0.82)
+gradient = SubResource("Gradient_aim")
+
+[node name="GunPoint" type="Marker2D" parent="."]
+position = Vector2(18, -13)

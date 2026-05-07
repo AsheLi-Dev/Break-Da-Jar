@@ -42,7 +42,9 @@ const MAX_ELITE_ENEMY_ATTACK_TOKENS := 1
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")
+const ZOMBIE_FIREMAN_SCENE: PackedScene = preload("res://scenes/enemies/ZombieFireman.tscn")
 const ELITE_BRUTE_SCENE: PackedScene = preload("res://scenes/enemies/EliteBrute.tscn")
+const UNDEAD_DARK_KNIGHT_SCENE: PackedScene = preload("res://scenes/enemies/UndeadDarkKnight.tscn")
 const CAMERA_SHAKE_SCRIPT := preload("res://systems/combat/CameraShake.gd")
 const CONTAINER_CATALOG := preload("res://systems/battle/ContainerCatalog.gd")
 const REWARD_PICKUP_SCRIPT := preload("res://systems/items/RewardPickup.gd")
@@ -724,7 +726,7 @@ func _release_container_enemies(spawn_position: Vector2, container_type: int) ->
 				_spawn_enemy(_get_spawn_offset_position(spawn_position, index, count), _pick_basic_zombie_scene(0.5))
 		ContainerType.TOMB:
 			if randf() < 0.2:
-				_spawn_enemy(spawn_position, ELITE_BRUTE_SCENE)
+				_spawn_enemy(spawn_position, _pick_elite_enemy_scene())
 			else:
 				for index in range(5):
 					_spawn_enemy(_get_spawn_offset_position(spawn_position, index, 5), _pick_basic_zombie_scene(0.5))
@@ -732,9 +734,18 @@ func _release_container_enemies(spawn_position: Vector2, container_type: int) ->
 
 func _pick_basic_zombie_scene(melee_chance: float) -> PackedScene:
 	if randf() < melee_chance:
+		if randf() < 0.35:
+			return UNDEAD_DARK_KNIGHT_SCENE
 		return MELEE_ZOMBIE_SCENE
 
+	if randf() < 0.5:
+		return ZOMBIE_FIREMAN_SCENE
+
 	return ACID_ZOMBIE_SCENE
+
+
+func _pick_elite_enemy_scene() -> PackedScene:
+	return ELITE_BRUTE_SCENE
 
 
 func _get_spawn_offset_position(center: Vector2, index: int, count: int) -> Vector2:
@@ -761,7 +772,7 @@ func _spawn_enemy(spawn_position: Vector2, enemy_scene: PackedScene) -> void:
 func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
 	if enemy is EliteBrute:
 		return ELITE_BRUTE_GOLD
-	if enemy is AcidZombie:
+	if enemy is AcidZombie or enemy is ZombieFireman:
 		return ACID_ZOMBIE_GOLD
 	return MELEE_ZOMBIE_GOLD
 
@@ -808,7 +819,7 @@ func release_enemy_attack_token(enemy: EnemyBase) -> void:
 func _get_enemy_attack_token_pool(enemy: EnemyBase) -> Dictionary:
 	if enemy is EliteBrute:
 		return elite_enemy_attack_tokens
-	if enemy is AcidZombie:
+	if enemy is AcidZombie or enemy is ZombieFireman:
 		return ranged_enemy_attack_tokens
 
 	return melee_enemy_attack_tokens
@@ -817,7 +828,7 @@ func _get_enemy_attack_token_pool(enemy: EnemyBase) -> Dictionary:
 func _get_enemy_attack_token_limit(enemy: EnemyBase) -> int:
 	if enemy is EliteBrute:
 		return MAX_ELITE_ENEMY_ATTACK_TOKENS
-	if enemy is AcidZombie:
+	if enemy is AcidZombie or enemy is ZombieFireman:
 		return MAX_RANGED_ENEMY_ATTACK_TOKENS
 
 	return MAX_MELEE_ENEMY_ATTACK_TOKENS

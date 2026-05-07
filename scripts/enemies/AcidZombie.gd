@@ -160,18 +160,29 @@ func _update_aim(delta: float) -> void:
 
 func _fire_projectile() -> void:
 	var direction: Vector2 = locked_attack_direction.normalized()
-	var projectile: Projectile = _spawn_projectile(global_position, direction)
+	var projectile: Projectile = _spawn_projectile(_get_projectile_spawn_position(), direction)
 	projectile.setup(direction, damage, projectile_speed, projectile_lifetime)
+
+
+func _get_projectile_spawn_position() -> Vector2:
+	var gun_point := get_node_or_null("GunPoint") as Marker2D
+	if gun_point != null:
+		var local_offset: Vector2 = gun_point.position
+		if locked_attack_direction.x < 0.0:
+			local_offset.x = -local_offset.x
+		return global_position + local_offset
+
+	return global_position
 
 
 func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectile:
 	var projectile := ACID_PROJECTILE_SCRIPT.new() as Projectile
 
-	projectile.global_position = spawn_position
 	projectile.collision_mask = 0
 	projectile.set_collision_mask_value(1, true)
 	projectile.set_collision_mask_value(7, true)
 	get_tree().current_scene.add_child(projectile)
+	projectile.global_position = spawn_position
 	projectile.direction = direction
 	return projectile
 
