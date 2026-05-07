@@ -1,13 +1,14 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PeriodicEffect.gd" id="2_periodic"]
+[ext_resource type="Texture2D" path="res://assets/items/Helmet RPG Icons/31.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_periodic")
 stacking_rule = &"shared_runtime_scaled"
 stacking_notes = "Surrounded means enemies within 220px. One monitor reads copy count; extra copies add +50% per-enemy effect and +50% cap."
-effect_type = &"surrounded_stat_bonus"
+mode = &"surrounded_stat_bonus"
 stat_name = &"defense"
 value = 4.0
 duration = 20.0
@@ -21,4 +22,5 @@ description = "Gain +4 DEF per surrounding enemy within 220px, up to +20 DEF. Ex
 category = &"defense"
 rarity = &"common"
 tags = Array[StringName]([&"Surrounded", &"Defense"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

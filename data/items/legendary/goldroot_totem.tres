@@ -1,18 +1,19 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PermanentGrowthEffect.gd" id="2_growth"]
+[ext_resource type="Texture2D" path="res://assets/items/sigil-rpg-game-icons/45.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_growth")
 stacking_notes = "At round start, gain +1 max HP per 10 gold held. Base trigger cap is 10, each extra copy adds +5 trigger cap."
-event_name = &"round_started"
-effect_type = &"permanent_stat_per_gold_on_round_start"
-stat_name = &"max_hp"
-value = 10.0
-damage_scale = 1.0
-max_stacks = 10
-chain_count = 5
+trigger = &"round_started"
+growth_stat = &"max_hp"
+growth_value = 1.0
+trigger_value = 10.0
+round_cap = 10.0
+stack_round_cap_bonus = 5.0
+use_current_gold = true
 
 [resource]
 script = ExtResource("1_def")
@@ -22,4 +23,5 @@ description = "At the start of each round, for every 10 gold you have, permanent
 category = &"defense"
 rarity = &"legendary"
 tags = Array[StringName]([&"Economy", &"RoundStart", &"MaxHP", &"Scaling"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

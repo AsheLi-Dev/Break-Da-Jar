@@ -1,6 +1,9 @@
 extends SceneTree
 
 const EFFECT_TYPES := preload("res://systems/items/effects/ItemEffectTypes.gd")
+const PERMANENT_GROWTH_EFFECT_SCRIPT := preload("res://systems/items/effects/PermanentGrowthEffect.gd")
+const PERIODIC_EFFECT_SCRIPT := preload("res://systems/items/effects/PeriodicEffect.gd")
+const TRIGGERED_BUFF_EFFECT_SCRIPT := preload("res://systems/items/effects/TriggeredBuffEffect.gd")
 
 const ITEM_ROOT := "res://data/items"
 const VALID_CATEGORIES: Array[StringName] = [
@@ -128,6 +131,12 @@ func _validate_effect(item: ItemDefinition, effect: Resource, index: int) -> voi
 
 	if effect is EventEffect:
 		_validate_event_effect(item, effect as EventEffect, label)
+	elif effect.get_script() == PERMANENT_GROWTH_EFFECT_SCRIPT:
+		_validate_permanent_growth_effect(effect, label)
+	elif effect.get_script() == PERIODIC_EFFECT_SCRIPT:
+		_validate_periodic_effect(effect, label)
+	elif effect.get_script() == TRIGGERED_BUFF_EFFECT_SCRIPT:
+		_validate_triggered_buff_effect(effect, label)
 	elif effect is StatModifierEffect:
 		_validate_stat_modifier_effect(effect as StatModifierEffect, label)
 
@@ -164,8 +173,65 @@ func _validate_stat_modifier_effect(effect: StatModifierEffect, label: String) -
 	_assert(VALID_STAT_OPERATIONS.has(effect.operation), "Stat effect operation is valid: %s -> %s" % [label, effect.operation])
 
 
+func _validate_permanent_growth_effect(effect: Resource, label: String) -> void:
+	var trigger := StringName(effect.get("trigger"))
+	var growth_stat := StringName(effect.get("growth_stat"))
+	_assert(trigger != &"", "Permanent growth trigger is set: %s" % label)
+	_assert(_is_valid_permanent_growth_trigger(trigger), "Permanent growth trigger is valid: %s -> %s" % [label, trigger])
+	_assert(growth_stat != &"", "Permanent growth stat is set: %s" % label)
+	_assert(_is_known_stat(growth_stat), "Permanent growth stat is known: %s -> %s" % [label, growth_stat])
+	_assert(float(effect.get("growth_value")) > 0.0, "Permanent growth value is positive: %s" % label)
+	_assert(float(effect.get("trigger_value")) > 0.0, "Permanent growth trigger value is positive: %s" % label)
+	_assert(float(effect.get("round_cap")) >= 0.0, "Permanent growth round cap is non-negative: %s" % label)
+	_assert(float(effect.get("stack_round_cap_bonus")) >= 0.0, "Permanent growth stack round cap bonus is non-negative: %s" % label)
+	_assert(float(effect.get("stack_growth_bonus")) >= 0.0, "Permanent growth stack growth bonus is non-negative: %s" % label)
+	_assert(not (bool(effect.get("requires_critical")) and bool(effect.get("requires_non_critical"))), "Permanent growth crit filters do not conflict: %s" % label)
+
+
+func _validate_periodic_effect(effect: Resource, label: String) -> void:
+	var mode := StringName(effect.get("mode"))
+	var stat_name := StringName(effect.get("stat_name"))
+	_assert(mode != &"", "Periodic mode is set: %s" % label)
+	_assert(PERIODIC_EFFECT_SCRIPT.all_modes().has(mode), "Periodic mode is valid: %s -> %s" % [label, mode])
+	if stat_name != &"":
+		_assert(_is_known_stat(stat_name), "Periodic stat_name is known: %s -> %s" % [label, stat_name])
+	_assert(int(effect.get("max_stacks")) >= 1, "Periodic max_stacks is positive: %s" % label)
+	_assert(float(effect.get("radius")) >= 0.0, "Periodic radius is non-negative: %s" % label)
+	_assert(float(effect.get("duration")) >= 0.0, "Periodic duration is non-negative: %s" % label)
+	_assert(float(effect.get("damage_scale")) >= 0.0, "Periodic damage_scale is non-negative: %s" % label)
+	_assert(float(effect.get("interval")) >= 0.0, "Periodic interval is non-negative: %s" % label)
+	_assert(float(effect.get("chance")) >= 0.0, "Periodic chance is non-negative: %s" % label)
+
+
+func _validate_triggered_buff_effect(effect: Resource, label: String) -> void:
+	var event_name := StringName(effect.get("event_name"))
+	var mode := StringName(effect.get("mode"))
+	var stat_name := StringName(effect.get("stat_name"))
+	_assert(event_name != &"", "Triggered buff event_name is set: %s" % label)
+	_assert(mode != &"", "Triggered buff mode is set: %s" % label)
+	_assert(TRIGGERED_BUFF_EFFECT_SCRIPT.all_modes().has(mode), "Triggered buff mode is valid: %s -> %s" % [label, mode])
+	_assert(stat_name != &"", "Triggered buff stat_name is set: %s" % label)
+	_assert(_is_known_stat(stat_name), "Triggered buff stat_name is known: %s -> %s" % [label, stat_name])
+	_assert(int(effect.get("max_stacks")) >= 1, "Triggered buff max_stacks is positive: %s" % label)
+	_assert(float(effect.get("duration")) >= 0.0, "Triggered buff duration is non-negative: %s" % label)
+	_assert(float(effect.get("missing_hp_step")) > 0.0, "Triggered buff missing_hp_step is positive: %s" % label)
+	_assert(float(effect.get("stack_value_bonus")) >= 0.0, "Triggered buff stack_value_bonus is non-negative: %s" % label)
+
+
 func _requires_event_name(effect_type: StringName) -> bool:
-	return not EVENTLESS_EFFECT_TYPES.has(effect_type) and not EFFECT_TYPES.is_runtime_monitor(effect_type)
+	return not EVENTLESS_EFFECT_TYPES.has(effect_type)
+
+
+func _is_valid_permanent_growth_trigger(trigger: StringName) -> bool:
+	return [
+		&"enemy_killed",
+		&"container_broken",
+		&"damage_taken",
+		&"shop_container_broken",
+		&"round_started",
+		&"round_ended",
+		&"stationary",
+	].has(trigger)
 
 
 func _is_known_stat(stat_name: StringName) -> bool:

@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/TriggeredBuffEffect.gd" id="2_buff"]
+[ext_resource type="Texture2D" path="res://assets/items/_unused/Demon Loot Vector Icons/37.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_buff")
+stacking_rule = &"shared_missing_hp_scaled"
+stacking_notes = "One listener handles all copies. First copy gives +2 HP regen per second per 20 missing HP; extra copies add +1 HP regen per second per 20 missing HP."
+event_name = &"hp_changed"
+mode = &"missing_hp_stat_bonus"
+stat_name = &"hp_regen_per_second"
+value = 2.0
+missing_hp_step = 20.0
+stack_value_bonus = 1.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"scarred_regrowth"
+display_name = "Scarred Regrowth"
+description = "For every 20 missing HP, regenerate 2 HP per second. Extra copies add 1 HP regen per second per 20 missing HP."
+category = &"defense"
+rarity = &"rare"
+tags = Array[StringName]([&"MissingHP", &"Regen", &"Heal"])
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])

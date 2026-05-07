@@ -5,6 +5,7 @@ const FRAME_SIZE := Vector2i(128, 128)
 const FRAMES_PER_DIRECTION := 15
 const DIRECTION_COUNT := 8
 const ATTACK_PROJECTILE_FRAME := 7
+const BLESSING_ACTIVE_FRAME := 9
 const SHOCKWAVE_HIT_FRAME := 9
 const SHOCKWAVE_EFFECT_DAMAGE_FRAME := 4
 const SHOCKWAVE_EFFECT_FPS := 10.0
@@ -26,11 +27,16 @@ const HOLY_SLASH_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HolyS
 const HOLY_SLASH_FPS := 24.0
 const IDLE_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/idle.png")
 const LEVEL_UP_EFFECT_TEXTURE: Texture2D = preload("res://assets/vfx/Level Up Effect/Level Up Effect Spritesheet.png")
+const PUMMEL_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/pummel.png")
 const ROLLING_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/rolling.png")
 const SLIDE_END_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/slideend.png")
 const SLIDE_SFX_PATH := "res://assets/sfx/slide.mp3"
 const SLIDE_START_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/slidestart.png")
 const RUN_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/run.png")
+const SWORD_OF_JUSTICE_FRAME_SIZE := Vector2i(64, 128)
+const SWORD_OF_JUSTICE_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/SwordOfJustice_spritesheet.png")
+const HOLY_SHIELD_FRAME_SIZE := Vector2i(64, 64)
+const HOLY_SHIELD_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HolyShield_spritesheet.png")
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const ENEMY_HURT_SFX: AudioStream = preload("res://assets/sfx/enemy_hurt.wav")
 const TALENT_CATALOG := preload("res://scripts/player/PlayerTalentCatalog.gd")
@@ -78,7 +84,9 @@ var hp: float
 @export var attack_slow_edge_frames: int = 3
 @export var attack_edge_animation_fps: float = 15.0
 @export var attack_fast_animation_fps: float = 36.0
-@export var attack_move_speed_multiplier: float = 0.5
+@export var attack_move_speed_multiplier: float = 0.3
+@export var attack_min_recovery_duration: float = 0.08
+@export var attack_max_animation_speed_scale: float = 2.2
 @export var melee_attack_radius: float = 200.0
 @export var melee_telegraph_color: Color = Color(1.0, 0.9, 0.28, 0.22)
 
@@ -88,6 +96,11 @@ var hp: float
 @export var shockwave_knockback: float = 430.0
 @export var shockwave_cooldown: float = 6.0
 @export var shockwave_visible_time: float = 0.16
+@export var blessing_cooldown: float = 10.0
+@export var blessing_duration: float = 5.0
+@export var blessing_attack_speed_bonus: float = 0.3
+@export var blessing_move_speed_bonus: float = 0.3
+@export var blessing_effect_fps: float = 12.0
 
 # Dash is a short reposition. Slide is the invincible enemy-pass-through followup.
 @export var dash_speed: float = 560.0
@@ -155,8 +168,15 @@ var slide_window_remaining: float = 0.0
 var invincible_remaining: float = 0.0
 var fire_cooldown_remaining: float = 0.0
 var shockwave_cooldown_remaining: float = 0.0
+var blessing_cooldown_remaining: float = 0.0
+var blessing_shield_remaining: float = 0.0
 var saved_collision_mask: int = 0
 var is_invincible: bool = false
+var blessing_next_is_attack: bool = true
+var pending_blessing: bool = false
+var pending_blessing_is_attack: bool = true
+var blessing_damage_shield_active: bool = false
+var blessing_shield_heals_on_block: bool = false
 
 var gun_pivot: Node2D
 var muzzle: Marker2D
@@ -208,6 +228,7 @@ func _exit_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_update_timers(delta)
+	_update_hp_regen(delta)
 	_update_facing()
 
 	match state:
@@ -229,12 +250,24 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("skill"):
 		_try_cast_shockwave()
 
+	if Input.is_action_just_pressed("blessing"):
+		_try_cast_blessing()
+
 	_update_sprite_animation(delta)
 
 
 func take_damage(amount: float) -> void:
 	if damage_shield_active:
+		var blocked_damage: float = amount
+		if stats != null:
+			blocked_damage = float(stats.calculate_incoming_damage(amount))
 		damage_shield_active = false
+		if blessing_damage_shield_active:
+			blessing_damage_shield_active = false
+			blessing_shield_remaining = 0.0
+		if blessing_shield_heals_on_block:
+			blessing_shield_heals_on_block = false
+			heal(blocked_damage)
 		return
 	if is_invincible:
 		return
@@ -259,6 +292,17 @@ func heal(amount: float) -> void:
 		return
 	hp = minf(max_hp, hp + amount)
 	hp_changed.emit(roundi(hp), roundi(max_hp))
+
+
+func _update_hp_regen(delta: float) -> void:
+	if stats == null or stats.hp_regen_per_second <= 0.0 or hp >= max_hp:
+		return
+
+	var old_rounded_hp := roundi(hp)
+	hp = minf(max_hp, hp + stats.hp_regen_per_second * delta)
+	var new_rounded_hp := roundi(hp)
+	if new_rounded_hp != old_rounded_hp:
+		hp_changed.emit(new_rounded_hp, roundi(max_hp))
 
 
 func lose_hp(amount: float) -> float:
@@ -590,6 +634,12 @@ func die() -> void:
 func _update_timers(delta: float) -> void:
 	fire_cooldown_remaining = maxf(0.0, fire_cooldown_remaining - delta)
 	shockwave_cooldown_remaining = maxf(0.0, shockwave_cooldown_remaining - delta)
+	blessing_cooldown_remaining = maxf(0.0, blessing_cooldown_remaining - delta)
+	blessing_shield_remaining = maxf(0.0, blessing_shield_remaining - delta)
+	if blessing_damage_shield_active and blessing_shield_remaining <= 0.0:
+		blessing_damage_shield_active = false
+		blessing_shield_heals_on_block = false
+		damage_shield_active = false
 	dash_cooldown_remaining = maxf(0.0, dash_cooldown_remaining - delta)
 	hurt_feedback_cooldown_remaining = maxf(0.0, hurt_feedback_cooldown_remaining - delta)
 	slide_window_remaining = maxf(0.0, slide_window_remaining - delta)
@@ -752,6 +802,48 @@ func _try_cast_shockwave() -> void:
 	pending_shockwave_target_position = get_global_mouse_position()
 	_play_action_animation_with_direction(&"ability", _get_action_animation_time(&"ability"), facing_direction)
 	get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_start_shockwave_effect)
+
+
+func _try_cast_blessing() -> void:
+	if blessing_cooldown_remaining > 0.0:
+		return
+	if not _can_start_attack_now():
+		return
+	_interrupt_slide_for_attack()
+
+	blessing_cooldown_remaining = blessing_cooldown
+	pending_blessing = true
+	pending_blessing_is_attack = blessing_next_is_attack
+	blessing_next_is_attack = not blessing_next_is_attack
+	_play_action_animation_with_direction(&"pummel", _get_action_animation_time(&"pummel"), facing_direction)
+
+
+func _maybe_apply_blessing() -> void:
+	if not pending_blessing or current_animation != &"pummel":
+		return
+	if action_animation_elapsed < _get_blessing_active_time():
+		return
+
+	pending_blessing = false
+	if pending_blessing_is_attack:
+		_apply_attack_blessing()
+	else:
+		_apply_defense_blessing()
+
+
+func _apply_attack_blessing() -> void:
+	if temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"attack_blessing_attack_speed", &"attack_speed_bonus", blessing_attack_speed_bonus, blessing_duration, 1)
+		temporary_buffs.add_timed_stat_buff(&"attack_blessing_move_speed", &"movement_speed_bonus", blessing_move_speed_bonus, blessing_duration, 1)
+	_play_blessing_effect(SWORD_OF_JUSTICE_TEXTURE, &"sword_of_justice", SWORD_OF_JUSTICE_FRAME_SIZE)
+
+
+func _apply_defense_blessing() -> void:
+	damage_shield_active = true
+	blessing_damage_shield_active = true
+	blessing_shield_heals_on_block = true
+	blessing_shield_remaining = blessing_duration
+	_play_blessing_effect(HOLY_SHIELD_TEXTURE, &"holy_shield", HOLY_SHIELD_FRAME_SIZE)
 
 
 func _start_shockwave_effect() -> void:
@@ -981,9 +1073,13 @@ func _get_full_animation_time() -> float:
 
 func _get_action_animation_time(animation_name: StringName) -> float:
 	if animation_name == &"attack":
-		return _get_fire_interval()
+		return _get_attack_action_time()
 
 	return _get_full_animation_time()
+
+
+func _get_blessing_active_time() -> float:
+	return float(BLESSING_ACTIVE_FRAME - 1) / animation_fps
 
 
 func _update_sprite_animation(delta: float) -> void:
@@ -991,8 +1087,10 @@ func _update_sprite_animation(delta: float) -> void:
 		action_animation_elapsed += delta
 		action_animation_remaining = maxf(0.0, action_animation_remaining - delta)
 		_maybe_spawn_attack_projectile()
+		_maybe_apply_blessing()
 		if action_animation_remaining <= 0.0:
 			action_direction_locked = false
+			_set_animation_speed_scale(1.0)
 		return
 
 	var wanted_animation: StringName = _get_locomotion_animation()
@@ -1030,6 +1128,7 @@ func _play_sprite_animation(animation_name: StringName, force_restart: bool = fa
 	current_animation = animation_name
 	current_animation_name = tree_animation_name
 	current_animation_elapsed = 0.0
+	_set_animation_speed_scale(_get_animation_speed_scale(animation_name))
 	if animation_state != null:
 		if force_restart:
 			animation_state.start(String(tree_animation_name), true)
@@ -1052,6 +1151,10 @@ func _maybe_spawn_attack_projectile() -> void:
 
 
 func _get_attack_projectile_time() -> float:
+	return _get_attack_base_windup_time() / _get_attack_speed_multiplier()
+
+
+func _get_attack_base_windup_time() -> float:
 	var time: float = 0.0
 	for frame in range(ATTACK_PROJECTILE_FRAME):
 		time += _get_attack_windup_frame_duration(frame)
@@ -1059,11 +1162,44 @@ func _get_attack_projectile_time() -> float:
 	return time
 
 
+func _get_attack_action_time() -> float:
+	var hit_time: float = _get_attack_projectile_time()
+	var recovery_time: float = maxf(attack_min_recovery_duration, _get_fire_interval() - hit_time)
+	return hit_time + recovery_time
+
+
+func _get_attack_cancel_time() -> float:
+	return _get_attack_projectile_time() + attack_min_recovery_duration
+
+
+func _get_base_fire_interval() -> float:
+	return 1.0 / maxf(fire_rate, 0.01)
+
+
 func _get_fire_interval() -> float:
-	var base_interval: float = 1.0 / maxf(fire_rate, 0.01)
+	var base_interval: float = _get_base_fire_interval()
 	if stats != null:
 		return stats.get_attack_interval(base_interval)
 	return base_interval
+
+
+func _get_attack_speed_multiplier() -> float:
+	return maxf(_get_base_fire_interval() / maxf(_get_fire_interval(), 0.001), 0.01)
+
+
+func _get_attack_animation_speed_scale() -> float:
+	return clampf(_get_base_fire_interval() / maxf(_get_attack_action_time(), 0.001), 1.0, attack_max_animation_speed_scale)
+
+
+func _get_animation_speed_scale(animation_name: StringName) -> float:
+	if animation_name == &"attack":
+		return _get_attack_animation_speed_scale()
+	return 1.0
+
+
+func _set_animation_speed_scale(speed_scale: float) -> void:
+	if animation_player != null:
+		animation_player.speed_scale = speed_scale
 
 
 func _can_cancel_current_action() -> bool:
@@ -1074,7 +1210,7 @@ func _can_cancel_current_action() -> bool:
 	if action_animation != &"attack":
 		return false
 
-	return action_animation_elapsed >= _get_attack_projectile_time()
+	return action_animation_elapsed >= _get_attack_cancel_time()
 
 
 func _cancel_current_action() -> void:
@@ -1085,7 +1221,9 @@ func _cancel_current_action() -> void:
 	action_animation_remaining = 0.0
 	action_animation_elapsed = 0.0
 	pending_attack_projectile = false
+	pending_blessing = false
 	action_direction_locked = false
+	_set_animation_speed_scale(1.0)
 	_hide_melee_telegraph()
 
 
@@ -1285,6 +1423,17 @@ func _play_holy_slash_effect(spawn_position: Vector2, direction: Vector2) -> voi
 	)
 
 
+func _play_blessing_effect(effect_texture: Texture2D, animation_name: StringName, frame_size: Vector2i) -> void:
+	_play_spritesheet_effect(
+		effect_texture,
+		animation_name,
+		global_position,
+		blessing_effect_fps,
+		Vector2.ONE,
+		frame_size
+	)
+
+
 func _play_spritesheet_effect(
 	effect_texture: Texture2D,
 	animation_name: StringName,
@@ -1299,12 +1448,14 @@ func _play_spritesheet_effect(
 	sprite_frames.set_animation_loop(animation_name, false)
 	sprite_frames.set_animation_speed(animation_name, fps)
 
-	var frame_count := int(effect_texture.get_width() / frame_size.x)
-	for frame_index in range(frame_count):
-		var frame_texture := AtlasTexture.new()
-		frame_texture.atlas = effect_texture
-		frame_texture.region = Rect2(frame_index * frame_size.x, 0, frame_size.x, frame_size.y)
-		sprite_frames.add_frame(animation_name, frame_texture)
+	var frame_columns := int(effect_texture.get_width() / frame_size.x)
+	var frame_rows := int(effect_texture.get_height() / frame_size.y)
+	for row_index in range(frame_rows):
+		for column_index in range(frame_columns):
+			var frame_texture := AtlasTexture.new()
+			frame_texture.atlas = effect_texture
+			frame_texture.region = Rect2(column_index * frame_size.x, row_index * frame_size.y, frame_size.x, frame_size.y)
+			sprite_frames.add_frame(animation_name, frame_texture)
 
 	var effect := AnimatedSprite2D.new()
 	effect.sprite_frames = sprite_frames
@@ -1495,6 +1646,8 @@ func _get_animation_texture(animation_name: StringName) -> Texture2D:
 			return ATTACK_ALT_TEXTURE
 		&"ability":
 			return ABILITY_TEXTURE
+		&"pummel":
+			return PUMMEL_TEXTURE
 		&"rolling":
 			return ROLLING_TEXTURE
 		&"slide_start":
@@ -1857,6 +2010,7 @@ func _get_animation_bases() -> Array[StringName]:
 		&"run",
 		&"attack",
 		&"ability",
+		&"pummel",
 		&"rolling",
 		&"slide_start",
 		&"slide_hold",
@@ -1894,14 +2048,14 @@ func _get_attack_frame_duration(frame: int) -> float:
 	if frame >= slow_recovery_start:
 		return 1.0 / maxf(attack_edge_animation_fps, 0.01)
 
-	var windup_time: float = _get_attack_projectile_time()
+	var windup_time: float = _get_attack_base_windup_time()
 	var slow_recovery_frame_count: int = FRAMES_PER_DIRECTION - slow_recovery_start
 	var slow_recovery_time: float = float(slow_recovery_frame_count) / maxf(attack_edge_animation_fps, 0.01)
 	var middle_recovery_frame_count: int = slow_recovery_start - ATTACK_PROJECTILE_FRAME
 	if middle_recovery_frame_count <= 0:
 		return 1.0 / maxf(attack_edge_animation_fps, 0.01)
 
-	var middle_recovery_time: float = maxf(_get_fire_interval() - windup_time - slow_recovery_time, 0.001)
+	var middle_recovery_time: float = maxf(_get_base_fire_interval() - windup_time - slow_recovery_time, 0.001)
 	return middle_recovery_time / float(middle_recovery_frame_count)
 
 

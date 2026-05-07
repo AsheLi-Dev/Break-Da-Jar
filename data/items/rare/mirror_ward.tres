@@ -1,13 +1,14 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PeriodicEffect.gd" id="2_periodic"]
+[ext_resource type="Texture2D" path="res://assets/items/Magic Book Game Icons/40.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_periodic")
 stacking_rule = &"shared_runtime_scaled"
 stacking_notes = "One monitor handles all copies. Grants one shield immediately; after it breaks, cooldown is 8 + 12 / (1 + 0.35 * (copies - 1))."
-effect_type = &"periodic_damage_shield"
+mode = &"periodic_damage_shield"
 
 [resource]
 script = ExtResource("1_def")
@@ -17,4 +18,5 @@ description = "Immediately gain a shield that blocks the next hit. After the shi
 category = &"defense"
 rarity = &"rare"
 tags = Array[StringName]([&"Shield", &"Defense", &"Timed"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

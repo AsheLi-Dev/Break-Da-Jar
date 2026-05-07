@@ -51,6 +51,7 @@ const REWARD_PICKUP_SCRIPT := preload("res://systems/items/RewardPickup.gd")
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const SHOP_RULES := preload("res://systems/battle/ShopRules.gd")
 const TALENT_TREE_UI_CONTROLLER := preload("res://systems/battle/TalentTreeUiController.gd")
+const PAUSE_INPUT_CONTROLLER := preload("res://systems/battle/PauseInputController.gd")
 const BATTLE_BGM: AudioStream = preload("res://assets/sfx/junipersona-to-the-death-159171.mp3")
 const SHOP_INSUFFICIENT_GOLD_SFX: AudioStream = preload("res://assets/sfx/Error_1.wav")
 const TALENT_UNLOCK_SFX: AudioStream = preload("res://assets/sfx/Confirm_7.wav")
@@ -114,6 +115,8 @@ var camera: Camera2D
 var hud_label: Label
 var status_panel: Panel
 var status_label: Label
+var pause_overlay: Control
+var pause_input_controller: Node
 var talent_tree_ui: CanvasLayer
 var bgm_player: AudioStreamPlayer
 
@@ -126,15 +129,17 @@ func _ready() -> void:
 	_create_camera()
 	_start_bgm()
 	_create_hud()
+	_create_pause_input_controller()
 	_start_combat_round()
 
 
 func _exit_tree() -> void:
+	get_tree().paused = false
 	_stop_bgm()
 
 
 func _process(delta: float) -> void:
-	if game_over:
+	if game_over or get_tree().paused:
 		return
 
 	_update_round_timer(delta)
@@ -147,7 +152,12 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE or event.is_action_pressed("ui_cancel"):
+			_set_paused(not get_tree().paused)
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode == KEY_R and game_over:
+			get_tree().paused = false
 			get_tree().reload_current_scene()
 			return
 		if Input.is_action_just_pressed("shop_next_round") and phase == Phase.SHOP:
@@ -926,7 +936,66 @@ func _create_hud() -> void:
 	status_label.size = Vector2(492, 180)
 	status_panel.add_child(status_label)
 
+	_create_pause_overlay(canvas)
 	_create_talent_tree_ui()
+
+
+func _create_pause_overlay(canvas: CanvasLayer) -> void:
+	pause_overlay = Control.new()
+	pause_overlay.name = "PauseOverlay"
+	pause_overlay.visible = false
+	pause_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	pause_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas.add_child(pause_overlay)
+
+	var shade := ColorRect.new()
+	shade.color = Color(0.0, 0.0, 0.0, 0.58)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_overlay.add_child(shade)
+
+	var panel := Panel.new()
+	panel.position = Vector2(720, 390)
+	panel.size = Vector2(480, 260)
+	pause_overlay.add_child(panel)
+
+	var title := Label.new()
+	title.text = "PAUSED"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.position = Vector2(24, 42)
+	title.size = Vector2(432, 70)
+	title.add_theme_font_size_override("font_size", 42)
+	panel.add_child(title)
+
+	var hint := Label.new()
+	hint.text = "Press Esc to resume"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hint.position = Vector2(24, 132)
+	hint.size = Vector2(432, 70)
+	hint.add_theme_font_size_override("font_size", 24)
+	panel.add_child(hint)
+
+
+func _create_pause_input_controller() -> void:
+	pause_input_controller = PAUSE_INPUT_CONTROLLER.new() as Node
+	pause_input_controller.name = "PauseInputController"
+	pause_input_controller.resume_requested.connect(_on_pause_resume_requested)
+	add_child(pause_input_controller)
+
+
+func _on_pause_resume_requested() -> void:
+	_set_paused(false)
+
+
+func _set_paused(paused: bool) -> void:
+	if game_over and paused:
+		return
+	get_tree().paused = paused
+	if pause_overlay != null:
+		pause_overlay.visible = paused
 
 
 func _create_talent_tree_ui() -> void:

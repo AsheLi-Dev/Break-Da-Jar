@@ -1,18 +1,18 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PermanentGrowthEffect.gd" id="2_growth"]
+[ext_resource type="Texture2D" path="res://assets/items/sigil-rpg-game-icons/14.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_growth")
 stacking_notes = "Track HP damage taken. Every 10 HP lost grants +1 ATK. One shared listener; base round cap is +5 ATK, each extra copy adds +3 round cap."
-event_name = &"damage_taken"
-effect_type = &"permanent_stat_every_hp_lost_round_cap"
-stat_name = &"atk"
-value = 10.0
-damage_scale = 1.0
-max_stacks = 5
-chain_count = 3
+trigger = &"damage_taken"
+growth_stat = &"atk"
+growth_value = 1.0
+trigger_value = 10.0
+round_cap = 5.0
+stack_round_cap_bonus = 3.0
 
 [resource]
 script = ExtResource("1_def")
@@ -22,4 +22,5 @@ description = "For every 10 HP you lose, permanently gain +1 ATK. Max +5 ATK per
 category = &"attack"
 rarity = &"legendary"
 tags = Array[StringName]([&"OnDamageTaken", &"Attack", &"Scaling"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

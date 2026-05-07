@@ -13,16 +13,13 @@ func _ready() -> void:
 
 
 func _create_debug_ui() -> void:
-	var canvas := CanvasLayer.new()
-	canvas.name = "ItemDebugUI"
-	canvas.layer = 20
-	add_child(canvas)
+	var parent := _get_debug_ui_parent()
 
 	var panel := Panel.new()
-	panel.name = "Panel"
-	panel.position = Vector2(24, 76)
+	panel.name = "ItemDebugUI"
+	panel.position = Vector2(24, 116)
 	panel.size = Vector2(420, 126)
-	canvas.add_child(panel)
+	parent.add_child(panel)
 
 	option_button = OptionButton.new()
 	option_button.name = "ItemDropdown"
@@ -46,6 +43,15 @@ func _create_debug_ui() -> void:
 	panel.add_child(status_label)
 
 
+func _get_debug_ui_parent() -> Node:
+	var battle_scene := get_node_or_null("BattleScene")
+	if battle_scene != null:
+		var pause_overlay := battle_scene.get("pause_overlay") as Control
+		if pause_overlay != null:
+			return pause_overlay
+	return self
+
+
 func _populate_item_dropdown() -> void:
 	option_button.clear()
 	item_ids.clear()
@@ -55,14 +61,23 @@ func _populate_item_dropdown() -> void:
 		status_label.text = "ItemDatabase autoload not found."
 		return
 
+	var sorted_items: Array = []
 	for item in database.all_items:
 		if item == null:
 			continue
+		sorted_items.append(item)
+	sorted_items.sort_custom(_compare_items_alphabetically)
+
+	for item in sorted_items:
 		var label := "%s [%s]" % [item.display_name, item.rarity]
 		option_button.add_item(label)
 		item_ids.append(item.id)
 
 	status_label.text = "Loaded %d items." % item_ids.size()
+
+
+func _compare_items_alphabetically(left: ItemDefinition, right: ItemDefinition) -> bool:
+	return left.display_name.nocasecmp_to(right.display_name) < 0
 
 
 func _give_selected_item() -> void:

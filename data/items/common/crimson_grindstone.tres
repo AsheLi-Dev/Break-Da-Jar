@@ -1,18 +1,19 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PermanentGrowthEffect.gd" id="2_growth"]
+[ext_resource type="Texture2D" path="res://assets/items/sigil-rpg-game-icons/41.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_growth")
 stacking_notes = "Critical direct player-attack kills grant +2% critical damage. One shared listener; base round cap is +10%, each extra copy adds +5% round cap."
-event_name = &"enemy_killed"
-effect_type = &"permanent_stat_attack_kill_crit_state_round_cap"
-stat_name = &"critical_damage_bonus"
-value = 0.02
-chance = 1.0
-max_stacks = 5
-chain_count = 3
+trigger = &"enemy_killed"
+growth_stat = &"critical_damage_bonus"
+growth_value = 0.02
+round_cap = 0.1
+stack_round_cap_bonus = 0.05
+requires_direct_player_attack = true
+requires_critical = true
 
 [resource]
 script = ExtResource("1_def")
@@ -22,4 +23,5 @@ description = "When a critical direct attack kills an enemy, permanently gain +2
 category = &"attack"
 rarity = &"common"
 tags = Array[StringName]([&"Critical", &"Attack", &"Scaling"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

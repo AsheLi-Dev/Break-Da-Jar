@@ -1,17 +1,7 @@
 extends Node
 class_name InventoryComponent
 
-const PERMANENT_GROWTH_EFFECT_TYPES: Array[StringName] = [
-	&"stat_bonus_every_n_kills_shared",
-	&"no_damage_round_permanent_stat",
-	&"permanent_stat_elite_kill",
-	&"permanent_stat_every_hp_lost_round_cap",
-	&"permanent_stat_per_gold_on_round_start",
-	&"permanent_stat_player_container_round_cap",
-	&"permanent_stat_shop_container_scaled",
-	&"permanent_stat_stationary_round_cap",
-	&"permanent_stat_attack_kill_crit_state_round_cap",
-]
+const PERMANENT_GROWTH_EFFECT_SCRIPT := preload("res://systems/items/effects/PermanentGrowthEffect.gd")
 
 var owner_player: Node
 var item_counts: Dictionary = {}
@@ -65,9 +55,6 @@ func get_unique_permanent_growth_item_count() -> int:
 
 func _is_permanent_growth_item(item: ItemDefinition) -> bool:
 	for effect in item.effects:
-		if effect == null:
-			continue
-		var effect_type_value: Variant = effect.get("effect_type")
-		if effect_type_value != null and PERMANENT_GROWTH_EFFECT_TYPES.has(StringName(effect_type_value)):
+		if effect != null and effect.get_script() == PERMANENT_GROWTH_EFFECT_SCRIPT:
 			return true
 	return false

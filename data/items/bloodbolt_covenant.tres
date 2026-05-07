@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
 [ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Texture2D" path="res://assets/items/_unused/Demon Loot Vector Icons/39.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
@@ -23,4 +24,5 @@ display_name = "Bloodbolt Covenant"
 description = "When a Bleeding enemy dies, trigger Chain Lightning twice from its position, 0.5 seconds apart. Extra copies add 1 additional trigger."
 category = &"attack"
 rarity = &"legendary"
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

@@ -1,17 +1,18 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PermanentGrowthEffect.gd" id="2_growth"]
+[ext_resource type="Texture2D" path="res://assets/items/sigil-rpg-game-icons/3.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_growth")
 stacking_notes = "One runtime monitor. Every 2 seconds spent stationary grants +2% attack speed. Base round cap is +20%, each extra copy adds +10% round cap."
-effect_type = &"permanent_stat_stationary_round_cap"
-stat_name = &"attack_speed_bonus"
-value = 0.02
-duration = 2.0
-max_stacks = 10
-damage_scale = 5.0
+trigger = &"stationary"
+growth_stat = &"attack_speed_bonus"
+growth_value = 0.02
+trigger_value = 2.0
+round_cap = 0.2
+stack_round_cap_bonus = 0.1
 
 [resource]
 script = ExtResource("1_def")
@@ -21,4 +22,5 @@ description = "Every 2 seconds you stand still, permanently gain +2% Attack Spee
 category = &"attack"
 rarity = &"legendary"
 tags = Array[StringName]([&"Stationary", &"AttackSpeed", &"Scaling"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/TriggeredBuffEffect.gd" id="2_buff"]
+[ext_resource type="Texture2D" path="res://assets/items/_unused/Demon Loot Vector Icons/3.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_buff")
+stacking_rule = &"shared_missing_hp_scaled"
+stacking_notes = "One listener handles all copies. First copy gives +5% movement speed per 10 missing HP; extra copies add +3% movement speed per 10 missing HP."
+event_name = &"hp_changed"
+mode = &"missing_hp_stat_bonus"
+stat_name = &"movement_speed_bonus"
+value = 0.05
+stack_value_bonus = 0.03
+
+[resource]
+script = ExtResource("1_def")
+id = &"panic_stride"
+display_name = "Panic Stride"
+description = "For every 10 missing HP, gain 5% movement speed. Extra copies add 3% movement speed per 10 missing HP."
+category = &"utility"
+rarity = &"rare"
+tags = Array[StringName]([&"MissingHP", &"MoveSpeed"])
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])

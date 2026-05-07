@@ -1,13 +1,14 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PeriodicEffect.gd" id="2_periodic"]
+[ext_resource type="Texture2D" path="res://assets/items/Helmet RPG Icons/45.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_periodic")
 stacking_rule = &"shared_runtime_scaled"
 stacking_notes = "Surrounded means enemies within 220px. Each surrounding enemy grants one dodge layer; each copy adds +1% dodge per layer and +2 max layers. Layers stack multiplicatively by failure rate."
-effect_type = &"surrounded_stat_bonus"
+mode = &"surrounded_stat_bonus"
 stat_name = &"dodge_chance_multiplier"
 value = -0.03
 duration = 5.0
@@ -22,4 +23,5 @@ description = "Gain one dodge layer per surrounding enemy within 220px. Each lay
 category = &"defense"
 rarity = &"legendary"
 tags = Array[StringName]([&"Surrounded", &"Dodge"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

@@ -1,18 +1,18 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PermanentGrowthEffect.gd" id="2_growth"]
+[ext_resource type="Texture2D" path="res://assets/items/sigil-rpg-game-icons/34.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
-stacking_rule = &"shared_counter_cap_per_copy"
+script = ExtResource("2_growth")
 stacking_notes = "All copies share one kill counter; each copy adds +50 max HP cap."
-event_name = &"enemy_killed"
-effect_type = &"stat_bonus_every_n_kills_shared"
-stat_name = &"max_hp"
-value = 10.0
-duration = 50.0
-max_stacks = 5
+trigger = &"enemy_killed"
+growth_stat = &"max_hp"
+growth_value = 10.0
+trigger_value = 5.0
+round_cap = 50.0
+stack_round_cap_bonus = 50.0
 
 [resource]
 script = ExtResource("1_def")
@@ -22,4 +22,5 @@ description = "Every 5 enemy kills, gain +10 max HP. Max +50 max HP per copy."
 category = &"defense"
 rarity = &"rare"
 tags = Array[StringName]([&"OnKill", &"MaxHP", &"Scaling"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

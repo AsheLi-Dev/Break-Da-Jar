@@ -25,6 +25,7 @@ signal stat_changed(stat_name: StringName, value: Variant)
 @export var bleed_chance: float = 0.0
 @export var poison_chance: float = 0.0
 @export var lifesteal: float = 0.0
+@export var hp_regen_per_second: float = 0.0
 @export var dodge_chance_multiplier: float = 1.0
 @export var surrounded_enemy_count_bonus: int = 0
 @export var chain_lightning_chance: float = 0.0
@@ -150,6 +151,9 @@ func _add_stat(stat_name: StringName, value: float) -> void:
 		&"lifesteal":
 			lifesteal = maxf(0.0, lifesteal + value)
 			_emit_change(stat_name, lifesteal)
+		&"hp_regen_per_second":
+			hp_regen_per_second = maxf(0.0, hp_regen_per_second + value)
+			_emit_change(stat_name, hp_regen_per_second)
 		&"dodge_chance_multiplier":
 			dodge_chance_multiplier = clampf(dodge_chance_multiplier + value, 0.0, 1.0)
 			_emit_change(stat_name, dodge_chance_multiplier)
@@ -237,6 +241,8 @@ func _get_numeric_stat(stat_name: StringName) -> float:
 			return poison_chance
 		&"lifesteal":
 			return lifesteal
+		&"hp_regen_per_second":
+			return hp_regen_per_second
 		&"dodge_chance_multiplier":
 			return dodge_chance_multiplier
 		&"surrounded_enemy_count_bonus":

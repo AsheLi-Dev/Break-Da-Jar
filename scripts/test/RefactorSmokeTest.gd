@@ -31,6 +31,7 @@ func _run():
 	await process_frame
 
 	_test_main_scene_boot()
+	_test_pause_toggle()
 	_test_shop_phase()
 	_test_talent_tree()
 	_test_required_items_exist()
@@ -56,6 +57,8 @@ func _test_main_scene_boot() -> void:
 	player = battle_scene.get("player") as Player
 	_assert(player != null, "BattleScene spawns Player")
 	_assert(player != null and player.is_in_group("player"), "Player is in player group")
+	_assert(battle_scene.process_mode != Node.PROCESS_MODE_ALWAYS, "BattleScene remains pausable")
+	_assert(player != null and player.process_mode != Node.PROCESS_MODE_ALWAYS, "Player remains pausable")
 	_assert(battle_scene.get("hud_label") != null, "BattleScene creates HUD label")
 	_assert(battle_scene.get("camera") != null, "BattleScene creates player camera")
 
@@ -63,6 +66,26 @@ func _test_main_scene_boot() -> void:
 	var containers: Array = containers_value if containers_value is Array else []
 	_assert(containers.size() > 0, "Combat containers spawn")
 	_assert(int(battle_scene.get("phase")) == 0, "Battle starts in combat phase")
+
+
+func _test_pause_toggle() -> void:
+	if battle_scene == null:
+		return
+
+	var event := InputEventKey.new()
+	event.keycode = KEY_ESCAPE
+	event.pressed = true
+
+	battle_scene.call("_unhandled_input", event)
+	_assert(root.get_tree().paused, "Esc pauses BattleScene")
+	var pause_overlay := battle_scene.get("pause_overlay") as Control
+	_assert(pause_overlay != null and pause_overlay.visible, "Pause overlay becomes visible")
+	var pause_input_controller := battle_scene.get("pause_input_controller") as Node
+	_assert(pause_input_controller != null and pause_input_controller.process_mode == Node.PROCESS_MODE_ALWAYS, "Pause input controller keeps receiving Esc")
+
+	pause_input_controller.call("_unhandled_input", event)
+	_assert(not root.get_tree().paused, "Esc resumes BattleScene")
+	_assert(pause_overlay != null and not pause_overlay.visible, "Pause overlay hides after resume")
 
 
 func _test_shop_phase() -> void:

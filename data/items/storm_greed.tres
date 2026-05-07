@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
 [ext_resource type="Script" path="res://systems/items/effects/StatModifierEffect.gd" id="2_stat"]
+[ext_resource type="Texture2D" path="res://assets/items/rings-and-jewelry-game-icons/34.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_damage"]
 script = ExtResource("2_stat")
@@ -22,4 +23,5 @@ display_name = "Storm Greed"
 description = "Your Chain Lightning deals 150% ATK damage and can chain to containers. Extra copies add 100% ATK Chain Lightning damage."
 category = &"attack"
 rarity = &"legendary"
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_damage"), SubResource("Resource_containers")])

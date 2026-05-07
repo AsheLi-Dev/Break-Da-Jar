@@ -1,17 +1,18 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Script" path="res://systems/items/effects/PermanentGrowthEffect.gd" id="2_growth"]
+[ext_resource type="Texture2D" path="res://assets/items/sigil-rpg-game-icons/8.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
-script = ExtResource("2_event")
+script = ExtResource("2_growth")
 stacking_notes = "Each direct player container break grants +1 max HP. One shared listener; base round cap is +10 max HP, each extra copy adds +5 round cap."
-event_name = &"container_broken"
-effect_type = &"permanent_stat_player_container_round_cap"
-stat_name = &"max_hp"
-value = 1.0
-max_stacks = 10
-chain_count = 5
+trigger = &"container_broken"
+growth_stat = &"max_hp"
+growth_value = 1.0
+round_cap = 10.0
+stack_round_cap_bonus = 5.0
+requires_direct_player_attack = true
 
 [resource]
 script = ExtResource("1_def")
@@ -21,4 +22,5 @@ description = "Whenever you break a container, permanently gain +1 Max HP. Max +
 category = &"defense"
 rarity = &"rare"
 tags = Array[StringName]([&"Container", &"MaxHP", &"Scaling"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

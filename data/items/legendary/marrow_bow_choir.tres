@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/MissingHpSummonEffect.gd" id="2_summon"]
+[ext_resource type="PackedScene" path="res://scenes/summons/SkeletonArcher.tscn" id="3_archer"]
+[ext_resource type="Texture2D" path="res://assets/items/skull-and-bone-rpg-icons/6.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_summon")
+stacking_rule = &"shared_missing_hp_summon_scaled"
+stacking_notes = "One listener handles all copies. Each extra copy reduces missing HP required per Skeleton Archer by 10, down to a minimum of 10."
+summon_scene = ExtResource("3_archer")
+missing_hp_per_summon = 50.0
+stack_missing_hp_reduction = 10.0
+minimum_missing_hp_per_summon = 10.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"marrow_bow_choir"
+display_name = "Marrow Bow Choir"
+description = "For every 50 missing HP, summon a Skeleton Archer. Extra copies reduce the missing HP required by 10, down to 10. Each archer inherits 100% of your attack damage and 75% of your attack speed, follows you when no enemy is nearby, and fires at the nearest enemy."
+category = &"attack"
+rarity = &"legendary"
+tags = Array[StringName]([&"MissingHP", &"Summon", &"Attack"])
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])

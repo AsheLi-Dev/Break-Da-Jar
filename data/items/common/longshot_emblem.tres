@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
 [ext_resource type="Script" path="res://systems/items/effects/StatModifierEffect.gd" id="2_stat"]
+[ext_resource type="Texture2D" path="res://assets/items/mace-rpg-game-icons/15.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_stat")
@@ -17,4 +18,5 @@ description = "Deal 20% increased direct damage to distant enemies."
 category = &"attack"
 rarity = &"common"
 tags = Array[StringName]([&"Distant", &"DamageMultiplier"])
+icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])
