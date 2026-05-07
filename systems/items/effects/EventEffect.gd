@@ -47,6 +47,9 @@ var runtime_trigger_count: int = 0
 var kill_counter: int = 0
 var fireburst_deferred: bool = false
 var applied_shared_stat_bonus: float = 0.0
+var took_damage_this_round: bool = false
+var permanent_round_triggers: int = 0
+var permanent_round_bonus: float = 0.0
 var fire_dragons: Array[Node] = []
 var accumulated_hp_loss: float = 0.0
 var lightning_chain_texture: Texture2D
@@ -63,6 +66,9 @@ func apply_to(player: Node) -> void:
 	owner_player = player
 	if _is_shared_runtime_effect() and item_stack_index > 0:
 		return
+	if effect_type == EFFECT_TYPES.NO_DAMAGE_ROUND_PERMANENT_STAT:
+		_connect_no_damage_round_signals(player)
+		return
 	if _is_pickup_effect():
 		_apply_pickup_effect()
 		return
@@ -75,6 +81,8 @@ func apply_to(player: Node) -> void:
 	var callable := Callable(self, "_on_player_event")
 	if not player.is_connected(event_name, callable):
 		player.connect(event_name, callable)
+	if _uses_permanent_round_cap():
+		_connect_permanent_round_reset(player)
 	if effect_type == &"fire_dragons_per_max_hp":
 		_sync_fire_dragons(_get_owner_max_hp())
 
@@ -159,6 +167,190 @@ func _on_player_event(arg1: Variant = null, arg2: Variant = null, arg3: Variant 
 			_queue_extra_rare_shop_jar()
 		&"next_attack_damage_after_kill":
 			_next_attack_damage_after_kill()
+		&"permanent_stat_elite_kill":
+			_permanent_stat_elite_kill(arg1)
+		&"permanent_stat_player_container_round_cap":
+			_permanent_stat_player_container_round_cap(arg2)
+		&"permanent_stat_every_hp_lost_round_cap":
+			_permanent_stat_every_hp_lost_round_cap(float(arg1))
+		&"permanent_stat_shop_container_scaled":
+			_permanent_stat_shop_container_scaled()
+		&"permanent_stat_per_gold_on_round_start":
+			_permanent_stat_per_gold_on_round_start()
+		&"permanent_stat_attack_kill_crit_state_round_cap":
+			_permanent_stat_attack_kill_crit_state_round_cap(arg1)
+
+
+func _connect_no_damage_round_signals(player: Node) -> void:
+	for signal_name in [&"round_started", &"round_ended", &"damage_taken"]:
+		if not player.has_signal(signal_name):
+			push_warning("Player signal missing: %s" % signal_name)
+			return
+
+	if not player.is_connected(&"round_started", Callable(self, "_on_no_damage_round_started")):
+		player.connect(&"round_started", Callable(self, "_on_no_damage_round_started"))
+	if not player.is_connected(&"damage_taken", Callable(self, "_on_no_damage_round_damage_taken")):
+		player.connect(&"damage_taken", Callable(self, "_on_no_damage_round_damage_taken"))
+	if not player.is_connected(&"round_ended", Callable(self, "_on_no_damage_round_ended")):
+		player.connect(&"round_ended", Callable(self, "_on_no_damage_round_ended"))
+
+
+func _on_no_damage_round_started(_round_index: int = 0) -> void:
+	took_damage_this_round = false
+	permanent_round_triggers = 0
+	permanent_round_bonus = 0.0
+
+
+func _connect_permanent_round_reset(player: Node) -> void:
+	if not player.has_signal(&"round_started"):
+		push_warning("Player signal missing: round_started")
+		return
+	var callable := Callable(self, "_on_permanent_round_started")
+	if not player.is_connected(&"round_started", callable):
+		player.connect(&"round_started", callable)
+
+
+func _on_permanent_round_started(_round_index: int = 0) -> void:
+	permanent_round_triggers = 0
+	permanent_round_bonus = 0.0
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_EVERY_HP_LOST_ROUND_CAP:
+		accumulated_hp_loss = 0.0
+
+
+func _uses_permanent_round_cap() -> bool:
+	return [
+		EFFECT_TYPES.PERMANENT_STAT_PLAYER_CONTAINER_ROUND_CAP,
+		EFFECT_TYPES.PERMANENT_STAT_EVERY_HP_LOST_ROUND_CAP,
+		EFFECT_TYPES.PERMANENT_STAT_ATTACK_KILL_CRIT_STATE_ROUND_CAP,
+	].has(effect_type)
+
+
+func _on_no_damage_round_damage_taken(final_damage_taken: float) -> void:
+	if final_damage_taken > 0.0:
+		took_damage_this_round = true
+
+
+func _on_no_damage_round_ended() -> void:
+	if took_damage_this_round:
+		return
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return
+
+	_apply_permanent_stat(value)
+
+
+func _permanent_stat_elite_kill(enemy: Variant) -> void:
+	if _is_elite_enemy(enemy):
+		_apply_permanent_stat(value)
+
+
+func _permanent_stat_attack_kill_crit_state_round_cap(enemy: Variant) -> void:
+	var attack_info := _get_enemy_last_attack_info(enemy)
+	if not bool(attack_info.get("direct", false)):
+		return
+	if String(attack_info.get("source", "")) != "player_attack":
+		return
+
+	var was_critical := bool(attack_info.get("critical", false))
+	var wants_critical := chance >= 0.5
+	if was_critical != wants_critical:
+		return
+	_apply_permanent_stat_round_capped(value)
+
+
+func _permanent_stat_player_container_round_cap(info_value: Variant) -> void:
+	var info: Dictionary = info_value if info_value is Dictionary else {}
+	if not _is_direct_player_container_break(info):
+		return
+	if _consume_permanent_round_trigger():
+		_apply_permanent_stat(value)
+
+
+func _permanent_stat_every_hp_lost_round_cap(final_damage_taken: float) -> void:
+	if final_damage_taken <= 0.0:
+		return
+
+	var hp_per_trigger := maxf(value, 0.001)
+	accumulated_hp_loss += final_damage_taken
+	while accumulated_hp_loss >= hp_per_trigger and _consume_permanent_round_trigger():
+		accumulated_hp_loss -= hp_per_trigger
+		_apply_permanent_stat(damage_scale)
+
+
+func _permanent_stat_shop_container_scaled() -> void:
+	var bonus := value + damage_scale * float(maxi(_get_item_count() - 1, 0))
+	_apply_permanent_stat(bonus)
+
+
+func _permanent_stat_per_gold_on_round_start() -> void:
+	permanent_round_triggers = 0
+	permanent_round_bonus = 0.0
+	var scene := owner_player.get_tree().current_scene if owner_player != null else null
+	if scene == null:
+		return
+
+	var gold := int(scene.get("gold"))
+	var triggers := mini(int(floori(float(gold) / maxf(value, 0.001))), _get_permanent_round_cap())
+	if triggers <= 0:
+		return
+
+	permanent_round_triggers += triggers
+	_apply_permanent_stat(damage_scale * float(triggers))
+
+
+func _consume_permanent_round_trigger() -> bool:
+	if permanent_round_triggers >= _get_permanent_round_cap():
+		return false
+	permanent_round_triggers += 1
+	return true
+
+
+func _get_permanent_round_cap() -> int:
+	return maxi(max_stacks + maxi(_get_item_count() - 1, 0) * chain_count, 1)
+
+
+func _apply_permanent_stat_round_capped(amount: float) -> void:
+	var cap := _get_permanent_round_bonus_cap()
+	if permanent_round_bonus >= cap:
+		return
+
+	var effective_amount := minf(amount, cap - permanent_round_bonus)
+	if effective_amount <= 0.0:
+		return
+
+	permanent_round_bonus += effective_amount
+	_apply_permanent_stat(effective_amount)
+
+
+func _get_permanent_round_bonus_cap() -> float:
+	return value * float(max_stacks) + value * float(chain_count) * 0.5 * float(maxi(_get_item_count() - 1, 0))
+
+
+func _apply_permanent_stat(amount: float) -> void:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return
+
+	var stats: StatsComponent = owner_player.get_stats()
+	if stats != null:
+		stats.apply_modifier(stat_name, &"add", _get_permanent_growth_amount(amount))
+
+
+func _get_permanent_growth_amount(amount: float) -> float:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return amount
+	var stats := owner_player.get_stats() as StatsComponent
+	if stats == null or stats.permanent_growth_bonus_per_unique <= 0.0:
+		return amount
+	var unique_count := 0
+	if owner_player.has_method("get_unique_permanent_growth_item_count"):
+		unique_count = int(owner_player.get_unique_permanent_growth_item_count())
+	if unique_count <= 0:
+		return amount
+
+	var multiplier := 1.0 + stats.permanent_growth_bonus_per_unique * float(unique_count)
+	if absf(amount) < 1.0:
+		return floorf(amount * multiplier * 100.0) / 100.0
+	return floorf(amount * multiplier)
 
 
 func _start_cooldown_timer() -> void:
@@ -187,6 +379,8 @@ func _is_pickup_effect() -> bool:
 		return true
 	if effect_type == EFFECT_TYPES.STATIONARY_ATTACK_SPEED:
 		return true
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_STATIONARY_ROUND_CAP:
+		return true
 	if effect_type == EFFECT_TYPES.AUTO_HOLY_FLAME_LASER:
 		return true
 	if _is_periodic_runtime_effect():
@@ -207,6 +401,8 @@ func _apply_pickup_effect() -> void:
 		&"surrounded_stat_bonus":
 			_add_runtime_effect_node()
 		&"stationary_attack_speed":
+			_add_runtime_effect_node()
+		&"permanent_stat_stationary_round_cap":
 			_add_runtime_effect_node()
 		&"auto_holy_flame_laser":
 			_add_runtime_effect_node()
@@ -234,6 +430,7 @@ func _is_shared_runtime_effect() -> bool:
 	return [
 		EFFECT_TYPES.NEARBY_ENEMY_ATTACK_SPEED,
 		EFFECT_TYPES.STATIONARY_ATTACK_SPEED,
+		EFFECT_TYPES.PERMANENT_STAT_STATIONARY_ROUND_CAP,
 		EFFECT_TYPES.SURROUNDED_STAT_BONUS,
 		EFFECT_TYPES.AUTO_HOLY_FLAME_LASER,
 	].has(effect_type) or _is_periodic_runtime_effect()
@@ -551,6 +748,16 @@ func _uses_shared_stack_listener() -> bool:
 		return true
 	if stacking_rule == &"summon_count_by_stat_per_copy":
 		return true
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_PLAYER_CONTAINER_ROUND_CAP:
+		return true
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_EVERY_HP_LOST_ROUND_CAP:
+		return true
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_ATTACK_KILL_CRIT_STATE_ROUND_CAP:
+		return true
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_SHOP_CONTAINER_SCALED:
+		return true
+	if effect_type == EFFECT_TYPES.PERMANENT_STAT_PER_GOLD_ON_ROUND_START:
+		return true
 	if effect_type == EFFECT_TYPES.STAT_BONUS_EVERY_N_KILLS_SHARED:
 		return true
 	if effect_type == EFFECT_TYPES.LOSE_CURRENT_HP_PERCENT_THEN_HEAL_OVER_TIME:
@@ -669,7 +876,7 @@ func _stat_bonus_every_n_kills_shared() -> void:
 
 	var triggers: int = int(kill_counter / threshold)
 	kill_counter %= threshold
-	var wanted_bonus: float = applied_shared_stat_bonus + value * float(triggers)
+	var wanted_bonus: float = applied_shared_stat_bonus + _get_permanent_growth_amount(value) * float(triggers)
 	var cap: float = _get_shared_stat_bonus_cap()
 	_set_shared_stat_bonus(minf(wanted_bonus, cap))
 
@@ -985,6 +1192,20 @@ func _get_initial_chain_excludes(arg1: Variant) -> Array:
 
 func _enemy_has_status(enemy: Variant, id: StringName) -> bool:
 	return enemy != null and enemy.has_method("has_status") and enemy.has_status(id)
+
+
+func _is_elite_enemy(enemy: Variant) -> bool:
+	var enemy_base := enemy as EnemyBase
+	if enemy_base != null:
+		return enemy_base.is_elite
+	return enemy is EliteBrute
+
+
+func _get_enemy_last_attack_info(enemy: Variant) -> Dictionary:
+	if enemy == null:
+		return {}
+	var value: Variant = enemy.get("last_attack_info") if enemy is Object else null
+	return value if value is Dictionary else {}
 
 
 func _get_enemies_near(origin: Vector2, search_radius: float, exclude: Array = []) -> Array[Node2D]:

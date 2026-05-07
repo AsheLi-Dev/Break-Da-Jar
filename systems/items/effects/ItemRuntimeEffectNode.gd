@@ -32,6 +32,7 @@ var internal_cooldown: float = 0.0
 var applied_bonus: float = 0.0
 var stationary_time: float = 0.0
 var linger_remaining: float = 0.0
+var permanent_round_triggers: int = 0
 var last_position: Vector2 = Vector2.ZERO
 var periodic_remaining: float = 0.0
 var active_trap: Node
@@ -71,6 +72,8 @@ func setup(
 	var owner_2d := owner_player as Node2D
 	if owner_2d != null:
 		last_position = owner_2d.global_position
+	if effect_type == &"permanent_stat_stationary_round_cap":
+		_connect_round_started()
 
 
 func _process(delta: float) -> void:
@@ -85,6 +88,8 @@ func _process(delta: float) -> void:
 			_update_surrounded_stat_bonus()
 		&"stationary_attack_speed":
 			_update_stationary_attack_speed(delta)
+		&"permanent_stat_stationary_round_cap":
+			_update_permanent_stationary_stat(delta)
 		&"periodic_timed_stat_buff":
 			_update_periodic_timed_stat_buff(delta)
 		&"auto_holy_flame_laser":
@@ -151,6 +156,68 @@ func _update_stationary_attack_speed(delta: float) -> void:
 	if active:
 		wanted_bonus = value * float(_get_item_count())
 	_set_dynamic_bonus(wanted_bonus)
+
+
+func _update_permanent_stationary_stat(delta: float) -> void:
+	var owner_2d := owner_player as Node2D
+	if owner_2d == null:
+		return
+
+	var moved: bool = owner_2d.global_position.distance_squared_to(last_position) > 1.0
+	last_position = owner_2d.global_position
+	if moved:
+		stationary_time = 0.0
+		return
+
+	stationary_time += delta
+	while stationary_time >= duration and permanent_round_triggers < _get_permanent_round_cap():
+		stationary_time -= duration
+		permanent_round_triggers += 1
+		_apply_permanent_stat(value)
+
+
+func _connect_round_started() -> void:
+	if owner_player == null or not owner_player.has_signal(&"round_started"):
+		return
+	var callable := Callable(self, "_on_round_started")
+	if not owner_player.is_connected(&"round_started", callable):
+		owner_player.connect(&"round_started", callable)
+
+
+func _on_round_started(_round_index: int = 0) -> void:
+	permanent_round_triggers = 0
+	stationary_time = 0.0
+
+
+func _get_permanent_round_cap() -> int:
+	return maxi(max_stacks + maxi(_get_item_count() - 1, 0) * int(round(damage_scale)), 1)
+
+
+func _apply_permanent_stat(amount: float) -> void:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return
+
+	var stats: StatsComponent = owner_player.get_stats()
+	if stats != null:
+		stats.apply_modifier(stat_name, &"add", _get_permanent_growth_amount(amount))
+
+
+func _get_permanent_growth_amount(amount: float) -> float:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return amount
+	var stats := owner_player.get_stats() as StatsComponent
+	if stats == null or stats.permanent_growth_bonus_per_unique <= 0.0:
+		return amount
+	var unique_count := 0
+	if owner_player.has_method("get_unique_permanent_growth_item_count"):
+		unique_count = int(owner_player.get_unique_permanent_growth_item_count())
+	if unique_count <= 0:
+		return amount
+
+	var multiplier := 1.0 + stats.permanent_growth_bonus_per_unique * float(unique_count)
+	if absf(amount) < 1.0:
+		return floorf(amount * multiplier * 100.0) / 100.0
+	return floorf(amount * multiplier)
 
 
 func _update_periodic_timed_stat_buff(delta: float) -> void:

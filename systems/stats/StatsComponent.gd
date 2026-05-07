@@ -32,6 +32,7 @@ signal stat_changed(stat_name: StringName, value: Variant)
 @export var chain_lightning_damage_scale_override: float = -1.0
 @export var chain_lightning_can_target_containers: bool = false
 @export var fireball_poison_stacks: int = 0
+@export var permanent_growth_bonus_per_unique: float = 0.0
 
 
 func apply_modifier(stat_name: StringName, operation: StringName, value: float) -> void:
@@ -170,6 +171,9 @@ func _add_stat(stat_name: StringName, value: float) -> void:
 		&"fireball_poison_stacks":
 			fireball_poison_stacks += int(round(value))
 			_emit_change(stat_name, fireball_poison_stacks)
+		&"permanent_growth_bonus_per_unique":
+			permanent_growth_bonus_per_unique = maxf(0.0, permanent_growth_bonus_per_unique + value)
+			_emit_change(stat_name, permanent_growth_bonus_per_unique)
 		_:
 			push_warning("Unknown stat modifier: %s" % stat_name)
 
@@ -245,6 +249,8 @@ func _get_numeric_stat(stat_name: StringName) -> float:
 			return chain_lightning_damage_scale_override
 		&"fireball_poison_stacks":
 			return fireball_poison_stacks
+		&"permanent_growth_bonus_per_unique":
+			return permanent_growth_bonus_per_unique
 		_:
 			return 0.0
 

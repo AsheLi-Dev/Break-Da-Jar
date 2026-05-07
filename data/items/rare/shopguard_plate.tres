@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_notes = "One shared listener. Breaking a shop container grants +5 Defense, plus +3 Defense for each extra copy."
+event_name = &"shop_container_broken"
+effect_type = &"permanent_stat_shop_container_scaled"
+stat_name = &"defense"
+value = 5.0
+damage_scale = 3.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"shopguard_plate"
+display_name = "Shopguard Plate"
+description = "Whenever you break a shop jar, permanently gain +5 Defense. Extra copies add +3 Defense to future gains."
+category = &"defense"
+rarity = &"rare"
+tags = Array[StringName]([&"Shop", &"Container", &"Defense", &"Scaling"])
+effects = Array[Resource]([SubResource("Resource_effect")])

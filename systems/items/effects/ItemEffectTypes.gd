@@ -24,6 +24,14 @@ const LOSE_CURRENT_HP_PERCENT_THEN_HEAL_OVER_TIME := &"lose_current_hp_percent_t
 const MISSING_HP_STAT_BONUS := &"missing_hp_stat_bonus"
 const NEARBY_ENEMY_ATTACK_SPEED := &"nearby_enemy_attack_speed"
 const NEXT_ATTACK_DAMAGE_AFTER_KILL := &"next_attack_damage_after_kill"
+const NO_DAMAGE_ROUND_PERMANENT_STAT := &"no_damage_round_permanent_stat"
+const PERMANENT_STAT_ELITE_KILL := &"permanent_stat_elite_kill"
+const PERMANENT_STAT_EVERY_HP_LOST_ROUND_CAP := &"permanent_stat_every_hp_lost_round_cap"
+const PERMANENT_STAT_PER_GOLD_ON_ROUND_START := &"permanent_stat_per_gold_on_round_start"
+const PERMANENT_STAT_PLAYER_CONTAINER_ROUND_CAP := &"permanent_stat_player_container_round_cap"
+const PERMANENT_STAT_SHOP_CONTAINER_SCALED := &"permanent_stat_shop_container_scaled"
+const PERMANENT_STAT_STATIONARY_ROUND_CAP := &"permanent_stat_stationary_round_cap"
+const PERMANENT_STAT_ATTACK_KILL_CRIT_STATE_ROUND_CAP := &"permanent_stat_attack_kill_crit_state_round_cap"
 const PERIODIC_AUTO_FIREBALL := &"periodic_auto_fireball"
 const PERIODIC_BLOOD_BLADE := &"periodic_blood_blade"
 const PERIODIC_BLOOD_CLAW := &"periodic_blood_claw"
@@ -71,6 +79,14 @@ static func all() -> Array[StringName]:
 		MISSING_HP_STAT_BONUS,
 		NEARBY_ENEMY_ATTACK_SPEED,
 		NEXT_ATTACK_DAMAGE_AFTER_KILL,
+		NO_DAMAGE_ROUND_PERMANENT_STAT,
+		PERMANENT_STAT_ELITE_KILL,
+		PERMANENT_STAT_EVERY_HP_LOST_ROUND_CAP,
+		PERMANENT_STAT_PER_GOLD_ON_ROUND_START,
+		PERMANENT_STAT_PLAYER_CONTAINER_ROUND_CAP,
+		PERMANENT_STAT_SHOP_CONTAINER_SCALED,
+		PERMANENT_STAT_STATIONARY_ROUND_CAP,
+		PERMANENT_STAT_ATTACK_KILL_CRIT_STATE_ROUND_CAP,
 		PERIODIC_AUTO_FIREBALL,
 		PERIODIC_BLOOD_BLADE,
 		PERIODIC_BLOOD_CLAW,
@@ -110,6 +126,7 @@ static func is_runtime_monitor(effect_type: StringName) -> bool:
 	return [
 		NEARBY_ENEMY_ATTACK_SPEED,
 		STATIONARY_ATTACK_SPEED,
+		PERMANENT_STAT_STATIONARY_ROUND_CAP,
 		SURROUNDED_STAT_BONUS,
 		AUTO_HOLY_FLAME_LASER,
 		PERIODIC_TIMED_STAT_BUFF,

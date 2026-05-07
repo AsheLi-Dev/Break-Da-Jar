@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_notes = "At round start, gain +1 max HP per 10 gold held. Base trigger cap is 10, each extra copy adds +5 trigger cap."
+event_name = &"round_started"
+effect_type = &"permanent_stat_per_gold_on_round_start"
+stat_name = &"max_hp"
+value = 10.0
+damage_scale = 1.0
+max_stacks = 10
+chain_count = 5
+
+[resource]
+script = ExtResource("1_def")
+id = &"goldroot_totem"
+display_name = "Goldroot Totem"
+description = "At the start of each round, for every 10 gold you have, permanently gain +1 Max HP. Max +10 Max HP each time; extra copies add +5 to the cap."
+category = &"defense"
+rarity = &"legendary"
+tags = Array[StringName]([&"Economy", &"RoundStart", &"MaxHP", &"Scaling"])
+effects = Array[Resource]([SubResource("Resource_effect")])

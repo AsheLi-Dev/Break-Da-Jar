@@ -388,6 +388,10 @@ func get_item_count(item_id: StringName) -> int:
 	return inventory.get_item_count(item_id) if inventory != null else 0
 
 
+func get_unique_permanent_growth_item_count() -> int:
+	return inventory.get_unique_permanent_growth_item_count() if inventory != null else 0
+
+
 func add_shop_price_multiplier(multiplier: float) -> void:
 	shop_price_multiplier *= maxf(multiplier, 0.01)
 	if get_tree().current_scene != null and get_tree().current_scene.has_method("refresh_shop_container_prices"):
