@@ -35,6 +35,10 @@ const CHARACTER_CARD_WIDTH := 282.0
 const CHARACTER_CARD_POSITION := Vector2(1608.0, 24.0)
 const CHARACTER_CARD_TOP_HEIGHT := 150.0
 const CHARACTER_CARD_ICON_SIZE := 34.0
+const ITEM_DETAIL_CARD_WIDTH := 282.0
+const ITEM_DETAIL_CARD_POSITION := Vector2(1304.0, 24.0)
+const ITEM_DETAIL_CARD_ICON_SIZE := 104.0
+const ITEM_DETAIL_TEXT_BOX_MARGIN := Vector2(28.0, 18.0)
 
 const MELEE_ZOMBIE_GOLD := 3
 const ACID_ZOMBIE_GOLD := 4
@@ -63,6 +67,10 @@ const SHOP_INSUFFICIENT_GOLD_SFX: AudioStream = preload("res://assets/sfx/Error_
 const TALENT_UNLOCK_SFX: AudioStream = preload("res://assets/sfx/Confirm_7.wav")
 const ARENA_TEXTURE: Texture2D = preload("res://assets/map/arena tiles.png")
 const CHARACTER_CARD_TEXTURE: Texture2D = preload("res://assets/ui/Gold Blue Card.png")
+const COMMON_ITEM_CARD_TEXTURE: Texture2D = preload("res://assets/ui/Green Card.png")
+const RARE_ITEM_CARD_TEXTURE: Texture2D = preload("res://assets/ui/Golden Card.png")
+const LEGENDARY_ITEM_CARD_TEXTURE: Texture2D = preload("res://assets/ui/Gold Red Card.png")
+const ITEM_DETAIL_TEXT_BOX_TEXTURE: Texture2D = preload("res://assets/ui/Passive Box.png")
 const URN_SHADOW_SCENE: PackedScene = preload("res://scenes/containers/UrnShadow.tscn")
 const BARREL_SHADOW_SCENE: PackedScene = preload("res://scenes/containers/BarrelShadow.tscn")
 const SKULL_DECOR_TEXTURES: Array[Texture2D] = [
@@ -125,6 +133,13 @@ var status_label: Label
 var character_card: Control
 var character_card_stats_label: Label
 var character_card_items_grid: GridContainer
+var character_card_items_signature: String = ""
+var item_detail_card: Control
+var item_detail_card_background: TextureRect
+var item_detail_card_icon: TextureRect
+var item_detail_card_text_box: TextureRect
+var item_detail_card_name_label: Label
+var item_detail_card_description_label: Label
 var pause_overlay: Control
 var pause_input_controller: Node
 var talent_tree_ui: CanvasLayer
@@ -968,6 +983,7 @@ func _create_hud() -> void:
 	status_panel.add_child(status_label)
 
 	_create_character_card(canvas)
+	_create_item_detail_card(canvas)
 	_create_pause_overlay(canvas)
 	_create_talent_tree_ui()
 
@@ -981,7 +997,7 @@ func _create_character_card(canvas: CanvasLayer) -> void:
 	character_card.name = "CharacterCard"
 	character_card.position = CHARACTER_CARD_POSITION
 	character_card.size = card_size
-	character_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card.mouse_filter = Control.MOUSE_FILTER_PASS
 	canvas.add_child(character_card)
 
 	var background := TextureRect.new()
@@ -1026,7 +1042,7 @@ func _create_character_card(canvas: CanvasLayer) -> void:
 	scroll.size = Vector2(card_size.x - 48, card_size.y - CHARACTER_CARD_TOP_HEIGHT - 70)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	character_card.add_child(scroll)
 
 	character_card_items_grid = GridContainer.new()
@@ -1034,8 +1050,77 @@ func _create_character_card(canvas: CanvasLayer) -> void:
 	character_card_items_grid.columns = 5
 	character_card_items_grid.add_theme_constant_override("h_separation", 7)
 	character_card_items_grid.add_theme_constant_override("v_separation", 7)
-	character_card_items_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card_items_grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll.add_child(character_card_items_grid)
+
+
+func _create_item_detail_card(canvas: CanvasLayer) -> void:
+	var texture_size := COMMON_ITEM_CARD_TEXTURE.get_size()
+	var card_height := ITEM_DETAIL_CARD_WIDTH * texture_size.y / texture_size.x
+	var card_size := Vector2(ITEM_DETAIL_CARD_WIDTH, card_height)
+
+	item_detail_card = Control.new()
+	item_detail_card.name = "ItemDetailCard"
+	item_detail_card.visible = false
+	item_detail_card.position = ITEM_DETAIL_CARD_POSITION
+	item_detail_card.size = card_size
+	item_detail_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(item_detail_card)
+
+	item_detail_card_background = TextureRect.new()
+	item_detail_card_background.name = "Background"
+	item_detail_card_background.position = Vector2.ZERO
+	item_detail_card_background.size = card_size
+	item_detail_card_background.stretch_mode = TextureRect.STRETCH_SCALE
+	item_detail_card_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item_detail_card.add_child(item_detail_card_background)
+
+	item_detail_card_icon = TextureRect.new()
+	item_detail_card_icon.name = "Icon"
+	item_detail_card_icon.position = (card_size - Vector2(ITEM_DETAIL_CARD_ICON_SIZE, ITEM_DETAIL_CARD_ICON_SIZE)) * 0.5
+	item_detail_card_icon.size = Vector2(ITEM_DETAIL_CARD_ICON_SIZE, ITEM_DETAIL_CARD_ICON_SIZE)
+	item_detail_card_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	item_detail_card_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	item_detail_card_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	item_detail_card_icon.material = ITEM_ICON_DARK_PIXEL_MATERIAL
+	item_detail_card_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item_detail_card.add_child(item_detail_card_icon)
+
+	var text_box_top := card_size.y * 0.63
+	var text_box_position := Vector2(ITEM_DETAIL_TEXT_BOX_MARGIN.x, text_box_top)
+	var text_box_size := Vector2(
+		card_size.x - ITEM_DETAIL_TEXT_BOX_MARGIN.x * 2.0,
+		card_size.y - text_box_top - ITEM_DETAIL_TEXT_BOX_MARGIN.y
+	)
+
+	item_detail_card_text_box = TextureRect.new()
+	item_detail_card_text_box.name = "TextBox"
+	item_detail_card_text_box.texture = ITEM_DETAIL_TEXT_BOX_TEXTURE
+	item_detail_card_text_box.position = text_box_position
+	item_detail_card_text_box.size = text_box_size
+	item_detail_card_text_box.stretch_mode = TextureRect.STRETCH_SCALE
+	item_detail_card_text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item_detail_card.add_child(item_detail_card_text_box)
+
+	item_detail_card_name_label = Label.new()
+	item_detail_card_name_label.name = "Name"
+	item_detail_card_name_label.position = text_box_position + Vector2(16, 13)
+	item_detail_card_name_label.size = Vector2(text_box_size.x - 32, 30)
+	item_detail_card_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	item_detail_card_name_label.add_theme_font_size_override("font_size", 18)
+	item_detail_card_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item_detail_card.add_child(item_detail_card_name_label)
+
+	item_detail_card_description_label = Label.new()
+	item_detail_card_description_label.name = "Description"
+	item_detail_card_description_label.position = text_box_position + Vector2(18, 46)
+	item_detail_card_description_label.size = Vector2(text_box_size.x - 36, text_box_size.y - 58)
+	item_detail_card_description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	item_detail_card_description_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	item_detail_card_description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	item_detail_card_description_label.add_theme_font_size_override("font_size", 14)
+	item_detail_card_description_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item_detail_card.add_child(item_detail_card_description_label)
 
 
 func _create_pause_overlay(canvas: CanvasLayer) -> void:
@@ -1262,6 +1347,12 @@ func _update_character_card() -> void:
 
 
 func _rebuild_character_card_items() -> void:
+	var signature := _get_character_card_items_signature()
+	if signature == character_card_items_signature:
+		return
+
+	character_card_items_signature = signature
+	_hide_item_detail_card()
 	for child in character_card_items_grid.get_children():
 		child.queue_free()
 
@@ -1283,7 +1374,9 @@ func _rebuild_character_card_items() -> void:
 func _create_character_card_item_icon(item: ItemDefinition, count: int) -> Control:
 	var cell := Control.new()
 	cell.custom_minimum_size = Vector2(CHARACTER_CARD_ICON_SIZE, CHARACTER_CARD_ICON_SIZE)
-	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.mouse_filter = Control.MOUSE_FILTER_STOP
+	cell.mouse_entered.connect(_show_item_detail_card.bind(item))
+	cell.mouse_exited.connect(_hide_item_detail_card)
 
 	var icon := TextureRect.new()
 	icon.texture = item.icon
@@ -1311,6 +1404,65 @@ func _create_character_card_item_icon(item: ItemDefinition, count: int) -> Contr
 		cell.add_child(count_label)
 
 	return cell
+
+
+func _get_character_card_items_signature() -> String:
+	if not is_instance_valid(player) or player.inventory == null:
+		return ""
+
+	var parts: Array[String] = []
+	var item_ids: Array = player.inventory.item_definitions_by_id.keys()
+	item_ids.sort()
+	for item_id in item_ids:
+		var count := player.inventory.get_item_count(item_id)
+		if count > 0:
+			parts.append("%s:%d" % [String(item_id), count])
+	return "|".join(parts)
+
+
+func _show_item_detail_card(item: ItemDefinition) -> void:
+	if item == null or item_detail_card == null:
+		return
+
+	var rarity := String(item.rarity)
+	item_detail_card_background.texture = _get_item_detail_card_texture(rarity)
+	item_detail_card_icon.texture = item.icon
+	item_detail_card_name_label.text = item.display_name
+	item_detail_card_description_label.text = item.description
+	_apply_item_detail_card_text_colors(rarity)
+	item_detail_card.visible = true
+
+
+func _hide_item_detail_card() -> void:
+	if item_detail_card != null:
+		item_detail_card.visible = false
+
+
+func _get_item_detail_card_texture(rarity: String) -> Texture2D:
+	match rarity:
+		"legendary":
+			return LEGENDARY_ITEM_CARD_TEXTURE
+		"rare":
+			return RARE_ITEM_CARD_TEXTURE
+		_:
+			return COMMON_ITEM_CARD_TEXTURE
+
+
+func _apply_item_detail_card_text_colors(rarity: String) -> void:
+	var main_color := Color(0.86, 0.78, 0.55)
+	var body_color := Color(0.84, 0.78, 0.66)
+	var outline_color := Color(0.03, 0.02, 0.012)
+	if rarity == "rare":
+		main_color = Color(0.21, 0.14, 0.06)
+		body_color = Color(0.23, 0.17, 0.09)
+		outline_color = Color(0.92, 0.82, 0.58, 0.0)
+
+	item_detail_card_name_label.add_theme_color_override("font_color", main_color)
+	item_detail_card_name_label.add_theme_color_override("font_outline_color", outline_color)
+	item_detail_card_name_label.add_theme_constant_override("outline_size", 3)
+	item_detail_card_description_label.add_theme_color_override("font_color", body_color)
+	item_detail_card_description_label.add_theme_color_override("font_outline_color", outline_color)
+	item_detail_card_description_label.add_theme_constant_override("outline_size", 2)
 
 
 func _check_defeat() -> void:
