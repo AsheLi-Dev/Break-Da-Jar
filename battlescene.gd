@@ -1,15 +1,15 @@
 extends Node2D
 
 const SCREEN_SIZE := Vector2(1920, 1080)
-const PLAY_AREA_SIZE := Vector2(1536, 1536)
+const PLAY_AREA_SIZE := Vector2(1280, 1280)
 const PLAY_AREA_CENTER := Vector2(960, 540)
 const PLAY_AREA_RECT := Rect2(PLAY_AREA_CENTER - PLAY_AREA_SIZE * 0.5, PLAY_AREA_SIZE)
-const CAMERA_VISIBLE_SIZE := Vector2(1600, 900)
+const CAMERA_VISIBLE_SIZE := Vector2(1152, 648)
 const CAMERA_ZOOM := Vector2(SCREEN_SIZE.x / CAMERA_VISIBLE_SIZE.x, SCREEN_SIZE.y / CAMERA_VISIBLE_SIZE.y)
 const PLAYER_POSITION := PLAY_AREA_CENTER + Vector2(-500, 0)
 const ARENA_TILE_SIZE := Vector2i(32, 32)
 const ARENA_TILE_SCALE := 2.0
-const ARENA_GRID_SIZE := Vector2i(24, 24)
+const ARENA_GRID_SIZE := Vector2i(20, 20)
 const ARENA_TILE_SOURCE_ID := 0
 const CHARACTER_SPRITE_SCALE := Vector2(2.0, 2.0)
 const MAX_ROUNDS := 10
@@ -31,6 +31,10 @@ const SHOP_CONTAINER_COLUMNS := 3
 const SHOP_CONTAINER_START := PLAY_AREA_CENTER + Vector2(-280, 40)
 const SHOP_CONTAINER_SPACING := Vector2(280, 240)
 const SHOP_CONTAINER_MAX_HP := 12.0
+const CHARACTER_CARD_WIDTH := 282.0
+const CHARACTER_CARD_POSITION := Vector2(1608.0, 24.0)
+const CHARACTER_CARD_TOP_HEIGHT := 150.0
+const CHARACTER_CARD_ICON_SIZE := 34.0
 
 const MELEE_ZOMBIE_GOLD := 3
 const ACID_ZOMBIE_GOLD := 4
@@ -48,6 +52,8 @@ const UNDEAD_DARK_KNIGHT_SCENE: PackedScene = preload("res://scenes/enemies/Unde
 const CAMERA_SHAKE_SCRIPT := preload("res://systems/combat/CameraShake.gd")
 const CONTAINER_CATALOG := preload("res://systems/battle/ContainerCatalog.gd")
 const REWARD_PICKUP_SCRIPT := preload("res://systems/items/RewardPickup.gd")
+const SHOP_ITEM_REWARD_VISUAL_SCRIPT := preload("res://systems/items/ShopItemRewardVisual.gd")
+const ITEM_ICON_DARK_PIXEL_MATERIAL: ShaderMaterial = preload("res://systems/items/ui/ItemIconDarkPixelMaterial.tres")
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const SHOP_RULES := preload("res://systems/battle/ShopRules.gd")
 const TALENT_TREE_UI_CONTROLLER := preload("res://systems/battle/TalentTreeUiController.gd")
@@ -56,6 +62,7 @@ const BATTLE_BGM: AudioStream = preload("res://assets/sfx/junipersona-to-the-dea
 const SHOP_INSUFFICIENT_GOLD_SFX: AudioStream = preload("res://assets/sfx/Error_1.wav")
 const TALENT_UNLOCK_SFX: AudioStream = preload("res://assets/sfx/Confirm_7.wav")
 const ARENA_TEXTURE: Texture2D = preload("res://assets/map/arena tiles.png")
+const CHARACTER_CARD_TEXTURE: Texture2D = preload("res://assets/ui/Gold Blue Card.png")
 const URN_SHADOW_SCENE: PackedScene = preload("res://scenes/containers/UrnShadow.tscn")
 const BARREL_SHADOW_SCENE: PackedScene = preload("res://scenes/containers/BarrelShadow.tscn")
 const SKULL_DECOR_TEXTURES: Array[Texture2D] = [
@@ -115,6 +122,9 @@ var camera: Camera2D
 var hud_label: Label
 var status_panel: Panel
 var status_label: Label
+var character_card: Control
+var character_card_stats_label: Label
+var character_card_items_grid: GridContainer
 var pause_overlay: Control
 var pause_input_controller: Node
 var talent_tree_ui: CanvasLayer
@@ -338,6 +348,7 @@ func _spawn_player() -> void:
 	_scale_actor_body(player)
 	player.movement_bounds_enabled = true
 	player.movement_bounds = PLAY_AREA_RECT
+	player.hp_changed.connect(_on_player_hp_changed)
 	player.experience_changed.connect(_on_player_progress_changed)
 	player.talent_points_changed.connect(_on_player_talent_points_changed)
 	player.talent_unlocked.connect(_on_player_talent_unlocked)
@@ -664,11 +675,31 @@ func _on_shop_container_broken(container: BreakableContainer, _attack_info: Dict
 	var rarity: StringName = _roll_item_rarity_for_tier(tier)
 	var item := _roll_shop_item(category, rarity)
 	if item != null and is_instance_valid(player):
-		player.add_item(item)
-		hud_message = "Received %s." % item.display_name
+		_spawn_shop_item_reward(item, container.global_position)
+		hud_message = "Bought %s." % item.display_name
 	else:
 		hud_message = "The shop jar was empty."
 	shop_container_data.erase(container)
+	_update_hud()
+
+
+func _spawn_shop_item_reward(item: ItemDefinition, spawn_position: Vector2, always_process: bool = false) -> void:
+	if item == null or not is_instance_valid(player):
+		return
+
+	var reward_visual := SHOP_ITEM_REWARD_VISUAL_SCRIPT.new()
+	if always_process:
+		reward_visual.process_mode = Node.PROCESS_MODE_ALWAYS
+	reward_visual.setup(item, spawn_position, player, Callable(self, "_collect_shop_item_reward"))
+	add_child(reward_visual)
+
+
+func _collect_shop_item_reward(item: ItemDefinition) -> void:
+	if item == null or not is_instance_valid(player):
+		return
+
+	player.add_item(item)
+	hud_message = "Received %s." % item.display_name
 	_update_hud()
 
 
@@ -936,8 +967,75 @@ func _create_hud() -> void:
 	status_label.size = Vector2(492, 180)
 	status_panel.add_child(status_label)
 
+	_create_character_card(canvas)
 	_create_pause_overlay(canvas)
 	_create_talent_tree_ui()
+
+
+func _create_character_card(canvas: CanvasLayer) -> void:
+	var texture_size := CHARACTER_CARD_TEXTURE.get_size()
+	var card_height := CHARACTER_CARD_WIDTH * texture_size.y / texture_size.x
+	var card_size := Vector2(CHARACTER_CARD_WIDTH, card_height)
+
+	character_card = Control.new()
+	character_card.name = "CharacterCard"
+	character_card.position = CHARACTER_CARD_POSITION
+	character_card.size = card_size
+	character_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(character_card)
+
+	var background := TextureRect.new()
+	background.name = "Background"
+	background.texture = CHARACTER_CARD_TEXTURE
+	background.position = Vector2.ZERO
+	background.size = card_size
+	background.stretch_mode = TextureRect.STRETCH_SCALE
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card.add_child(background)
+
+	character_card_stats_label = Label.new()
+	character_card_stats_label.name = "Stats"
+	character_card_stats_label.position = Vector2(26, 28)
+	character_card_stats_label.size = Vector2(card_size.x - 52, CHARACTER_CARD_TOP_HEIGHT - 34)
+	character_card_stats_label.add_theme_color_override("font_color", Color(0.88, 0.82, 0.62))
+	character_card_stats_label.add_theme_font_size_override("font_size", 17)
+	character_card_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card.add_child(character_card_stats_label)
+
+	var separator := ColorRect.new()
+	separator.name = "Separator"
+	separator.color = Color(0.72, 0.58, 0.32, 0.72)
+	separator.position = Vector2(24, CHARACTER_CARD_TOP_HEIGHT)
+	separator.size = Vector2(card_size.x - 48, 2)
+	separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card.add_child(separator)
+
+	var equipment_label := Label.new()
+	equipment_label.name = "EquipmentLabel"
+	equipment_label.text = "Equipment"
+	equipment_label.position = Vector2(26, CHARACTER_CARD_TOP_HEIGHT + 12)
+	equipment_label.size = Vector2(card_size.x - 52, 24)
+	equipment_label.add_theme_color_override("font_color", Color(0.88, 0.82, 0.62))
+	equipment_label.add_theme_font_size_override("font_size", 15)
+	equipment_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card.add_child(equipment_label)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "EquipmentScroll"
+	scroll.position = Vector2(24, CHARACTER_CARD_TOP_HEIGHT + 42)
+	scroll.size = Vector2(card_size.x - 48, card_size.y - CHARACTER_CARD_TOP_HEIGHT - 70)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_card.add_child(scroll)
+
+	character_card_items_grid = GridContainer.new()
+	character_card_items_grid.name = "EquipmentGrid"
+	character_card_items_grid.columns = 5
+	character_card_items_grid.add_theme_constant_override("h_separation", 7)
+	character_card_items_grid.add_theme_constant_override("v_separation", 7)
+	character_card_items_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll.add_child(character_card_items_grid)
 
 
 func _create_pause_overlay(canvas: CanvasLayer) -> void:
@@ -1033,6 +1131,10 @@ func _play_shop_insufficient_gold_sfx(sound_position: Vector2) -> void:
 	SFX_PLAYER.play_2d(parent, SHOP_INSUFFICIENT_GOLD_SFX, sound_position, -2.0, 1.0, 1.0)
 
 
+func _on_player_hp_changed(_current_hp: int, _max_hp: int) -> void:
+	_update_hud()
+
+
 func _on_player_progress_changed(_current_exp: int, _required_exp: int, _level: int) -> void:
 	_update_hud()
 
@@ -1123,6 +1225,92 @@ func _update_hud() -> void:
 		enemies.size(),
 		prompt,
 	]
+	_update_character_card()
+
+
+func _update_character_card() -> void:
+	if character_card_stats_label == null or character_card_items_grid == null:
+		return
+
+	var hp := 0
+	var max_hp := 0
+	var level := 1
+	var experience := 0
+	var required_experience := 10
+	var atk := 0
+	var defense := 0
+	if is_instance_valid(player):
+		hp = int(ceil(player.hp))
+		max_hp = int(ceil(player.max_hp))
+		level = player.level
+		experience = player.experience
+		required_experience = player.get_required_exp_for_next_level()
+		if player.stats != null:
+			atk = player.stats.atk
+			defense = player.stats.defense
+
+	character_card_stats_label.text = "HP       %d/%d\nLevel    %d\nEXP      %d/%d\nATK      %d\nDEF      %d" % [
+		hp,
+		max_hp,
+		level,
+		experience,
+		required_experience,
+		atk,
+		defense,
+	]
+	_rebuild_character_card_items()
+
+
+func _rebuild_character_card_items() -> void:
+	for child in character_card_items_grid.get_children():
+		child.queue_free()
+
+	if not is_instance_valid(player) or player.inventory == null:
+		return
+
+	var item_ids: Array = player.inventory.item_definitions_by_id.keys()
+	item_ids.sort()
+	for item_id in item_ids:
+		var count := player.inventory.get_item_count(item_id)
+		if count <= 0:
+			continue
+		var item := player.inventory.item_definitions_by_id.get(item_id) as ItemDefinition
+		if item == null:
+			continue
+		character_card_items_grid.add_child(_create_character_card_item_icon(item, count))
+
+
+func _create_character_card_item_icon(item: ItemDefinition, count: int) -> Control:
+	var cell := Control.new()
+	cell.custom_minimum_size = Vector2(CHARACTER_CARD_ICON_SIZE, CHARACTER_CARD_ICON_SIZE)
+	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var icon := TextureRect.new()
+	icon.texture = item.icon
+	icon.material = ITEM_ICON_DARK_PIXEL_MATERIAL
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.position = Vector2.ZERO
+	icon.size = Vector2(CHARACTER_CARD_ICON_SIZE, CHARACTER_CARD_ICON_SIZE)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_child(icon)
+
+	if count > 1:
+		var count_label := Label.new()
+		count_label.text = str(count)
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		count_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		count_label.position = Vector2(0, CHARACTER_CARD_ICON_SIZE - 15)
+		count_label.size = Vector2(CHARACTER_CARD_ICON_SIZE, 15)
+		count_label.add_theme_color_override("font_color", Color(0.98, 0.9, 0.62))
+		count_label.add_theme_color_override("font_outline_color", Color(0.02, 0.015, 0.01))
+		count_label.add_theme_constant_override("outline_size", 3)
+		count_label.add_theme_font_size_override("font_size", 12)
+		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cell.add_child(count_label)
+
+	return cell
 
 
 func _check_defeat() -> void:
