@@ -42,6 +42,7 @@ var facing_direction: Vector2 = Vector2.RIGHT
 var locked_attack_direction: Vector2 = Vector2.RIGHT
 var leap_start_position: Vector2 = Vector2.ZERO
 var leap_target_position: Vector2 = Vector2.ZERO
+var leap_target_locked: bool = false
 var current_animation_name: StringName = &""
 var current_hold_squash: Vector2 = Vector2.ONE
 var slam_telegraph_active: bool = false
@@ -129,6 +130,7 @@ func _start_leap_slam() -> void:
 	_enter_state(State.LEAP_SLAM)
 	attack_elapsed = 0.0
 	slam_resolved = false
+	leap_target_locked = false
 	_reset_hold_squash()
 	locked_attack_direction = facing_direction
 	leap_start_position = global_position
@@ -140,6 +142,7 @@ func _start_leap_slam() -> void:
 
 func _update_leap_slam(delta: float) -> void:
 	attack_elapsed += delta
+	_update_leap_target_lock()
 	_update_leap_motion(delta)
 
 	if not slam_resolved and attack_elapsed >= _get_slam_active_time():
@@ -172,6 +175,20 @@ func _update_leap_motion(delta: float) -> void:
 	_face_target(global_position + direction)
 	velocity = offset / maxf(delta, 0.001)
 	move_and_slide()
+
+
+func _update_leap_target_lock() -> void:
+	if leap_target_locked:
+		return
+
+	leap_target_position = _get_leap_target_position()
+	var offset := leap_target_position - global_position
+	if offset.length_squared() > 0.001:
+		locked_attack_direction = offset.normalized()
+		_face_target(leap_target_position)
+
+	if attack_elapsed >= _get_leap_slam_hold_end_time():
+		leap_target_locked = true
 
 
 func _get_leap_target_position() -> Vector2:
@@ -526,6 +543,10 @@ func _play_dark_knight_animation(animation_name: StringName, force_restart: bool
 
 func _get_slam_active_time() -> float:
 	return _get_leap_slam_frame_start_time(SLAM_ACTIVE_FRAME)
+
+
+func _get_leap_slam_hold_end_time() -> float:
+	return _get_leap_slam_frame_start_time(LEAP_SLAM_HOLD_FRAME) + maxf(leap_slam_hold_time, 0.0)
 
 
 func _get_animation_time(animation_name: StringName) -> float:
