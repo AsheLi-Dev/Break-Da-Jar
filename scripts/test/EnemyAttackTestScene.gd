@@ -2,6 +2,7 @@ extends Node2D
 
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
+const BURNING_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/BurningZombie.tscn")
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")
 const ZOMBIE_FIREMAN_SCENE: PackedScene = preload("res://scenes/enemies/ZombieFireman.tscn")
 const ELITE_BRUTE_SCENE: PackedScene = preload("res://scenes/enemies/EliteBrute.tscn")
@@ -12,6 +13,7 @@ const DUMMY_POSITION := Vector2(520.0, 360.0)
 
 var enemy_options: Array[Dictionary] = [
 	{"label": "Zombie Melee", "scene": MELEE_ZOMBIE_SCENE, "attacks": ["Attack"]},
+	{"label": "Burning Zombie", "scene": BURNING_ZOMBIE_SCENE, "attacks": ["Contact"]},
 	{"label": "Acid Zombie", "scene": ACID_ZOMBIE_SCENE, "attacks": ["Acid Shot"]},
 	{"label": "Zombie Fireman", "scene": ZOMBIE_FIREMAN_SCENE, "attacks": ["Axe Throw"]},
 	{"label": "Elite Brute", "scene": ELITE_BRUTE_SCENE, "attacks": ["Melee Slam", "Bone Barrage", "Shout"]},
@@ -165,6 +167,8 @@ func _release_selected_attack() -> void:
 			current_enemy.call("_start_aim")
 		"Axe Throw":
 			current_enemy.call("_start_aim")
+		"Contact":
+			pass
 		"Melee Slam":
 			current_enemy.call("_start_melee_attack")
 		"Bone Barrage":
@@ -212,6 +216,8 @@ func _get_enemy_spawn_position() -> Vector2:
 	match attack_name:
 		"Attack":
 			return DUMMY_POSITION + Vector2(96.0, 0.0)
+		"Contact":
+			return DUMMY_POSITION + Vector2(70.0, 0.0)
 		"Melee Slam":
 			return DUMMY_POSITION + Vector2(120.0, 0.0)
 		"Shout":

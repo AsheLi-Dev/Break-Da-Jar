@@ -150,7 +150,7 @@ func _get_talent_ui_position(coord: Vector2i) -> Vector2:
 	var center_x: float = 360.0
 	var bottom_y: float = 716.0
 	return Vector2(
-		center_x + (float(coord.x) - 2.5) * spacing.x,
+		center_x + (float(coord.x) - 3.0) * spacing.x,
 		bottom_y - float(coord.y) * spacing.y
 	)
 

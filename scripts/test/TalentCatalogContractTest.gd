@@ -48,6 +48,14 @@ func _test_catalog_contract() -> void:
 
 	_assert(TALENT_CATALOG.is_start_coord(Vector2i(2, 0)), "Left start talent coordinate is recognized")
 	_assert(TALENT_CATALOG.is_start_coord(Vector2i(3, 0)), "Right start talent coordinate is recognized")
+	_assert(TALENT_CATALOG.is_start_coord(Vector2i(4, 0)), "Center start talent coordinate is recognized")
+	_assert(TALENT_CATALOG.is_coord_valid(Vector2i(4, 3)), "Talent handle includes third column")
+	_assert(TALENT_CATALOG.is_coord_valid(Vector2i(-1, 4)), "Talent hammer head includes left edge column")
+	_assert(TALENT_CATALOG.is_coord_valid(Vector2i(7, 7)), "Talent hammer head includes right edge column")
+	_assert(not TALENT_CATALOG.is_coord_valid(Vector2i(1, 3)), "Talent handle rejects outside left column")
+	_assert(not TALENT_CATALOG.is_coord_valid(Vector2i(5, 3)), "Talent handle rejects outside right column")
+	_assert(not TALENT_CATALOG.is_coord_valid(Vector2i(-2, 4)), "Talent hammer head rejects outside left column")
+	_assert(not TALENT_CATALOG.is_coord_valid(Vector2i(8, 7)), "Talent hammer head rejects outside right column")
 
 	for connection in TALENT_CATALOG.connections():
 		_assert(connection is Array and connection.size() == 2, "Talent connection has two endpoints")

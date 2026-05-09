@@ -7,6 +7,7 @@ const XP_PICKUP_SFX: AudioStream = preload("res://assets/sfx/xp_pickup.mp3")
 
 const KIND_GOLD := &"gold"
 const KIND_EXPERIENCE := &"experience"
+const KIND_HEAL := &"heal"
 
 @export var kind: StringName = KIND_GOLD
 @export var amount: int = 1
@@ -83,6 +84,9 @@ func _collect() -> void:
 	elif kind == KIND_GOLD:
 		target_player.add_gold(amount)
 		_play_pickup_sfx(GOLD_PICKUP_SFX, -4.0, 0.92, 1.16)
+	elif kind == KIND_HEAL:
+		target_player.heal(amount)
+		_play_pickup_sfx(XP_PICKUP_SFX, -3.0, 1.08, 1.28)
 
 	queue_free()
 
@@ -133,7 +137,12 @@ func _ensure_visual() -> void:
 
 	body = Polygon2D.new()
 	body.name = "Body"
-	body.color = Color(1.0, 0.78, 0.18, 1.0) if kind == KIND_GOLD else Color(0.24, 0.72, 1.0, 1.0)
+	if kind == KIND_GOLD:
+		body.color = Color(1.0, 0.78, 0.18, 1.0)
+	elif kind == KIND_HEAL:
+		body.color = Color(0.34, 1.0, 0.56, 1.0)
+	else:
+		body.color = Color(0.24, 0.72, 1.0, 1.0)
 	body.polygon = PackedVector2Array([
 		Vector2(0.0, -8.0),
 		Vector2(7.0, 0.0),
@@ -144,7 +153,12 @@ func _ensure_visual() -> void:
 
 	label = Label.new()
 	label.name = "Label"
-	label.text = "$" if kind == KIND_GOLD else "XP"
+	if kind == KIND_GOLD:
+		label.text = "$"
+	elif kind == KIND_HEAL:
+		label.text = "+"
+	else:
+		label.text = "XP"
 	label.position = Vector2(-10.0, -28.0)
 	label.add_theme_color_override("font_color", body.color)
 	add_child(label)

@@ -44,11 +44,12 @@ const MELEE_ZOMBIE_GOLD := 3
 const ACID_ZOMBIE_GOLD := 4
 const ELITE_BRUTE_GOLD := 12
 const MAX_MELEE_ENEMY_ATTACK_TOKENS := 2
-const MAX_RANGED_ENEMY_ATTACK_TOKENS := 1
-const MAX_ELITE_ENEMY_ATTACK_TOKENS := 1
+const MAX_RANGED_ENEMY_ATTACK_TOKENS := 3
+const MAX_ELITE_ENEMY_ATTACK_TOKENS := 2
 
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
+const BURNING_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/BurningZombie.tscn")
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")
 const ZOMBIE_FIREMAN_SCENE: PackedScene = preload("res://scenes/enemies/ZombieFireman.tscn")
 const ELITE_BRUTE_SCENE: PackedScene = preload("res://scenes/enemies/EliteBrute.tscn")
@@ -417,7 +418,21 @@ func _start_combat_round() -> void:
 	_spawn_containers()
 	if is_instance_valid(player):
 		player.emit_round_started(current_round)
+		_maybe_spawn_round_healing_orb()
 	_update_hud()
+
+
+func _maybe_spawn_round_healing_orb() -> void:
+	if not is_instance_valid(player) or not player.has_method("should_spawn_round_healing_orb"):
+		return
+	if not bool(player.should_spawn_round_healing_orb()):
+		return
+
+	var spawn_position := PLAY_AREA_RECT.position + Vector2(
+		randf_range(PLAY_AREA_SIZE.x * 0.2, PLAY_AREA_SIZE.x * 0.8),
+		randf_range(PLAY_AREA_SIZE.y * 0.2, PLAY_AREA_SIZE.y * 0.8)
+	)
+	_spawn_reward_pickup(RewardPickup.KIND_HEAL, maxi(1, roundi(player.max_hp * 0.25)), spawn_position)
 
 
 func _spawn_containers() -> void:
@@ -448,7 +463,24 @@ func _roll_combat_container_placements() -> Array[Dictionary]:
 			"position": placement["position"],
 			"type": container_type,
 		})
+		if container_type == ContainerType.TOMB:
+			var extra_tomb_count := _get_extra_tomb_container_count()
+			for _extra_index in range(extra_tomb_count):
+				var extra_placement := _roll_container_placement(ContainerType.TOMB, grid_cell_size, occupied_cells)
+				if extra_placement.is_empty():
+					break
+				placements.append({
+					"position": extra_placement["position"],
+					"type": ContainerType.TOMB,
+				})
 	return placements
+
+
+func _get_extra_tomb_container_count() -> int:
+	var multiplier := 1.0
+	if is_instance_valid(player) and player.has_method("get_tomb_container_count_multiplier"):
+		multiplier = float(player.get_tomb_container_count_multiplier())
+	return maxi(0, int(floorf(multiplier - 1.0)))
 
 
 func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occupied_cells: Dictionary) -> Dictionary:
@@ -775,20 +807,35 @@ func _on_container_break_finished(container: BreakableContainer, container_type:
 func _release_container_enemies(spawn_position: Vector2, container_type: int) -> void:
 	match container_type:
 		ContainerType.URN:
-			_spawn_enemy(spawn_position, _pick_basic_zombie_scene(0.7))
+			var count := _get_modified_enemy_spawn_count(1)
+			for index in range(count):
+				_spawn_enemy(_get_spawn_offset_position(spawn_position, index, count), _pick_basic_zombie_scene(0.7))
 		ContainerType.BARREL:
-			var count: int = randi_range(2, 3)
+			var count: int = _get_modified_enemy_spawn_count(randi_range(2, 3))
 			for index in range(count):
 				_spawn_enemy(_get_spawn_offset_position(spawn_position, index, count), _pick_basic_zombie_scene(0.5))
 		ContainerType.TOMB:
 			if randf() < 0.2:
-				_spawn_enemy(spawn_position, _pick_elite_enemy_scene())
+				var count := _get_modified_enemy_spawn_count(1)
+				for index in range(count):
+					_spawn_enemy(_get_spawn_offset_position(spawn_position, index, count), _pick_elite_enemy_scene())
 			else:
-				for index in range(5):
-					_spawn_enemy(_get_spawn_offset_position(spawn_position, index, 5), _pick_basic_zombie_scene(0.5))
+				var count := _get_modified_enemy_spawn_count(5)
+				for index in range(count):
+					_spawn_enemy(_get_spawn_offset_position(spawn_position, index, count), _pick_basic_zombie_scene(0.5))
+
+
+func _get_modified_enemy_spawn_count(base_count: int) -> int:
+	var multiplier := 1.0
+	if is_instance_valid(player) and player.has_method("get_enemy_spawn_count_multiplier"):
+		multiplier = float(player.get_enemy_spawn_count_multiplier())
+	return maxi(1, int(ceilf(float(base_count) * multiplier)))
 
 
 func _pick_basic_zombie_scene(melee_chance: float) -> PackedScene:
+	if randf() < 0.18:
+		return BURNING_ZOMBIE_SCENE
+
 	if randf() < melee_chance:
 		if randf() < 0.35:
 			return UNDEAD_DARK_KNIGHT_SCENE
@@ -818,6 +865,10 @@ func _spawn_enemy(spawn_position: Vector2, enemy_scene: PackedScene) -> void:
 		return
 
 	enemy.global_position = spawn_position
+	if is_instance_valid(player) and player.has_method("get_enemy_max_hp_multiplier"):
+		var hp_multiplier := float(player.get_enemy_max_hp_multiplier())
+		enemy.max_hp *= hp_multiplier
+		enemy.hp = enemy.max_hp
 	enemy.died.connect(_on_enemy_died)
 	enemies.append(enemy)
 	enemy_gold_rewards[enemy] = _get_enemy_gold_reward(enemy)
@@ -836,13 +887,29 @@ func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
 func _on_enemy_died(enemy: EnemyBase) -> void:
 	enemies.erase(enemy)
 	release_enemy_attack_token(enemy)
-	var reward: int = int(enemy_gold_rewards.get(enemy, MELEE_ZOMBIE_GOLD))
+	var base_reward: int = int(enemy_gold_rewards.get(enemy, MELEE_ZOMBIE_GOLD))
 	enemy_gold_rewards.erase(enemy)
-	_spawn_reward_pickup(RewardPickup.KIND_GOLD, reward, enemy.global_position + Vector2(-10.0, 0.0))
-	_spawn_reward_pickup(RewardPickup.KIND_EXPERIENCE, reward, enemy.global_position + Vector2(10.0, 0.0))
-	hud_message = "Dropped %d gold and %d EXP." % [reward, reward]
+	var gold_reward := _get_modified_enemy_gold_reward(enemy, base_reward)
+	var experience_reward := _get_modified_enemy_experience_reward(enemy, base_reward)
+	_spawn_reward_pickup(RewardPickup.KIND_GOLD, gold_reward, enemy.global_position + Vector2(-10.0, 0.0))
+	_spawn_reward_pickup(RewardPickup.KIND_EXPERIENCE, experience_reward, enemy.global_position + Vector2(10.0, 0.0))
+	hud_message = "Dropped %d gold and %d EXP." % [gold_reward, experience_reward]
 	_update_hud()
 	_check_combat_clear()
+
+
+func _get_modified_enemy_gold_reward(enemy: EnemyBase, base_reward: int) -> int:
+	var multiplier := 1.0
+	if is_instance_valid(player) and player.has_method("get_enemy_gold_reward_multiplier"):
+		multiplier = float(player.get_enemy_gold_reward_multiplier(enemy))
+	return maxi(0, int(round(float(base_reward) * multiplier)))
+
+
+func _get_modified_enemy_experience_reward(enemy: EnemyBase, base_reward: int) -> int:
+	var multiplier := 1.0
+	if is_instance_valid(player) and player.has_method("get_enemy_experience_reward_multiplier"):
+		multiplier = float(player.get_enemy_experience_reward_multiplier(enemy))
+	return maxi(0, int(round(float(base_reward) * multiplier)))
 
 
 func _spawn_reward_pickup(kind: StringName, amount: int, spawn_position: Vector2) -> void:
@@ -1448,21 +1515,13 @@ func _get_item_detail_card_texture(rarity: String) -> Texture2D:
 			return COMMON_ITEM_CARD_TEXTURE
 
 
-func _apply_item_detail_card_text_colors(rarity: String) -> void:
-	var main_color := Color(0.86, 0.78, 0.55)
-	var body_color := Color(0.84, 0.78, 0.66)
-	var outline_color := Color(0.03, 0.02, 0.012)
-	if rarity == "rare":
-		main_color = Color(0.21, 0.14, 0.06)
-		body_color = Color(0.23, 0.17, 0.09)
-		outline_color = Color(0.92, 0.82, 0.58, 0.0)
+func _apply_item_detail_card_text_colors(_rarity: String) -> void:
+	var text_color := Color(0.0, 0.0, 0.0)
 
-	item_detail_card_name_label.add_theme_color_override("font_color", main_color)
-	item_detail_card_name_label.add_theme_color_override("font_outline_color", outline_color)
-	item_detail_card_name_label.add_theme_constant_override("outline_size", 3)
-	item_detail_card_description_label.add_theme_color_override("font_color", body_color)
-	item_detail_card_description_label.add_theme_color_override("font_outline_color", outline_color)
-	item_detail_card_description_label.add_theme_constant_override("outline_size", 2)
+	item_detail_card_name_label.add_theme_color_override("font_color", text_color)
+	item_detail_card_name_label.add_theme_constant_override("outline_size", 0)
+	item_detail_card_description_label.add_theme_color_override("font_color", text_color)
+	item_detail_card_description_label.add_theme_constant_override("outline_size", 0)
 
 
 func _check_defeat() -> void:

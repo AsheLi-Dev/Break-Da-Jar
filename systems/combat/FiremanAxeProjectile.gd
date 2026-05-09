@@ -6,8 +6,8 @@ const FRAME_SIZE := Vector2i(256, 256)
 const FRAME_COUNT := 15
 
 @export var animation_fps: float = 24.0
-@export var visual_scale: Vector2 = Vector2(0.3515625, 0.3515625)
-@export var collision_radius: float = 15.0
+@export var visual_scale: Vector2 = Vector2(0.58, 0.58)
+@export var collision_radius: float = 24.0
 
 var has_reversed: bool = false
 var animation_elapsed: float = 0.0

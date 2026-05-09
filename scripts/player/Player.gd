@@ -19,6 +19,7 @@ const ATTACK_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack.pn
 const ATTACK_ALT_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/attack_alt.png")
 const DIRECTIONAL_ANIMATION_LIBRARY_BUILDER := preload("res://scripts/player/DirectionalAnimationLibraryBuilder.gd")
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
+const EFFECT_TARGETING := preload("res://systems/items/effects/EffectTargeting.gd")
 const FLOATING_TEXT_SCRIPT := preload("res://systems/combat/FloatingText.gd")
 const HOLY_SPELL_FRAME_SIZE := Vector2i(128, 64)
 const HOLY_SPELL_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/HolyNova_spritesheet.png")
@@ -40,6 +41,9 @@ const HOLY_SHIELD_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/Holy
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const ENEMY_HURT_SFX: AudioStream = preload("res://assets/sfx/enemy_hurt.wav")
 const TALENT_CATALOG := preload("res://scripts/player/PlayerTalentCatalog.gd")
+const LIGHTNING_CHAIN_TEXTURE_PATH := "res://assets/vfx/lightning spell/lightning chain 256x256.png"
+const LIGHTNING_CHAIN_FRAME_SIZE := Vector2(256.0, 256.0)
+const LIGHTNING_CHAIN_SFX: AudioStream = preload("res://assets/sfx/dragon-studio-lightning-spell-386163.mp3")
 
 signal attack_hit(enemy: Node, damage_dealt: float, attack_info: Dictionary)
 signal attack_started(origin: Vector2, direction: Vector2, attack_info: Dictionary)
@@ -151,7 +155,55 @@ var talent_next_attack_after_slide_enabled: bool = false
 var talent_slide_damage_reduction_enabled: bool = false
 var talent_max_hp_from_atk_enabled: bool = false
 var talent_heal_on_kill_enabled: bool = false
+var talent_kill_gold_chance_enabled: bool = false
+var talent_elite_kill_common_item_enabled: bool = false
+var talent_container_gold_chance_enabled: bool = false
+var talent_level_up_gold_enabled: bool = false
+var talent_rich_double_xp_enabled: bool = false
+var talent_normal_kill_gold_chance_enabled: bool = false
+var talent_normal_enemy_xp_bonus_enabled: bool = false
+var talent_normal_kill_common_item_counter_enabled: bool = false
+var talent_normal_enemy_gold_double_enabled: bool = false
+var talent_elite_kill_gold_enabled: bool = false
+var talent_elite_enemy_xp_bonus_enabled: bool = false
+var talent_elite_kill_rare_item_enabled: bool = false
+var talent_round_healing_orb_enabled: bool = false
+var talent_low_hp_round_end_heal_enabled: bool = false
+var talent_defense_per_item_enabled: bool = false
+var talent_max_hp_per_common_item_enabled: bool = false
+var talent_item_max_hp_bonus_multiplier_enabled: bool = false
+var talent_slide_defense_bonus_enabled: bool = false
+var talent_damage_taken_lifesteal_enabled: bool = false
+var talent_holy_strike_movement_stack_enabled: bool = false
+var talent_holy_strike_long_range_enabled: bool = false
+var talent_holy_strike_focused_zeal_enabled: bool = false
+var talent_holy_strike_crit_fireball_burst_enabled: bool = false
+var talent_holy_strike_lucky_critical_procs_enabled: bool = false
+var talent_holy_strike_move_speed_attack_speed_enabled: bool = false
+var talent_holy_strike_max_hp_range_enabled: bool = false
+var talent_holy_strike_chain_lightning_pack_enabled: bool = false
+var talent_holy_strike_nearby_enemy_attack_speed_enabled: bool = false
+var talent_holy_strike_more_weaker_enemies_enabled: bool = false
+var talent_holy_strike_elite_damage_per_kill_enabled: bool = false
+var talent_holy_strike_zombie_inscriptions_enabled: bool = false
+var talent_holy_strike_heavy_smite_enabled: bool = false
+var talent_holy_strike_stationary_crit_enabled: bool = false
+var talent_holy_strike_elite_smite_enabled: bool = false
+var talent_holy_strike_stationary_atk_enabled: bool = false
+var talent_holy_strike_double_tombs_enabled: bool = false
+var talent_holy_strike_undamaged_stationary_enabled: bool = false
 var applied_max_hp_from_atk: int = 0
+var applied_holy_strike_move_speed_attack_speed: float = -1.0
+var applied_holy_strike_nearby_enemy_attack_speed: float = -1.0
+var holy_strike_zombie_inscription_kills: int = 0
+var holy_strike_stationary_time: float = 0.0
+var holy_strike_undamaged_time: float = 0.0
+var holy_strike_stationary_atk_timer: float = 0.0
+var holy_strike_stationary_atk_stacks: int = 0
+var applied_holy_strike_undamaged_move_speed: float = 0.0
+var normal_kill_common_item_counter: int = 0
+var applied_item_defense_bonus: int = 0
+var applied_item_max_hp_bonus: int = 0
 var next_attack_after_slide_ready: bool = false
 var next_attack_damage_bonus: float = 0.0
 var shop_price_multiplier: float = 1.0
@@ -228,6 +280,9 @@ func _exit_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_update_timers(delta)
+	_update_holy_strike_stationary_talents(delta)
+	_update_holy_strike_dynamic_talents()
+	_update_holy_strike_nearby_enemy_attack_speed()
 	_update_hp_regen(delta)
 	_update_facing()
 
@@ -280,8 +335,11 @@ func take_damage(amount: float) -> void:
 	if final_damage <= 0.0:
 		return
 	hp = maxf(0.0, hp - final_damage)
+	holy_strike_undamaged_time = 0.0
 	hp_changed.emit(roundi(hp), roundi(max_hp))
 	damage_taken.emit(final_damage)
+	if talent_damage_taken_lifesteal_enabled and temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"damage_taken_lifesteal", &"lifesteal", 0.2, 2.0, 1)
 	_play_hurt_impact_feedback()
 	if hp <= 0.0:
 		die()
@@ -349,6 +407,8 @@ func gain_experience(amount: int) -> void:
 	if amount <= 0:
 		return
 
+	if talent_rich_double_xp_enabled and _get_current_gold() >= 300:
+		amount *= 2
 	experience += amount
 	while experience >= _get_required_exp_for_next_level():
 		experience -= _get_required_exp_for_next_level()
@@ -426,6 +486,7 @@ func unlock_talent(node_id: StringName) -> bool:
 func add_item(item: ItemDefinition) -> void:
 	if inventory != null:
 		inventory.add_item(item)
+		_update_item_talent_bonuses()
 
 
 func get_item_count(item_id: StringName) -> int:
@@ -470,6 +531,12 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 			final_damage *= 1.5
 			next_attack_after_slide_ready = false
 			attack_info["talent_slide_attack_bonus"] = true
+		if _is_holy_strike_attack(attack_info) and talent_holy_strike_heavy_smite_enabled:
+			final_damage *= 1.5
+			attack_info["holy_strike_heavy_smite"] = true
+		if _is_holy_strike_attack(attack_info) and talent_holy_strike_long_range_enabled:
+			final_damage *= 0.8
+			attack_info["holy_strike_long_range_damage_penalty"] = true
 		if bool(attack_info.get("direct", true)) and next_attack_damage_bonus > 0.0:
 			final_damage *= 1.0 + next_attack_damage_bonus
 			attack_info["next_attack_damage_bonus"] = next_attack_damage_bonus
@@ -477,7 +544,13 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 		final_damage *= stats.get_damage_multiplier()
 		if bool(attack_info.get("direct", true)):
 			final_damage *= _get_conditional_direct_damage_multiplier(enemy)
-		if bool(attack_info.get("allow_crit", true)) and randf() < stats.critical_chance:
+		if _is_holy_strike_attack(attack_info) and talent_holy_strike_elite_smite_enabled:
+			if _is_elite_enemy(enemy):
+				final_damage *= 1.5
+			else:
+				final_damage *= 0.7
+			attack_info["holy_strike_elite_smite"] = true
+		if bool(attack_info.get("allow_crit", true)) and _roll_attack_crit(attack_info):
 			final_damage *= 2.0 + stats.critical_damage_bonus
 			attack_info["critical"] = true
 			print("Critical hit")
@@ -489,14 +562,15 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 	_play_enemy_hit_feedback(enemy, damage_dealt, attack_info)
 
 	if bool(attack_info.get("direct", true)):
-		_apply_attack_status_procs(enemy)
+		_apply_attack_status_procs(enemy, attack_info)
 		if stats != null and stats.lifesteal > 0.0:
 			var heal_amount: float = damage_dealt * stats.lifesteal
 			heal(heal_amount)
 			print("Lifesteal heals %s" % heal_amount)
 
 	if bool(attack_info.get("allow_procs", true)):
-		_try_trigger_talent_fireball(enemy)
+		_apply_holy_strike_on_hit_talents(enemy, attack_info)
+		_try_trigger_talent_fireball(enemy, attack_info)
 		attack_hit.emit(enemy, damage_dealt, attack_info)
 
 	return damage_dealt
@@ -609,8 +683,31 @@ func _flash_hurt_screen() -> void:
 
 
 func notify_enemy_killed(enemy: Node) -> void:
+	var is_elite := _is_elite_enemy(enemy)
 	if talent_heal_on_kill_enabled:
 		heal(5.0)
+	if talent_kill_gold_chance_enabled and randf() < 0.1:
+		add_gold(1)
+	if talent_normal_kill_gold_chance_enabled and not is_elite and randf() < 0.1:
+		add_gold(1)
+	if talent_normal_kill_common_item_counter_enabled and not is_elite:
+		normal_kill_common_item_counter += 1
+		while normal_kill_common_item_counter >= 25:
+			normal_kill_common_item_counter -= 25
+			_grant_random_common_item()
+	if talent_elite_kill_gold_enabled and is_elite:
+		add_gold(10)
+	if talent_elite_kill_common_item_enabled and is_elite:
+		_grant_random_common_item()
+	if talent_elite_kill_rare_item_enabled and is_elite:
+		_grant_random_item(&"rare")
+	if talent_holy_strike_elite_damage_per_kill_enabled and temporary_buffs != null:
+		temporary_buffs.add_round_stat_buff(&"holy_strike_elite_damage_per_kill", &"elite_direct_damage_bonus", 0.01, 999999)
+	if talent_holy_strike_zombie_inscriptions_enabled and stats != null:
+		holy_strike_zombie_inscription_kills += 1
+		while holy_strike_zombie_inscription_kills >= 10:
+			holy_strike_zombie_inscription_kills -= 10
+			stats.apply_modifier(&"surrounded_enemy_count_bonus", &"add", 1.0)
 	enemy_killed.emit(enemy)
 
 
@@ -619,6 +716,42 @@ func add_gold(amount: int, reason: String = "") -> void:
 		return
 	if get_tree().current_scene.has_method("add_player_gold"):
 		get_tree().current_scene.add_player_gold(amount, reason)
+
+
+func _get_current_gold() -> int:
+	if get_tree().current_scene == null:
+		return 0
+	return int(get_tree().current_scene.get("gold"))
+
+
+func get_enemy_spawn_count_multiplier() -> float:
+	return 1.5 if talent_holy_strike_more_weaker_enemies_enabled else 1.0
+
+
+func get_enemy_max_hp_multiplier() -> float:
+	return 0.8 if talent_holy_strike_more_weaker_enemies_enabled else 1.0
+
+
+func get_tomb_container_count_multiplier() -> float:
+	return 2.0 if talent_holy_strike_double_tombs_enabled else 1.0
+
+
+func get_enemy_gold_reward_multiplier(enemy: Node) -> float:
+	if not _is_elite_enemy(enemy) and talent_normal_enemy_gold_double_enabled:
+		return 2.0
+	return 1.0
+
+
+func get_enemy_experience_reward_multiplier(enemy: Node) -> float:
+	if _is_elite_enemy(enemy) and talent_elite_enemy_xp_bonus_enabled:
+		return 1.5
+	if not _is_elite_enemy(enemy) and talent_normal_enemy_xp_bonus_enabled:
+		return 1.2
+	return 1.0
+
+
+func should_spawn_round_healing_orb() -> bool:
+	return talent_round_healing_orb_enabled
 
 
 func apply_slow(multiplier: float, duration: float) -> void:
@@ -1183,6 +1316,21 @@ func _get_fire_interval() -> float:
 	return base_interval
 
 
+func _get_holy_strike_radius() -> float:
+	var radius := melee_attack_radius
+	if talent_holy_strike_max_hp_range_enabled and stats != null:
+		radius *= 1.0 + 0.02 * floorf(float(stats.max_hp) / 10.0)
+	if talent_holy_strike_long_range_enabled:
+		radius *= 1.5
+	return radius
+
+
+func _get_holy_strike_angle() -> float:
+	if talent_holy_strike_focused_zeal_enabled:
+		return PI * 0.2
+	return PI
+
+
 func _get_attack_speed_multiplier() -> float:
 	return maxf(_get_base_fire_interval() / maxf(_get_fire_interval(), 0.001), 0.01)
 
@@ -1255,12 +1403,19 @@ func _perform_melee_attack_at(target_position: Vector2) -> void:
 	var attack_info := {"source": "player_attack", "direct": true, "allow_procs": true}
 	attack_started.emit(global_position, direction, attack_info)
 
+	var enemies_hit: int = 0
+	var last_enemy_hit_position := global_position
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		var enemy_2d := enemy as Node2D
 		if enemy_2d == null or not _is_target_in_melee_hitbox(enemy_2d.global_position, direction):
 			continue
 		if enemy.has_method("take_damage"):
 			deal_player_damage_to_enemy(enemy, projectile_damage, attack_info.duplicate())
+			enemies_hit += 1
+			last_enemy_hit_position = enemy_2d.global_position
+
+	if talent_holy_strike_chain_lightning_pack_enabled and enemies_hit >= 5:
+		_trigger_holy_strike_chain_lightning(last_enemy_hit_position)
 
 	for container in get_tree().get_nodes_in_group("container"):
 		var container_2d := container as Node2D
@@ -1271,8 +1426,10 @@ func _perform_melee_attack_at(target_position: Vector2) -> void:
 
 
 func _is_target_in_melee_hitbox(target_position: Vector2, direction: Vector2) -> bool:
+	if talent_holy_strike_long_range_enabled or talent_holy_strike_focused_zeal_enabled:
+		return _is_target_in_melee_arc(target_position, direction, _get_holy_strike_radius(), _get_holy_strike_angle())
 	if melee_hitbox_polygon == null:
-		return _is_target_in_melee_arc(target_position, direction, melee_attack_radius)
+		return _is_target_in_melee_arc(target_position, direction, _get_holy_strike_radius(), _get_holy_strike_angle())
 
 	var local_offset := Vector2.ZERO
 	if melee_attack_root != null:
@@ -1291,13 +1448,13 @@ func _is_target_in_melee_hitbox(target_position: Vector2, direction: Vector2) ->
 	return _is_point_in_polygon(local_target, melee_hitbox_polygon.polygon)
 
 
-func _is_target_in_melee_arc(target_position: Vector2, direction: Vector2, radius: float) -> bool:
+func _is_target_in_melee_arc(target_position: Vector2, direction: Vector2, radius: float, angle: float = PI) -> bool:
 	var offset := target_position - global_position
 	if offset.length_squared() > radius * radius:
 		return false
 	if offset.length_squared() <= 0.001:
 		return true
-	return direction.dot(offset.normalized()) >= 0.0
+	return direction.dot(offset.normalized()) >= cos(angle * 0.5)
 
 
 func _is_point_in_polygon(point: Vector2, polygon: PackedVector2Array) -> bool:
@@ -1325,14 +1482,15 @@ func _show_melee_telegraph(direction: Vector2) -> void:
 	if direction.length_squared() <= 0.001:
 		direction = facing_direction
 
-	melee_telegraph_visual.polygon = _semicircle_polygon(_get_melee_telegraph_radius(), 24)
+	_sync_holy_strike_preview()
+	melee_telegraph_visual.polygon = _arc_polygon(_get_melee_telegraph_radius(), _get_holy_strike_angle(), 24)
 	melee_telegraph_visual.rotation = direction.angle()
 	melee_telegraph_visual.color = melee_telegraph_color
 	melee_telegraph_visual.visible = true
 
 
 func _get_melee_telegraph_radius() -> float:
-	return melee_attack_radius * MELEE_TELEGRAPH_RADIUS_SCALE
+	return _get_holy_strike_radius() * MELEE_TELEGRAPH_RADIUS_SCALE
 
 
 func _hide_melee_telegraph() -> void:
@@ -1340,7 +1498,18 @@ func _hide_melee_telegraph() -> void:
 		melee_telegraph_visual.visible = false
 
 
+func _sync_holy_strike_preview() -> void:
+	if melee_hitbox_polygon != null:
+		melee_hitbox_polygon.polygon = _arc_polygon(_get_holy_strike_radius(), _get_holy_strike_angle(), 24)
+	if melee_effect_damage_preview != null:
+		var holy_strike_radius := _get_holy_strike_radius()
+		melee_effect_damage_preview.position = Vector2(holy_strike_radius * 0.5, 0.0)
+		melee_effect_damage_preview.scale = Vector2.ONE * (holy_strike_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
+
+
 func emit_container_broken(container: Node, attack_info: Dictionary = {}) -> void:
+	if talent_container_gold_chance_enabled and randf() < 0.1:
+		add_gold(1)
 	container_broken.emit(container, attack_info)
 
 
@@ -1353,6 +1522,8 @@ func emit_round_started(round_index: int = 0) -> void:
 
 
 func emit_round_ended() -> void:
+	if talent_low_hp_round_end_heal_enabled and max_hp > 0.0 and hp / max_hp < 0.5:
+		heal(max_hp * 0.3)
 	round_ended.emit()
 	if temporary_buffs != null:
 		temporary_buffs.clear_round_buffs()
@@ -1365,6 +1536,8 @@ func _get_required_exp_for_next_level() -> int:
 func _level_up() -> void:
 	level += 1
 	pending_talent_points += 1
+	if talent_level_up_gold_enabled:
+		add_gold(10)
 	_play_level_up_effect()
 	talent_points_changed.emit(unspent_talent_points, pending_talent_points)
 	player_leveled_up.emit(level)
@@ -1395,22 +1568,24 @@ func _queue_holy_slash_effect(direction: Vector2) -> void:
 	direction = direction.normalized()
 
 	var delay := maxf(_get_attack_projectile_time() - 1.0 / HOLY_SLASH_FPS, 0.0)
-	get_tree().create_timer(delay).timeout.connect(_play_holy_slash_effect.bind(global_position, direction))
+	get_tree().create_timer(delay).timeout.connect(_play_holy_slash_effect.bind(direction))
 
 
-func _play_holy_slash_effect(spawn_position: Vector2, direction: Vector2) -> void:
+func _play_holy_slash_effect(direction: Vector2) -> void:
 	if direction.length_squared() <= 0.001:
 		direction = facing_direction
 	direction = direction.normalized()
 
-	var effect_position := spawn_position + direction * (melee_attack_radius * 0.5)
-	var effect_scale := Vector2.ONE * (melee_attack_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
+	_sync_holy_strike_preview()
+	var holy_strike_radius := _get_holy_strike_radius()
+	var effect_position := direction * (holy_strike_radius * 0.5)
+	var effect_scale := Vector2.ONE * (holy_strike_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
 	if melee_effect_damage_preview != null:
 		var local_offset := Vector2.ZERO
 		if melee_attack_root != null:
 			local_offset += melee_attack_root.position
 		local_offset += melee_effect_damage_preview.position
-		effect_position = spawn_position + local_offset.rotated(direction.angle())
+		effect_position = local_offset.rotated(direction.angle())
 		effect_scale = melee_effect_damage_preview.scale
 	_play_spritesheet_effect(
 		HOLY_SLASH_TEXTURE,
@@ -1419,7 +1594,8 @@ func _play_holy_slash_effect(spawn_position: Vector2, direction: Vector2) -> voi
 		HOLY_SLASH_FPS,
 		effect_scale,
 		HOLY_SLASH_FRAME_SIZE,
-		direction.angle()
+		direction.angle(),
+		self
 	)
 
 
@@ -1441,7 +1617,8 @@ func _play_spritesheet_effect(
 	fps: float,
 	effect_scale: Vector2 = Vector2.ONE,
 	frame_size: Vector2i = FRAME_SIZE,
-	effect_rotation: float = 0.0
+	effect_rotation: float = 0.0,
+	effect_parent: Node2D = null
 ) -> void:
 	var sprite_frames := SpriteFrames.new()
 	sprite_frames.add_animation(animation_name)
@@ -1464,8 +1641,12 @@ func _play_spritesheet_effect(
 	effect.scale = effect_scale
 	effect.rotation = effect_rotation
 	effect.z_index = 20
-	get_parent().add_child(effect)
-	effect.global_position = spawn_position
+	if effect_parent != null:
+		effect_parent.add_child(effect)
+		effect.position = spawn_position
+	else:
+		get_parent().add_child(effect)
+		effect.global_position = spawn_position
 	effect.animation_finished.connect(effect.queue_free)
 	effect.play()
 
@@ -1489,6 +1670,89 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			_update_max_hp_from_atk_talent()
 		&"heal_on_kill":
 			talent_heal_on_kill_enabled = true
+		&"kill_gold_chance":
+			talent_kill_gold_chance_enabled = true
+		&"elite_kill_common_item":
+			talent_elite_kill_common_item_enabled = true
+		&"container_gold_chance":
+			talent_container_gold_chance_enabled = true
+		&"level_up_gold":
+			talent_level_up_gold_enabled = true
+		&"rich_double_xp":
+			talent_rich_double_xp_enabled = true
+		&"normal_kill_gold_chance":
+			talent_normal_kill_gold_chance_enabled = true
+		&"normal_enemy_xp_bonus":
+			talent_normal_enemy_xp_bonus_enabled = true
+		&"normal_kill_common_item_counter":
+			talent_normal_kill_common_item_counter_enabled = true
+		&"normal_enemy_gold_double":
+			talent_normal_enemy_gold_double_enabled = true
+		&"elite_kill_gold":
+			talent_elite_kill_gold_enabled = true
+		&"elite_enemy_xp_bonus":
+			talent_elite_enemy_xp_bonus_enabled = true
+		&"elite_kill_rare_item":
+			talent_elite_kill_rare_item_enabled = true
+		&"round_healing_orb":
+			talent_round_healing_orb_enabled = true
+		&"low_hp_round_end_heal":
+			talent_low_hp_round_end_heal_enabled = true
+		&"defense_per_item":
+			talent_defense_per_item_enabled = true
+			_update_item_talent_bonuses()
+		&"max_hp_per_common_item":
+			talent_max_hp_per_common_item_enabled = true
+			_update_item_talent_bonuses()
+		&"item_max_hp_bonus_multiplier":
+			talent_item_max_hp_bonus_multiplier_enabled = true
+			_update_item_talent_bonuses()
+		&"slide_defense_bonus":
+			talent_slide_defense_bonus_enabled = true
+		&"damage_taken_lifesteal":
+			talent_damage_taken_lifesteal_enabled = true
+		&"holy_strike_movement_stack":
+			talent_holy_strike_movement_stack_enabled = true
+		&"holy_strike_long_range":
+			talent_holy_strike_long_range_enabled = true
+		&"holy_strike_focused_zeal":
+			talent_holy_strike_focused_zeal_enabled = true
+			if stats != null:
+				stats.apply_modifier(&"attack_speed_bonus", &"add", 1.0)
+		&"holy_strike_crit_fireball_burst":
+			talent_holy_strike_crit_fireball_burst_enabled = true
+		&"holy_strike_lucky_critical_procs":
+			talent_holy_strike_lucky_critical_procs_enabled = true
+		&"holy_strike_move_speed_attack_speed":
+			talent_holy_strike_move_speed_attack_speed_enabled = true
+			_update_holy_strike_dynamic_talents()
+		&"holy_strike_max_hp_range":
+			talent_holy_strike_max_hp_range_enabled = true
+		&"holy_strike_chain_lightning_pack":
+			talent_holy_strike_chain_lightning_pack_enabled = true
+		&"holy_strike_nearby_enemy_attack_speed":
+			talent_holy_strike_nearby_enemy_attack_speed_enabled = true
+			_update_holy_strike_nearby_enemy_attack_speed()
+		&"holy_strike_more_weaker_enemies":
+			talent_holy_strike_more_weaker_enemies_enabled = true
+		&"holy_strike_elite_damage_per_kill":
+			talent_holy_strike_elite_damage_per_kill_enabled = true
+		&"holy_strike_zombie_inscriptions":
+			talent_holy_strike_zombie_inscriptions_enabled = true
+		&"holy_strike_heavy_smite":
+			talent_holy_strike_heavy_smite_enabled = true
+			if stats != null:
+				stats.apply_modifier(&"attack_speed_bonus", &"add", -0.3)
+		&"holy_strike_stationary_crit":
+			talent_holy_strike_stationary_crit_enabled = true
+		&"holy_strike_elite_smite":
+			talent_holy_strike_elite_smite_enabled = true
+		&"holy_strike_stationary_atk":
+			talent_holy_strike_stationary_atk_enabled = true
+		&"holy_strike_double_tombs":
+			talent_holy_strike_double_tombs_enabled = true
+		&"holy_strike_undamaged_stationary":
+			talent_holy_strike_undamaged_stationary_enabled = true
 		_:
 			if stats != null:
 				stats.apply_modifier(
@@ -1503,6 +1767,8 @@ func _apply_slide_finished_talents() -> void:
 		temporary_buffs.add_timed_stat_buff(&"talent_slide_attack_speed", &"attack_speed_bonus", 0.2, 3.0, 1)
 	if talent_slide_damage_reduction_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"talent_slide_damage_reduction", &"damage_reduction_bonus", 0.2, 2.0, 1)
+	if talent_slide_defense_bonus_enabled and temporary_buffs != null and stats != null:
+		temporary_buffs.add_timed_stat_buff(&"talent_slide_defense_bonus", &"defense", float(stats.defense) * 0.5, 2.0, 1)
 	if talent_next_attack_after_slide_enabled:
 		next_attack_after_slide_ready = true
 
@@ -1518,6 +1784,125 @@ func _update_max_hp_from_atk_talent() -> void:
 
 	applied_max_hp_from_atk = wanted_bonus
 	stats.apply_modifier(&"max_hp", &"add", float(delta))
+
+
+func _update_item_talent_bonuses() -> void:
+	if stats == null or inventory == null:
+		return
+
+	var total_item_count := _get_total_item_count()
+	var wanted_defense := total_item_count * 5 if talent_defense_per_item_enabled else 0
+	var defense_delta := wanted_defense - applied_item_defense_bonus
+	if defense_delta != 0:
+		applied_item_defense_bonus = wanted_defense
+		stats.apply_modifier(&"defense", &"add", float(defense_delta))
+
+	var common_item_count := _get_item_count_by_rarity(&"common")
+	var base_max_hp_bonus := common_item_count * 3 if talent_max_hp_per_common_item_enabled else 0
+	var multiplier := 1.3 if talent_item_max_hp_bonus_multiplier_enabled else 1.0
+	var wanted_max_hp := int(round(float(base_max_hp_bonus) * multiplier))
+	var max_hp_delta := wanted_max_hp - applied_item_max_hp_bonus
+	if max_hp_delta != 0:
+		applied_item_max_hp_bonus = wanted_max_hp
+		stats.apply_modifier(&"max_hp", &"add", float(max_hp_delta))
+
+
+func _get_total_item_count() -> int:
+	if inventory == null:
+		return 0
+
+	var total := 0
+	for item_id in inventory.item_counts.keys():
+		total += int(inventory.item_counts.get(item_id, 0))
+	return total
+
+
+func _get_item_count_by_rarity(rarity: StringName) -> int:
+	if inventory == null:
+		return 0
+
+	var total := 0
+	for item_id in inventory.item_counts.keys():
+		var item := inventory.item_definitions_by_id.get(item_id) as ItemDefinition
+		if item != null and item.rarity == rarity:
+			total += int(inventory.item_counts.get(item_id, 0))
+	return total
+
+
+func _update_holy_strike_dynamic_talents() -> void:
+	if not talent_holy_strike_move_speed_attack_speed_enabled or temporary_buffs == null or stats == null:
+		return
+
+	var move_speed_value: float = stats.get_move_speed(move_speed)
+	var attack_speed_bonus: float = floorf(move_speed_value / 10.0) * 0.01
+	if is_equal_approx(attack_speed_bonus, applied_holy_strike_move_speed_attack_speed):
+		return
+	applied_holy_strike_move_speed_attack_speed = attack_speed_bonus
+	temporary_buffs.set_dynamic_stat_bonus(&"holy_strike_move_speed_attack_speed", &"attack_speed_bonus", attack_speed_bonus)
+
+
+func _update_holy_strike_nearby_enemy_attack_speed() -> void:
+	if not talent_holy_strike_nearby_enemy_attack_speed_enabled or temporary_buffs == null or stats == null:
+		return
+
+	var nearby_enemy_count := EFFECT_TARGETING.enemies_surrounding(self, global_position).size()
+	nearby_enemy_count += maxi(stats.surrounded_enemy_count_bonus, 0)
+	var attack_speed_bonus := float(nearby_enemy_count) * 0.05
+	if is_equal_approx(attack_speed_bonus, applied_holy_strike_nearby_enemy_attack_speed):
+		return
+	applied_holy_strike_nearby_enemy_attack_speed = attack_speed_bonus
+	temporary_buffs.set_dynamic_stat_bonus(&"holy_strike_nearby_enemy_attack_speed", &"attack_speed_bonus", attack_speed_bonus)
+
+
+func _update_holy_strike_stationary_talents(delta: float) -> void:
+	holy_strike_undamaged_time += delta
+	var effective_stationary := _is_holy_strike_effectively_stationary()
+	if effective_stationary:
+		holy_strike_stationary_time += delta
+	else:
+		holy_strike_stationary_time = 0.0
+
+	_update_holy_strike_stationary_atk(delta, effective_stationary)
+	_update_holy_strike_undamaged_move_speed()
+
+
+func _update_holy_strike_stationary_atk(delta: float, effective_stationary: bool) -> void:
+	if not talent_holy_strike_stationary_atk_enabled or stats == null:
+		return
+
+	if not effective_stationary:
+		if holy_strike_stationary_atk_stacks > 0:
+			stats.apply_modifier(&"atk", &"add", -float(holy_strike_stationary_atk_stacks))
+			holy_strike_stationary_atk_stacks = 0
+		holy_strike_stationary_atk_timer = 0.0
+		return
+
+	holy_strike_stationary_atk_timer += delta
+	while holy_strike_stationary_atk_timer >= 1.0:
+		holy_strike_stationary_atk_timer -= 1.0
+		holy_strike_stationary_atk_stacks += 1
+		stats.apply_modifier(&"atk", &"add", 1.0)
+
+
+func _update_holy_strike_undamaged_move_speed() -> void:
+	if not talent_holy_strike_undamaged_stationary_enabled or temporary_buffs == null:
+		return
+
+	var wanted_bonus := -0.3 if holy_strike_undamaged_time >= 5.0 else 0.0
+	if is_equal_approx(wanted_bonus, applied_holy_strike_undamaged_move_speed):
+		return
+	applied_holy_strike_undamaged_move_speed = wanted_bonus
+	temporary_buffs.set_dynamic_stat_bonus(&"holy_strike_undamaged_stationary_move_speed", &"movement_speed_bonus", wanted_bonus)
+
+
+func _is_holy_strike_effectively_stationary() -> bool:
+	if talent_holy_strike_undamaged_stationary_enabled and holy_strike_undamaged_time >= 5.0:
+		return true
+	if state == State.DASHING or state == State.SLIDING:
+		return false
+	if _get_move_input().length_squared() > 0.001:
+		return false
+	return velocity.length_squared() <= 16.0
 
 
 func _should_consume_next_slide_attack(attack_info: Dictionary) -> bool:
@@ -1560,6 +1945,22 @@ func _is_elite_enemy(enemy: Node) -> bool:
 	return enemy is EliteBrute
 
 
+func _grant_random_common_item() -> void:
+	_grant_random_item(&"common")
+
+
+func _grant_random_item(rarity: StringName) -> void:
+	var database := get_node_or_null("/root/ItemDatabase")
+	if database == null or not database.has_method("get_random_item"):
+		return
+
+	var item := database.get_random_item(&"", rarity) as ItemDefinition
+	if item == null and rarity != &"common":
+		item = database.get_random_item(&"", &"common") as ItemDefinition
+	if item != null:
+		add_item(item)
+
+
 func _get_enemy_hp_fraction(enemy: Node) -> float:
 	if enemy == null:
 		return 1.0
@@ -1582,10 +1983,10 @@ func _enemy_has_status(enemy: Node, status_id: StringName) -> bool:
 	return enemy != null and enemy.has_method("has_status") and enemy.has_status(status_id)
 
 
-func _try_trigger_talent_fireball(enemy: Node) -> void:
+func _try_trigger_talent_fireball(enemy: Node, attack_info: Dictionary = {}) -> void:
 	if stats == null or stats.fireball_chance <= 0.0:
 		return
-	if randf() >= stats.fireball_chance:
+	if not _roll_holy_strike_proc(stats.fireball_chance, attack_info):
 		return
 
 	var enemy_2d := enemy as Node2D
@@ -1593,6 +1994,122 @@ func _try_trigger_talent_fireball(enemy: Node) -> void:
 		return
 
 	_launch_talent_fireball(global_position, enemy_2d.global_position)
+
+
+func _apply_holy_strike_on_hit_talents(enemy: Node, attack_info: Dictionary) -> void:
+	if not _is_holy_strike_attack(attack_info):
+		return
+
+	if talent_holy_strike_movement_stack_enabled and temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"holy_strike_movement_stack", &"bonus_move_speed_flat", 5.0, 3.0, 999999)
+
+	if talent_holy_strike_crit_fireball_burst_enabled and bool(attack_info.get("critical", false)):
+		if _roll_holy_strike_proc(0.5, attack_info):
+			var enemy_2d := enemy as Node2D
+			if enemy_2d != null:
+				_launch_holy_strike_fireball_burst(enemy_2d.global_position)
+
+
+func _roll_holy_strike_proc(chance: float, attack_info: Dictionary) -> bool:
+	var clamped_chance := clampf(chance, 0.0, 1.0)
+	if clamped_chance <= 0.0:
+		return false
+	if clamped_chance >= 1.0:
+		return true
+	if _should_roll_holy_strike_proc_lucky(attack_info):
+		return randf() < clamped_chance or randf() < clamped_chance
+	return randf() < clamped_chance
+
+
+func _roll_attack_crit(attack_info: Dictionary) -> bool:
+	if stats == null:
+		return false
+	if (
+		_is_holy_strike_attack(attack_info)
+		and talent_holy_strike_stationary_crit_enabled
+		and holy_strike_stationary_time >= 2.0
+	):
+		holy_strike_stationary_time = 0.0
+		return true
+	return randf() < stats.critical_chance
+
+
+func _should_roll_holy_strike_proc_lucky(attack_info: Dictionary) -> bool:
+	return (
+		talent_holy_strike_lucky_critical_procs_enabled
+		and _is_holy_strike_attack(attack_info)
+		and bool(attack_info.get("critical", false))
+	)
+
+
+func _is_holy_strike_attack(attack_info: Dictionary) -> bool:
+	return StringName(attack_info.get("source", &"")) == &"player_attack"
+
+
+func _launch_holy_strike_fireball_burst(origin: Vector2) -> void:
+	for index in range(8):
+		var angle := TAU * float(index) / 8.0
+		_launch_talent_fireball(origin, origin + Vector2(cos(angle), sin(angle)))
+
+
+func _trigger_holy_strike_chain_lightning(origin: Vector2) -> void:
+	if get_tree().current_scene == null:
+		return
+
+	var damage := get_base_attack_damage() * 0.8
+	var current_position := origin
+	var hit: Array = []
+	var did_hit := false
+	for _index in range(5):
+		var target := EFFECT_TARGETING.nearest_enemy(self, current_position, 420.0, hit)
+		if target == null:
+			break
+
+		var previous_position := current_position
+		hit.append(target)
+		current_position = target.global_position
+		_spawn_holy_strike_chain_lightning_vfx(previous_position, current_position)
+		deal_player_damage_to_enemy(target, damage, {"source": "holy_strike_chain_lightning", "direct": true, "allow_procs": false})
+		did_hit = true
+
+	if did_hit:
+		SFX_PLAYER.play_2d(get_tree().current_scene, LIGHTNING_CHAIN_SFX, origin, -4.0, 0.96, 1.04)
+
+
+func _spawn_holy_strike_chain_lightning_vfx(start_position: Vector2, end_position: Vector2) -> void:
+	var texture := load(LIGHTNING_CHAIN_TEXTURE_PATH) as Texture2D
+	if texture == null or get_tree().current_scene == null:
+		return
+
+	var offset := end_position - start_position
+	var length := offset.length()
+	if length <= 0.001:
+		return
+
+	var sprite_frames := SpriteFrames.new()
+	var animation_name := &"chain"
+	sprite_frames.add_animation(animation_name)
+	sprite_frames.set_animation_loop(animation_name, false)
+	sprite_frames.set_animation_speed(animation_name, 20.0)
+
+	var frame_count := int(texture.get_height() / LIGHTNING_CHAIN_FRAME_SIZE.y)
+	for frame_index in range(frame_count):
+		var frame_texture := AtlasTexture.new()
+		frame_texture.atlas = texture
+		frame_texture.region = Rect2(0.0, float(frame_index) * LIGHTNING_CHAIN_FRAME_SIZE.y, LIGHTNING_CHAIN_FRAME_SIZE.x, LIGHTNING_CHAIN_FRAME_SIZE.y)
+		sprite_frames.add_frame(animation_name, frame_texture)
+
+	var effect := AnimatedSprite2D.new()
+	effect.name = "HolyStrikeChainLightningVFX"
+	effect.sprite_frames = sprite_frames
+	effect.centered = true
+	effect.rotation = offset.angle()
+	effect.scale = Vector2(length / LIGHTNING_CHAIN_FRAME_SIZE.x, 1.0)
+	effect.z_index = 140
+	get_tree().current_scene.add_child(effect)
+	effect.global_position = (start_position + end_position) * 0.5
+	effect.play(animation_name)
+	effect.animation_finished.connect(effect.queue_free)
 
 
 func _launch_talent_fireball(start_position: Vector2, target_position: Vector2) -> void:
@@ -1921,12 +2438,12 @@ func _on_stat_changed(stat_name: StringName, _value: Variant) -> void:
 		_update_max_hp_from_atk_talent()
 
 
-func _apply_attack_status_procs(enemy: Node) -> void:
+func _apply_attack_status_procs(enemy: Node, attack_info: Dictionary = {}) -> void:
 	if stats == null or enemy == null:
 		return
-	if randf() < stats.bleed_chance and enemy.has_method("apply_status_effect"):
+	if _roll_holy_strike_proc(stats.bleed_chance, attack_info) and enemy.has_method("apply_status_effect"):
 		enemy.apply_status_effect(&"bleeding", self)
-	if randf() < stats.poison_chance and enemy.has_method("apply_status_effect"):
+	if _roll_holy_strike_proc(stats.poison_chance, attack_info) and enemy.has_method("apply_status_effect"):
 		enemy.apply_status_effect(&"poison", self)
 
 
@@ -1950,11 +2467,15 @@ func _circle_polygon(radius: float, points: int) -> PackedVector2Array:
 
 
 func _semicircle_polygon(radius: float, points: int) -> PackedVector2Array:
+	return _arc_polygon(radius, PI, points)
+
+
+func _arc_polygon(radius: float, angle: float, points: int) -> PackedVector2Array:
 	var polygon: PackedVector2Array = PackedVector2Array()
 	polygon.append(Vector2.ZERO)
 	for point in range(points + 1):
-		var angle: float = -PI * 0.5 + PI * float(point) / float(maxi(points, 1))
-		polygon.append(Vector2(cos(angle), sin(angle)) * radius)
+		var point_angle: float = -angle * 0.5 + angle * float(point) / float(maxi(points, 1))
+		polygon.append(Vector2(cos(point_angle), sin(point_angle)) * radius)
 
 	return polygon
 
