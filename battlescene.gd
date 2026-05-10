@@ -16,6 +16,8 @@ const MAX_ROUNDS := 10
 const ROUND_CONTAINER_AUTO_BREAK_TIME := 30.0
 const RANDOM_CONTAINER_BREAK_MIN_TIME := 2.0
 const RANDOM_CONTAINER_BREAK_MAX_TIME := 3.0
+const ROUND_ENRAGE_SPEED_GAIN_PER_SECOND := 0.05
+const ROUND_ENRAGE_MAX_SPEED_BONUS := 1.0
 const PLAYER_CONTAINER_GOLD_DROP_CHANCE := 0.5
 const PLAYER_CONTAINER_GOLD_DROP_MIN := 1
 const PLAYER_CONTAINER_GOLD_DROP_MAX := 3
@@ -24,7 +26,6 @@ const CONTAINER_COUNT := 40
 const GRID_SIZE := 16
 const CONTAINER_GRID_MIN_INDEX := 3
 const CONTAINER_GRID_MAX_INDEX := 12
-const CONTAINER_COLLISION_RADIUS := 18.0
 
 const SHOP_CONTAINER_COUNT := 6
 const SHOP_CONTAINER_COLUMNS := 3
@@ -39,6 +40,7 @@ const ITEM_DETAIL_CARD_WIDTH := 282.0
 const ITEM_DETAIL_CARD_POSITION := Vector2(1304.0, 24.0)
 const ITEM_DETAIL_CARD_ICON_SIZE := 104.0
 const ITEM_DETAIL_TEXT_BOX_MARGIN := Vector2(28.0, 18.0)
+const CONTAINER_HITBOX_PREVIEW_ROOT := NodePath("ContainerHitboxPreviews")
 
 const MELEE_ZOMBIE_GOLD := 3
 const ACID_ZOMBIE_GOLD := 4
@@ -48,6 +50,7 @@ const MAX_RANGED_ENEMY_ATTACK_TOKENS := 3
 const MAX_ELITE_ENEMY_ATTACK_TOKENS := 2
 
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
+const DEFAULT_CHARACTER_ID := &"wizard"
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
 const BURNING_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/BurningZombie.tscn")
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")
@@ -124,6 +127,8 @@ var hud_message: String = ""
 var round_time_remaining: float = 0.0
 var random_container_break_time_remaining: float = 0.0
 var auto_break_triggered: bool = false
+var round_enrage_active: bool = false
+var round_enrage_elapsed: float = 0.0
 var shop_transition_pending: bool = false
 
 var player: Player
@@ -150,6 +155,7 @@ var bgm_player: AudioStreamPlayer
 func _ready() -> void:
 	randomize()
 	y_sort_enabled = true
+	_hide_container_hitbox_previews()
 	_create_background()
 	_spawn_player()
 	_create_camera()
@@ -171,6 +177,7 @@ func _process(delta: float) -> void:
 	_update_round_timer(delta)
 	_update_random_container_break_timer(delta)
 	_cleanup_enemy_list()
+	_update_round_enrage(delta)
 	_update_hud()
 	_check_defeat()
 	_check_combat_clear()
@@ -355,6 +362,7 @@ func _scale_actor_body(actor: Node2D) -> void:
 
 func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate() as Player
+	player.setup_character(DEFAULT_CHARACTER_ID)
 	player.name = "Player"
 	player.global_position = PLAYER_POSITION
 	player.set_collision_layer_value(1, false)
@@ -411,6 +419,8 @@ func _start_combat_round() -> void:
 	round_time_remaining = ROUND_CONTAINER_AUTO_BREAK_TIME
 	_reset_random_container_break_timer()
 	auto_break_triggered = false
+	round_enrage_active = false
+	round_enrage_elapsed = 0.0
 	shop_transition_pending = false
 	hud_message = "Round %d started." % current_round
 	status_panel.visible = false
@@ -552,7 +562,7 @@ func _roll_small_combat_container_type() -> int:
 
 
 func _create_combat_container(container_position: Vector2, container_number: int, container_type: int) -> BreakableContainer:
-	var container := _create_base_container(container_position, "%s%d" % [_get_container_type_name(container_type), container_number])
+	var container := _create_base_container(container_position, "%s%d" % [_get_container_type_name(container_type), container_number], container_type)
 	container.container_type = container_type
 	container.static_texture = _get_container_texture(container_type)
 	container.damaged_texture = _get_container_damaged_texture(container_type)
@@ -571,8 +581,9 @@ func _create_shop_container(container_position: Vector2, index: int, forced_cate
 	var category: int = forced_category if forced_category >= 0 else _roll_shop_category()
 	var tier: int = forced_tier if forced_tier >= 0 else _roll_shop_tier()
 	var base_price: int = _get_shop_price(category, tier)
+	base_price = _apply_shop_tier_price_multiplier(base_price, tier)
 	var price: int = _apply_shop_price_discount(base_price)
-	var container := _create_base_container(container_position, "ShopJar%d" % index)
+	var container := _create_base_container(container_position, "ShopJar%d" % index, ContainerType.URN)
 	container.is_shop_container = true
 	container.container_type = ContainerType.URN
 	container.static_texture = _get_container_texture(ContainerType.URN)
@@ -594,7 +605,7 @@ func _create_shop_container(container_position: Vector2, index: int, forced_cate
 	return container
 
 
-func _create_base_container(container_position: Vector2, container_name: String) -> BreakableContainer:
+func _create_base_container(container_position: Vector2, container_name: String, container_type: int) -> BreakableContainer:
 	var container := BreakableContainer.new()
 	container.name = container_name
 	container.global_position = container_position
@@ -605,11 +616,83 @@ func _create_base_container(container_position: Vector2, container_name: String)
 
 	var collision := CollisionShape2D.new()
 	collision.name = "CollisionShape2D"
-	var shape := CircleShape2D.new()
-	shape.radius = CONTAINER_COLLISION_RADIUS * CHARACTER_SPRITE_SCALE.x
-	collision.shape = shape
+	collision.position = _get_container_collision_offset(container_type)
+	collision.scale = _get_container_collision_scale(container_type)
+	collision.shape = _get_container_collision_shape(container_type)
 	container.add_child(collision)
 	return container
+
+
+func _hide_container_hitbox_previews() -> void:
+	var preview_root := get_node_or_null(CONTAINER_HITBOX_PREVIEW_ROOT) as Node2D
+	if preview_root != null:
+		preview_root.visible = false
+
+
+func _get_container_collision_shape(container_type: int) -> Shape2D:
+	var template := _get_container_hitbox_template(container_type)
+	if template != null and template.shape != null:
+		return template.shape.duplicate() as Shape2D
+
+	var shape := CircleShape2D.new()
+	shape.radius = _get_exported_container_collision_radius(container_type)
+	return shape
+
+
+func _get_container_collision_radius(container_type: int) -> float:
+	var template := _get_container_hitbox_template(container_type)
+	if template != null and template.shape is CircleShape2D:
+		return (template.shape as CircleShape2D).radius
+	return _get_exported_container_collision_radius(container_type)
+
+
+func _get_exported_container_collision_radius(container_type: int) -> float:
+	match container_type:
+		ContainerType.BARREL:
+			return 32.0
+		ContainerType.TOMB:
+			return 64.0
+		_:
+			return 28.0
+
+
+func _get_container_collision_offset(container_type: int) -> Vector2:
+	var template := _get_container_hitbox_template(container_type)
+	if template != null:
+		return template.position
+	return _get_exported_container_collision_offset(container_type)
+
+
+func _get_exported_container_collision_offset(container_type: int) -> Vector2:
+	match container_type:
+		ContainerType.BARREL:
+			return Vector2(0.0, 16.0)
+		ContainerType.TOMB:
+			return Vector2(0.0, 20.0)
+		_:
+			return Vector2(0.0, 12.0)
+
+
+func _get_container_collision_scale(container_type: int) -> Vector2:
+	var template := _get_container_hitbox_template(container_type)
+	if template != null:
+		return template.scale
+	return Vector2.ONE
+
+
+func _get_container_hitbox_template(container_type: int) -> CollisionShape2D:
+	var preview_root := get_node_or_null(CONTAINER_HITBOX_PREVIEW_ROOT)
+	if preview_root == null:
+		return null
+
+	var preview_name := "Urn"
+	match container_type:
+		ContainerType.BARREL:
+			preview_name = "Barrel"
+		ContainerType.TOMB:
+			preview_name = "Tomb"
+
+	return preview_root.get_node_or_null("%s/CollisionShape2D" % preview_name) as CollisionShape2D
 
 
 func _add_container_sprite(container: BreakableContainer, modulate_color: Color) -> void:
@@ -783,7 +866,7 @@ func refresh_shop_container_prices() -> void:
 			continue
 		var category: int = int(data.get("category", ShopCategory.BROWN))
 		var tier: int = int(data.get("tier", ShopTier.COMMON))
-		var base_price: int = int(data.get("base_price", _get_shop_price(category, tier)))
+		var base_price: int = _apply_shop_tier_price_multiplier(_get_shop_price(category, tier), tier)
 		var price: int = _apply_shop_price_discount(base_price)
 		data["base_price"] = base_price
 		data["price"] = price
@@ -874,6 +957,7 @@ func _spawn_enemy(spawn_position: Vector2, enemy_scene: PackedScene) -> void:
 	enemy_gold_rewards[enemy] = _get_enemy_gold_reward(enemy)
 	add_child(enemy)
 	_scale_actor_body(enemy)
+	_apply_current_round_enrage_to_enemy(enemy)
 
 
 func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
@@ -949,12 +1033,13 @@ func _get_enemy_attack_token_pool(enemy: EnemyBase) -> Dictionary:
 
 
 func _get_enemy_attack_token_limit(enemy: EnemyBase) -> int:
+	var multiplier := 2 if round_enrage_active else 1
 	if enemy is EliteBrute:
-		return MAX_ELITE_ENEMY_ATTACK_TOKENS
+		return MAX_ELITE_ENEMY_ATTACK_TOKENS * multiplier
 	if enemy is AcidZombie or enemy is ZombieFireman:
-		return MAX_RANGED_ENEMY_ATTACK_TOKENS
+		return MAX_RANGED_ENEMY_ATTACK_TOKENS * multiplier
 
-	return MAX_MELEE_ENEMY_ATTACK_TOKENS
+	return MAX_MELEE_ENEMY_ATTACK_TOKENS * multiplier
 
 
 func _get_valid_enemy_attack_token_count(token_pool: Dictionary) -> int:
@@ -986,7 +1071,8 @@ func _spawn_shop_containers() -> void:
 	_clear_shop_containers()
 	for index in range(SHOP_CONTAINER_COUNT):
 		var position: Vector2 = _get_shop_container_position(index)
-		var container := _create_shop_container(position, index + 1)
+		var forced_tier := ShopTier.LEGENDARY if index == 0 and _should_force_legendary_shop_jar() else -1
+		var container := _create_shop_container(position, index + 1, -1, forced_tier)
 		shop_containers.append(container)
 		add_child(container)
 	var extra_rare_count: int = player.consume_extra_rare_shop_jars() if is_instance_valid(player) else 0
@@ -996,6 +1082,10 @@ func _spawn_shop_containers() -> void:
 		var container := _create_shop_container(position, index + 1, ShopCategory.BROWN, ShopTier.RARE)
 		shop_containers.append(container)
 		add_child(container)
+
+
+func _should_force_legendary_shop_jar() -> bool:
+	return is_instance_valid(player) and player.has_method("has_guaranteed_legendary_shop_jar") and bool(player.has_guaranteed_legendary_shop_jar())
 
 
 func _get_shop_container_position(index: int) -> Vector2:
@@ -1533,9 +1623,16 @@ func _check_combat_clear() -> void:
 	if phase != Phase.COMBAT or game_over or shop_transition_pending:
 		return
 
-	if containers.is_empty() and enemies.is_empty():
+	if containers.is_empty() and enemies.is_empty() and not _has_enemy_nodes_in_scene():
 		shop_transition_pending = true
 		call_deferred("_enter_shop_phase")
+
+
+func _has_enemy_nodes_in_scene() -> bool:
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+			return true
+	return false
 
 
 func _update_round_timer(delta: float) -> void:
@@ -1566,6 +1663,39 @@ func _reset_random_container_break_timer() -> void:
 		RANDOM_CONTAINER_BREAK_MIN_TIME,
 		RANDOM_CONTAINER_BREAK_MAX_TIME
 	)
+
+
+func _update_round_enrage(delta: float) -> void:
+	if phase != Phase.COMBAT:
+		return
+	if not auto_break_triggered or not containers.is_empty() or enemies.is_empty():
+		return
+
+	if not round_enrage_active:
+		round_enrage_active = true
+		round_enrage_elapsed = 0.0
+		hud_message = "Surviving zombies are enraging."
+
+	round_enrage_elapsed += delta
+	var speed_multiplier := _get_round_enrage_speed_multiplier()
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			enemy.set_round_enrage_multiplier(speed_multiplier)
+
+
+func _get_round_enrage_speed_multiplier() -> float:
+	var speed_bonus := minf(
+		round_enrage_elapsed * ROUND_ENRAGE_SPEED_GAIN_PER_SECOND,
+		ROUND_ENRAGE_MAX_SPEED_BONUS
+	)
+	return 1.0 + speed_bonus
+
+
+func _apply_current_round_enrage_to_enemy(enemy: EnemyBase) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var speed_multiplier := _get_round_enrage_speed_multiplier() if round_enrage_active else 1.0
+	enemy.set_round_enrage_multiplier(speed_multiplier)
 
 
 func _break_random_container() -> void:
@@ -1648,6 +1778,13 @@ func _get_shop_price(category: int, tier: int) -> int:
 func _get_discounted_shop_price(category: int, tier: int) -> int:
 	var multiplier: float = player.get_shop_price_multiplier() if is_instance_valid(player) else 1.0
 	return SHOP_RULES.discounted_price(category, tier, multiplier)
+
+
+func _apply_shop_tier_price_multiplier(base_price: int, tier: int) -> int:
+	var multiplier := 1.0
+	if is_instance_valid(player) and player.has_method("get_shop_tier_price_multiplier"):
+		multiplier = float(player.get_shop_tier_price_multiplier(tier))
+	return maxi(1, int(round(float(base_price) * multiplier)))
 
 
 func _apply_shop_price_discount(base_price: int) -> int:

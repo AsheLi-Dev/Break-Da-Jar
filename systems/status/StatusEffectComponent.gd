@@ -50,7 +50,6 @@ func apply_bleeding(source_player: Node = null) -> void:
 	bleeding_time_left = bleeding_duration
 	if source_player != null and is_instance_valid(source_player):
 		status_owner_player = source_player
-	print("Bleeding applied to %s" % owner_enemy.name)
 
 
 func apply_poison(source_player: Node = null) -> void:
@@ -62,7 +61,6 @@ func apply_poison_stacks(amount: int, source_player: Node = null) -> void:
 	poison_time_left = poison_duration
 	if source_player != null and is_instance_valid(source_player):
 		status_owner_player = source_player
-	print("Poison applied to %s stacks=%d" % [owner_enemy.name, poison_stacks])
 
 
 func get_poison_stacks() -> int:

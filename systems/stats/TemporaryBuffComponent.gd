@@ -42,7 +42,6 @@ func add_timed_stat_buff(buff_id: StringName, stat_name: StringName, value_per_s
 		"round": false,
 	}
 	buffs[buff_id] = buff
-	print("Timed buff added/refreshed: %s stacks=%d" % [buff_id, stacks])
 
 
 func add_round_stat_buff(buff_id: StringName, stat_name: StringName, value_per_stack: float, max_stacks: int) -> void:
@@ -62,7 +61,6 @@ func add_round_stat_buff(buff_id: StringName, stat_name: StringName, value_per_s
 		"applied_value": new_value,
 		"round": true,
 	}
-	print("Round buff added: %s stacks=%d" % [buff_id, stacks])
 
 
 func set_dynamic_stat_bonus(bonus_id: StringName, stat_name: StringName, value: float) -> void:
@@ -76,15 +74,12 @@ func set_dynamic_stat_bonus(bonus_id: StringName, stat_name: StringName, value: 
 	else:
 		dynamic_bonuses.erase(bonus_id)
 
-	print("Dynamic bonus updated: %s value=%s" % [bonus_id, value])
-
 
 func clear_round_buffs() -> void:
 	for buff_id in buffs.keys().duplicate():
 		var buff: Dictionary = buffs[buff_id]
 		if bool(buff.get("round", false)):
 			_remove_buff(buff_id)
-	print("Round buffs cleared")
 
 
 func _remove_buff(buff_id: StringName) -> void:
@@ -94,7 +89,6 @@ func _remove_buff(buff_id: StringName) -> void:
 
 	_apply_stat(StringName(buff["stat_name"]), -float(buff.get("applied_value", 0.0)))
 	buffs.erase(buff_id)
-	print("Buff expired/removed: %s" % buff_id)
 
 
 func _apply_stat(stat_name: StringName, value: float) -> void:

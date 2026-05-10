@@ -111,18 +111,15 @@ func _add_connection_lines(graph: Control) -> void:
 	for connection in player.get_talent_connections():
 		var from_id: StringName = connection[0]
 		var to_id: StringName = connection[1]
-		var from_position: Vector2 = _get_talent_ui_position(player.get_talent_node_grid_position(from_id))
-		var to_position: Vector2 = _get_talent_ui_position(player.get_talent_node_grid_position(to_id))
-		var line := ColorRect.new()
+		var from_position: Vector2 = player.get_talent_node_position(from_id)
+		var to_position: Vector2 = player.get_talent_node_position(to_id)
+		var line := Line2D.new()
 		line.name = "TalentConnection"
-		line.color = Color(0.42, 0.48, 0.44, 0.85)
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if absf(from_position.x - to_position.x) < 0.1:
-			line.position = Vector2(from_position.x - 2.0, minf(from_position.y, to_position.y))
-			line.size = Vector2(4.0, absf(from_position.y - to_position.y))
-		else:
-			line.position = Vector2(minf(from_position.x, to_position.x), from_position.y - 2.0)
-			line.size = Vector2(absf(from_position.x - to_position.x), 4.0)
+		line.default_color = Color(0.42, 0.48, 0.44, 0.85)
+		line.width = 4.0
+		line.antialiased = true
+		line.add_point(from_position)
+		line.add_point(to_position)
 		graph.add_child(line)
 
 
@@ -136,7 +133,7 @@ func _add_buttons(graph: Control) -> void:
 		button.name = String(node_id)
 		button.text = player.get_talent_display_name(node_id)
 		button.tooltip_text = player.get_talent_description(node_id)
-		button.position = _get_talent_ui_position(player.get_talent_node_grid_position(node_id)) - Vector2(24, 24)
+		button.position = player.get_talent_node_position(node_id) - Vector2(24, 24)
 		button.size = Vector2(48, 48)
 		button.focus_mode = Control.FOCUS_NONE
 		button.mouse_entered.connect(_play_talent_hover_sfx)

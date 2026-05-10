@@ -18,6 +18,8 @@ var damaged_containers: Array[Node] = []
 var sprite: AnimatedSprite2D
 var attack_source: String = "player_attack"
 var allow_procs: bool = true
+var chain_remaining: int = 0
+var chain_range: float = 700.0
 
 
 func setup(new_owner_player: Node, origin: Vector2, new_direction: Vector2, new_damage: float, new_attack_source: String = "player_attack", new_allow_procs: bool = true) -> void:
@@ -115,6 +117,8 @@ func _damage_enemy(enemy: Node) -> void:
 		owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": attack_source, "direct": true, "allow_procs": allow_procs})
 	else:
 		enemy.call("take_damage", damage)
+	if chain_remaining > 0 and owner_player != null and owner_player.has_method("spawn_chained_wizard_fire_laser"):
+		owner_player.call("spawn_chained_wizard_fire_laser", enemy, chain_remaining - 1, chain_range, damaged_bodies.duplicate())
 
 
 func _damage_container(container: Node) -> void:

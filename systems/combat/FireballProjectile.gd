@@ -20,24 +20,33 @@ const FIREBALL_EXPLOSION_FRAME_SIZE := Vector2(64.0, 64.0)
 @export var fireball_visual_scale: float = 1.0
 @export var explosion_animation_fps: float = 18.0
 @export var explosion_visual_radius_scale: float = 0.85
+@export var flight_jitter_amplitude: float = 0.8
+@export var flight_jitter_frequency: float = 32.0
 
 var owner_player: Node
 var age: float = 0.0
 var exploded: bool = false
 var fireball_texture: Texture2D
 var explosion_texture: Texture2D
+var allow_procs: bool = false
+var explode_replacement_callback: Callable = Callable()
+var explode_callback: Callable = Callable()
+var owner_spawn_modifiers_applied: bool = false
 
 
-func setup(new_owner: Node, new_position: Vector2, new_direction: Vector2, new_damage: float, new_radius: float) -> void:
+func setup(new_owner: Node, new_position: Vector2, new_direction: Vector2, new_damage: float, new_radius: float, new_allow_procs: bool = false) -> void:
 	owner_player = new_owner
 	global_position = new_position
 	direction = new_direction.normalized()
 	damage = new_damage
 	explosion_radius = new_radius
+	allow_procs = new_allow_procs
 	rotation = direction.angle()
 
 
 func _ready() -> void:
+	add_to_group("fireball_projectile")
+	_apply_owner_spawn_modifiers()
 	_ensure_nodes()
 	if not body_entered.is_connected(_on_body_entered):
 		body_entered.connect(_on_body_entered)
@@ -48,8 +57,9 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	position += direction * speed * delta
 	age += delta
+	_update_flight_jitter()
 	if age >= lifetime:
-		explode()
+		explode(true)
 
 
 func _on_body_entered(body: Node) -> void:
@@ -63,12 +73,25 @@ func _on_area_entered(area: Area2D) -> void:
 		explode()
 
 
-func explode() -> void:
+func _apply_owner_spawn_modifiers() -> void:
+	if owner_spawn_modifiers_applied:
+		return
+	if owner_player != null and owner_player.has_method("apply_fireball_projectile_talent_modifiers"):
+		owner_player.call("apply_fireball_projectile_talent_modifiers", self)
+
+
+func explode(is_natural: bool = false) -> void:
 	if exploded:
 		return
 
 	exploded = true
-	print("Fireball explodes")
+	if is_natural and owner_player != null and owner_player.has_method("get_fireball_natural_explosion_radius_multiplier"):
+		explosion_radius *= maxf(float(owner_player.call("get_fireball_natural_explosion_radius_multiplier")), 0.0)
+	if is_natural and owner_player != null and owner_player.has_method("on_fireball_natural_explosion"):
+		owner_player.call("on_fireball_natural_explosion", self)
+	if explode_replacement_callback.is_valid() and bool(explode_replacement_callback.call(global_position, is_natural)):
+		queue_free()
+		return
 	_spawn_explosion_vfx()
 	var poison_stacks: int = 0
 	if owner_player != null and owner_player.has_method("get_stats"):
@@ -81,7 +104,7 @@ func explode() -> void:
 		if enemy_2d == null or enemy_2d.global_position.distance_to(global_position) > explosion_radius:
 			continue
 		if owner_player != null and owner_player.has_method("deal_player_damage_to_enemy"):
-			owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": "fireball", "direct": true, "allow_procs": false})
+			owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
 		elif enemy.has_method("take_damage"):
 			enemy.take_damage(damage)
 		if poison_stacks > 0 and enemy.has_method("apply_poison_stacks"):
@@ -96,6 +119,9 @@ func explode() -> void:
 				continue
 			if container.has_method("take_damage"):
 				container.take_damage(damage, {"source": "fireball", "owner": owner_player})
+
+	if explode_callback.is_valid():
+		explode_callback.call(global_position)
 
 	queue_free()
 
@@ -130,6 +156,15 @@ func _ensure_nodes() -> void:
 			Vector2(-8.0, 8.0),
 		])
 		add_child(body)
+
+
+func _update_flight_jitter() -> void:
+	var vfx := get_node_or_null("FireballVFX") as Node2D
+	if vfx == null:
+		return
+	var perpendicular := Vector2(-direction.y, direction.x)
+	var jitter := sin(age * flight_jitter_frequency) * flight_jitter_amplitude
+	vfx.position = perpendicular * jitter
 
 
 func _add_fireball_vfx() -> bool:
@@ -169,12 +204,11 @@ func _get_fireball_texture() -> Texture2D:
 	if fireball_texture != null:
 		return fireball_texture
 
-	var image := Image.load_from_file(FIREBALL_TEXTURE_PATH)
-	if image == null or image.is_empty():
+	fireball_texture = load(FIREBALL_TEXTURE_PATH) as Texture2D
+	if fireball_texture == null:
 		push_warning("Failed to load fireball texture: %s" % FIREBALL_TEXTURE_PATH)
 		return null
 
-	fireball_texture = ImageTexture.create_from_image(image)
 	return fireball_texture
 
 
@@ -219,10 +253,9 @@ func _get_explosion_texture() -> Texture2D:
 	if explosion_texture != null:
 		return explosion_texture
 
-	var image := Image.load_from_file(FIREBALL_EXPLOSION_TEXTURE_PATH)
-	if image == null or image.is_empty():
+	explosion_texture = load(FIREBALL_EXPLOSION_TEXTURE_PATH) as Texture2D
+	if explosion_texture == null:
 		push_warning("Failed to load fireball explosion texture: %s" % FIREBALL_EXPLOSION_TEXTURE_PATH)
 		return null
 
-	explosion_texture = ImageTexture.create_from_image(image)
 	return explosion_texture

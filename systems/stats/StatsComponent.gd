@@ -262,5 +262,4 @@ func _get_numeric_stat(stat_name: StringName) -> float:
 
 
 func _emit_change(stat_name: StringName, value: Variant) -> void:
-	print("Stat changed: %s = %s" % [stat_name, value])
 	stat_changed.emit(stat_name, value)

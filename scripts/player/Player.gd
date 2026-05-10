@@ -41,6 +41,9 @@ const HOLY_SHIELD_TEXTURE: Texture2D = preload("res://assets/vfx/holy spell/Holy
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const ENEMY_HURT_SFX: AudioStream = preload("res://assets/sfx/enemy_hurt.wav")
 const TALENT_CATALOG := preload("res://scripts/player/PlayerTalentCatalog.gd")
+const CHARACTER_DATABASE := preload("res://scripts/player/CharacterDatabase.gd")
+const HOLY_FLAME_LASER_SCRIPT := preload("res://systems/combat/HolyFlameLaser.gd")
+const FIRE_ESSENCE_PICKUP_SCRIPT := preload("res://systems/combat/FireEssencePickup.gd")
 const LIGHTNING_CHAIN_TEXTURE_PATH := "res://assets/vfx/lightning spell/lightning chain 256x256.png"
 const LIGHTNING_CHAIN_FRAME_SIZE := Vector2(256.0, 256.0)
 const LIGHTNING_CHAIN_SFX: AudioStream = preload("res://assets/sfx/dragon-studio-lightning-spell-386163.mp3")
@@ -145,6 +148,11 @@ var slow_remaining: float = 0.0
 var stats: StatsComponent
 var inventory: InventoryComponent
 var temporary_buffs: TemporaryBuffComponent
+var character_definition: RefCounted
+var talent_catalog: GDScript = TALENT_CATALOG
+var primary_ability: StringName = &"paladin_holy_strike"
+var secondary_ability: StringName = &"paladin_shockwave"
+var utility_ability: StringName = &"paladin_blessing"
 var level: int = 1
 var experience: int = 0
 var pending_talent_points: int = 0
@@ -192,9 +200,46 @@ var talent_holy_strike_elite_smite_enabled: bool = false
 var talent_holy_strike_stationary_atk_enabled: bool = false
 var talent_holy_strike_double_tombs_enabled: bool = false
 var talent_holy_strike_undamaged_stationary_enabled: bool = false
+var talent_wizard_slide_fireball_blast_enabled: bool = false
+var talent_wizard_poison_stack_damage_enabled: bool = false
+var talent_wizard_nearby_enemy_attack_speed_enabled: bool = false
+var talent_wizard_nearby_damage_focus_enabled: bool = false
+var talent_wizard_fire_surge_left_click_blast_enabled: bool = false
+var talent_wizard_nearby_kill_gold_enabled: bool = false
+var talent_wizard_dash_fireball_enabled: bool = false
+var talent_wizard_nearby_enemy_move_speed_enabled: bool = false
+var talent_wizard_nearby_poison_aura_enabled: bool = false
+var talent_wizard_poisoned_kill_gold_enabled: bool = false
+var talent_wizard_short_laser_double_damage_enabled: bool = false
+var talent_wizard_nearby_enemy_elite_damage_enabled: bool = false
+var talent_wizard_more_weaker_enemies_enabled: bool = false
+var talent_wizard_rebirth_level_to_atk_enabled: bool = false
+var talent_wizard_primary_fireball_laser_explosion_enabled: bool = false
+var talent_wizard_fire_surge_laser_enabled: bool = false
+var talent_wizard_fire_laser_chain_enabled: bool = false
+var talent_wizard_fire_surge_attack_speed_enabled: bool = false
+var talent_wizard_attack_speed_laser_chain_enabled: bool = false
+var talent_wizard_fire_essence_burst_enabled: bool = false
+var talent_wizard_kill_move_speed_burst_enabled: bool = false
+var talent_wizard_fire_surge_radial_fireballs_enabled: bool = false
+var talent_wizard_max_hp_primary_echo_enabled: bool = false
+var talent_wizard_move_speed_extra_fireballs_enabled: bool = false
+var talent_wizard_poisoned_death_fireball_enabled: bool = false
+var talent_wizard_rare_item_move_speed_enabled: bool = false
+var talent_wizard_fire_essence_explosion_scatter_enabled: bool = false
+var talent_wizard_random_double_fireballs_enabled: bool = false
+var talent_wizard_guaranteed_legendary_shop_jar_enabled: bool = false
+var talent_wizard_natural_fireball_radius_enabled: bool = false
+var talent_wizard_legendary_extra_fireballs_enabled: bool = false
+var talent_wizard_natural_fireball_heal_enabled: bool = false
+var talent_wizard_damage_taken_natural_explode_fireballs_enabled: bool = false
+var wizard_rebirth_used: bool = false
 var applied_max_hp_from_atk: int = 0
 var applied_holy_strike_move_speed_attack_speed: float = -1.0
 var applied_holy_strike_nearby_enemy_attack_speed: float = -1.0
+var applied_wizard_nearby_enemy_attack_speed: float = -1.0
+var applied_wizard_nearby_enemy_move_speed: float = -1.0
+var applied_wizard_nearby_enemy_elite_damage: float = -1.0
 var holy_strike_zombie_inscription_kills: int = 0
 var holy_strike_stationary_time: float = 0.0
 var holy_strike_undamaged_time: float = 0.0
@@ -204,7 +249,9 @@ var applied_holy_strike_undamaged_move_speed: float = 0.0
 var normal_kill_common_item_counter: int = 0
 var applied_item_defense_bonus: int = 0
 var applied_item_max_hp_bonus: int = 0
+var applied_wizard_rare_item_move_speed: int = 0
 var next_attack_after_slide_ready: bool = false
+var next_wizard_slide_fireball_ready: bool = false
 var next_attack_damage_bonus: float = 0.0
 var shop_price_multiplier: float = 1.0
 var extra_rare_shop_jars_pending: int = 0
@@ -229,6 +276,12 @@ var pending_blessing: bool = false
 var pending_blessing_is_attack: bool = true
 var blessing_damage_shield_active: bool = false
 var blessing_shield_heals_on_block: bool = false
+var fire_surge_remaining: float = 0.0
+var fire_surge_fire_remaining: float = 0.0
+var fire_surge_cooldown_pending: bool = false
+var wizard_nearby_poison_aura_timer: float = 5.0
+var wizard_fire_essence_spawn_timer: float = 5.0
+var wizard_fire_essence_charges: int = 0
 
 var gun_pivot: Node2D
 var muzzle: Marker2D
@@ -266,12 +319,34 @@ var hurt_feedback_cooldown_remaining: float = 0.0
 
 
 func _ready() -> void:
+	if character_definition == null:
+		setup_character(&"paladin")
 	add_to_group("player")
 	_ensure_stats_and_items()
 	hp = max_hp
 	saved_collision_mask = collision_mask
 	_ensure_placeholder_nodes()
 	hp_changed.emit(roundi(hp), roundi(max_hp))
+
+
+func setup_character(character_id: StringName) -> void:
+	character_definition = CHARACTER_DATABASE.get_definition(character_id)
+	talent_catalog = character_definition.talent_catalog
+	primary_ability = character_definition.primary_ability
+	secondary_ability = character_definition.secondary_ability
+	utility_ability = character_definition.utility_ability
+	max_hp = character_definition.max_hp
+	move_speed = character_definition.move_speed
+	projectile_damage = character_definition.base_damage
+	fire_rate = character_definition.fire_rate
+	if stats != null:
+		stats.max_hp = roundi(max_hp)
+		stats.base_move_speed = move_speed
+	if sprite != null:
+		sprite.texture = _get_animation_texture(&"idle")
+	if animation_player != null:
+		_build_animation_library()
+		_build_animation_state_machine()
 
 
 func _exit_tree() -> void:
@@ -283,6 +358,12 @@ func _physics_process(delta: float) -> void:
 	_update_holy_strike_stationary_talents(delta)
 	_update_holy_strike_dynamic_talents()
 	_update_holy_strike_nearby_enemy_attack_speed()
+	_update_wizard_nearby_enemy_attack_speed()
+	_update_wizard_nearby_enemy_move_speed()
+	_update_wizard_nearby_enemy_elite_damage()
+	_update_wizard_fire_surge_attack_speed_bonus()
+	_update_wizard_nearby_poison_aura(delta)
+	_update_wizard_fire_essence_spawner(delta)
 	_update_hp_regen(delta)
 	_update_facing()
 
@@ -334,10 +415,14 @@ func take_damage(amount: float) -> void:
 		final_damage = float(stats.calculate_incoming_damage(amount))
 	if final_damage <= 0.0:
 		return
+	if hp - final_damage <= 0.0 and _try_wizard_rebirth():
+		damage_taken.emit(final_damage)
+		return
 	hp = maxf(0.0, hp - final_damage)
 	holy_strike_undamaged_time = 0.0
 	hp_changed.emit(roundi(hp), roundi(max_hp))
 	damage_taken.emit(final_damage)
+	_trigger_wizard_damage_taken_fireball_natural_explosions()
 	if talent_damage_taken_lifesteal_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"damage_taken_lifesteal", &"lifesteal", 0.2, 2.0, 1)
 	_play_hurt_impact_feedback()
@@ -368,6 +453,8 @@ func lose_hp(amount: float) -> float:
 		return 0.0
 
 	var old_hp: float = hp
+	if hp - amount <= 0.0 and _try_wizard_rebirth():
+		return old_hp
 	hp = maxf(0.0, hp - amount)
 	hp_changed.emit(roundi(hp), roundi(max_hp))
 	if hp <= 0.0:
@@ -385,6 +472,52 @@ func get_temporary_buffs() -> TemporaryBuffComponent:
 
 func get_base_attack_damage() -> float:
 	return projectile_damage
+
+
+func collect_fire_essence() -> void:
+	if talent_wizard_fire_essence_burst_enabled:
+		wizard_fire_essence_charges += 1
+
+
+func apply_fireball_projectile_talent_modifiers(fireball: FireballProjectile) -> void:
+	if fireball == null or fireball.owner_spawn_modifiers_applied:
+		return
+
+	fireball.owner_spawn_modifiers_applied = true
+	var total_fireballs := 1 + _get_wizard_legendary_extra_fireball_count()
+	if talent_wizard_random_double_fireballs_enabled:
+		total_fireballs *= 2
+	if total_fireballs <= 1:
+		return
+
+	var randomize_directions := talent_wizard_random_double_fireballs_enabled
+	if randomize_directions:
+		var first_direction := _get_random_fireball_direction()
+		fireball.direction = first_direction
+		fireball.rotation = first_direction.angle()
+	for _index in range(total_fireballs - 1):
+		var duplicate_direction := _get_random_fireball_direction() if randomize_directions else fireball.direction
+		_spawn_fireball_duplicate(fireball, duplicate_direction)
+
+
+func get_fireball_natural_explosion_radius_multiplier() -> float:
+	return 2.0 if talent_wizard_natural_fireball_radius_enabled else 1.0
+
+
+func on_fireball_natural_explosion(_fireball: FireballProjectile) -> void:
+	if talent_wizard_natural_fireball_heal_enabled:
+		heal(1.0)
+
+
+func _trigger_wizard_damage_taken_fireball_natural_explosions() -> void:
+	if not talent_wizard_damage_taken_natural_explode_fireballs_enabled or get_tree() == null:
+		return
+
+	for node in get_tree().get_nodes_in_group("fireball_projectile"):
+		var fireball := node as FireballProjectile
+		if fireball == null or fireball.owner_player != self or fireball.exploded:
+			continue
+		fireball.explode(true)
 
 
 func grant_timed_invincibility(duration: float) -> void:
@@ -431,11 +564,19 @@ func get_required_exp_for_next_level() -> int:
 
 
 func get_talent_node_ids() -> Array[StringName]:
-	return TALENT_CATALOG.node_ids()
+	return talent_catalog.node_ids()
 
 
 func get_talent_node_grid_position(node_id: StringName) -> Vector2i:
-	return TALENT_CATALOG.grid_position(node_id)
+	if talent_catalog.has_method("grid_position"):
+		return talent_catalog.grid_position(node_id)
+	return Vector2i.ZERO
+
+
+func get_talent_node_position(node_id: StringName) -> Vector2:
+	if talent_catalog.has_method("position"):
+		return talent_catalog.position(node_id)
+	return _get_talent_ui_position_from_grid(get_talent_node_grid_position(node_id))
 
 
 func get_talent_display_name(node_id: StringName) -> String:
@@ -449,7 +590,7 @@ func get_talent_description(node_id: StringName) -> String:
 
 
 func get_talent_connections() -> Array:
-	return TALENT_CATALOG.connections()
+	return talent_catalog.connections()
 
 
 func can_unlock_talent(node_id: StringName) -> bool:
@@ -458,14 +599,16 @@ func can_unlock_talent(node_id: StringName) -> bool:
 	if unlocked_talents.has(node_id):
 		return false
 
-	var coord: Vector2i = get_talent_node_grid_position(node_id)
-	if not _is_talent_coord_valid(coord):
+	if not get_talent_node_ids().has(node_id):
 		return false
-	if _is_talent_start_coord(coord):
+	if _is_talent_start_node(node_id):
 		return true
-
-	for neighbor in _get_talent_neighbor_coords(coord):
-		if unlocked_talents.has(_get_talent_node_id(neighbor)):
+	for connection in get_talent_connections():
+		if connection.size() != 2:
+			continue
+		if connection[0] == node_id and unlocked_talents.has(connection[1]):
+			return true
+		if connection[1] == node_id and unlocked_talents.has(connection[0]):
 			return true
 
 	return false
@@ -507,6 +650,14 @@ func get_shop_price_multiplier() -> float:
 	return shop_price_multiplier
 
 
+func has_guaranteed_legendary_shop_jar() -> bool:
+	return talent_wizard_guaranteed_legendary_shop_jar_enabled
+
+
+func get_shop_tier_price_multiplier(tier: int) -> float:
+	return 2.0 if talent_wizard_guaranteed_legendary_shop_jar_enabled and tier == 2 else 1.0
+
+
 func queue_extra_rare_shop_jar(amount: int = 1) -> void:
 	extra_rare_shop_jars_pending += maxi(amount, 0)
 
@@ -544,6 +695,18 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 		final_damage *= stats.get_damage_multiplier()
 		if bool(attack_info.get("direct", true)):
 			final_damage *= _get_conditional_direct_damage_multiplier(enemy)
+		if talent_wizard_poison_stack_damage_enabled:
+			var poison_stacks := _get_enemy_poison_stacks(enemy)
+			if poison_stacks > 0:
+				final_damage *= 1.0 + 0.05 * float(poison_stacks)
+				attack_info["wizard_poison_stack_damage_bonus"] = poison_stacks
+		if talent_wizard_nearby_damage_focus_enabled:
+			if _is_enemy_nearby(enemy):
+				final_damage *= 1.5
+				attack_info["wizard_nearby_damage_focus"] = "nearby"
+			else:
+				final_damage *= 0.5
+				attack_info["wizard_nearby_damage_focus"] = "distant"
 		if _is_holy_strike_attack(attack_info) and talent_holy_strike_elite_smite_enabled:
 			if _is_elite_enemy(enemy):
 				final_damage *= 1.5
@@ -553,7 +716,6 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 		if bool(attack_info.get("allow_crit", true)) and _roll_attack_crit(attack_info):
 			final_damage *= 2.0 + stats.critical_damage_bonus
 			attack_info["critical"] = true
-			print("Critical hit")
 
 	var damage_dealt: float = enemy.take_damage(final_damage, self, attack_info)
 	if damage_dealt <= 0.0:
@@ -566,7 +728,6 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 		if stats != null and stats.lifesteal > 0.0:
 			var heal_amount: float = damage_dealt * stats.lifesteal
 			heal(heal_amount)
-			print("Lifesteal heals %s" % heal_amount)
 
 	if bool(attack_info.get("allow_procs", true)):
 		_apply_holy_strike_on_hit_talents(enemy, attack_info)
@@ -701,6 +862,14 @@ func notify_enemy_killed(enemy: Node) -> void:
 		_grant_random_common_item()
 	if talent_elite_kill_rare_item_enabled and is_elite:
 		_grant_random_item(&"rare")
+	if talent_wizard_nearby_kill_gold_enabled and _is_enemy_nearby(enemy):
+		add_gold(1)
+	if talent_wizard_poisoned_kill_gold_enabled and _is_enemy_poisoned(enemy):
+		add_gold(1)
+	if talent_wizard_poisoned_death_fireball_enabled and _is_enemy_poisoned(enemy):
+		_trigger_wizard_poisoned_death_fireball(enemy)
+	if talent_wizard_kill_move_speed_burst_enabled and temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"wizard_kill_move_speed_burst", &"movement_speed_bonus", 2.0, 0.2, 1)
 	if talent_holy_strike_elite_damage_per_kill_enabled and temporary_buffs != null:
 		temporary_buffs.add_round_stat_buff(&"holy_strike_elite_damage_per_kill", &"elite_direct_damage_bonus", 0.01, 999999)
 	if talent_holy_strike_zombie_inscriptions_enabled and stats != null:
@@ -725,10 +894,14 @@ func _get_current_gold() -> int:
 
 
 func get_enemy_spawn_count_multiplier() -> float:
+	if talent_wizard_more_weaker_enemies_enabled:
+		return 2.0
 	return 1.5 if talent_holy_strike_more_weaker_enemies_enabled else 1.0
 
 
 func get_enemy_max_hp_multiplier() -> float:
+	if talent_wizard_more_weaker_enemies_enabled:
+		return 0.7
 	return 0.8 if talent_holy_strike_more_weaker_enemies_enabled else 1.0
 
 
@@ -754,6 +927,107 @@ func should_spawn_round_healing_orb() -> bool:
 	return talent_round_healing_orb_enabled
 
 
+func _try_wizard_rebirth() -> bool:
+	if not talent_wizard_rebirth_level_to_atk_enabled or wizard_rebirth_used:
+		return false
+
+	wizard_rebirth_used = true
+	var lost_levels: int = maxi(level - 1, 0)
+	_reset_level_and_talents_after_wizard_rebirth()
+	if stats != null and lost_levels > 0:
+		stats.apply_modifier(&"atk", &"add", float(lost_levels))
+	hp = max_hp
+	is_invincible = false
+	invincible_remaining = 0.0
+	hp_changed.emit(roundi(hp), roundi(max_hp))
+	experience_changed.emit(experience, _get_required_exp_for_next_level(), level)
+	talent_points_changed.emit(unspent_talent_points, pending_talent_points)
+	return true
+
+
+func _reset_level_and_talents_after_wizard_rebirth() -> void:
+	for node_id in unlocked_talents.duplicate():
+		_remove_talent_stat_effect(node_id)
+	unlocked_talents.clear()
+	level = 1
+	experience = 0
+	pending_talent_points = 0
+	unspent_talent_points = 0
+	_reset_wizard_talent_state_after_rebirth()
+
+
+func _remove_talent_stat_effect(node_id: StringName) -> void:
+	if stats == null:
+		return
+	var definition := _get_talent_definition(node_id)
+	if not definition.has("stat"):
+		return
+	var operation := StringName(definition.get("operation", &"add"))
+	if operation != &"add":
+		return
+	stats.apply_modifier(
+		StringName(definition.get("stat", &"atk")),
+		&"add",
+		-float(definition.get("value", 1.0))
+	)
+
+
+func _reset_wizard_talent_state_after_rebirth() -> void:
+	talent_wizard_slide_fireball_blast_enabled = false
+	talent_wizard_poison_stack_damage_enabled = false
+	talent_wizard_nearby_enemy_attack_speed_enabled = false
+	talent_wizard_nearby_damage_focus_enabled = false
+	talent_wizard_fire_surge_left_click_blast_enabled = false
+	talent_wizard_nearby_kill_gold_enabled = false
+	talent_wizard_dash_fireball_enabled = false
+	talent_wizard_nearby_enemy_move_speed_enabled = false
+	talent_wizard_nearby_poison_aura_enabled = false
+	talent_wizard_poisoned_kill_gold_enabled = false
+	talent_wizard_short_laser_double_damage_enabled = false
+	talent_wizard_nearby_enemy_elite_damage_enabled = false
+	talent_wizard_more_weaker_enemies_enabled = false
+	talent_wizard_rebirth_level_to_atk_enabled = false
+	talent_wizard_primary_fireball_laser_explosion_enabled = false
+	talent_wizard_fire_surge_laser_enabled = false
+	talent_wizard_fire_laser_chain_enabled = false
+	talent_wizard_fire_surge_attack_speed_enabled = false
+	talent_wizard_attack_speed_laser_chain_enabled = false
+	talent_wizard_fire_essence_burst_enabled = false
+	talent_wizard_kill_move_speed_burst_enabled = false
+	talent_wizard_fire_surge_radial_fireballs_enabled = false
+	talent_wizard_max_hp_primary_echo_enabled = false
+	talent_wizard_move_speed_extra_fireballs_enabled = false
+	talent_wizard_poisoned_death_fireball_enabled = false
+	talent_wizard_rare_item_move_speed_enabled = false
+	talent_wizard_fire_essence_explosion_scatter_enabled = false
+	talent_wizard_random_double_fireballs_enabled = false
+	talent_wizard_guaranteed_legendary_shop_jar_enabled = false
+	talent_wizard_natural_fireball_radius_enabled = false
+	talent_wizard_legendary_extra_fireballs_enabled = false
+	talent_wizard_natural_fireball_heal_enabled = false
+	talent_wizard_damage_taken_natural_explode_fireballs_enabled = false
+	if stats != null and applied_wizard_rare_item_move_speed != 0:
+		stats.apply_modifier(&"bonus_move_speed_flat", &"add", -float(applied_wizard_rare_item_move_speed))
+		applied_wizard_rare_item_move_speed = 0
+	next_wizard_slide_fireball_ready = false
+	wizard_nearby_poison_aura_timer = 5.0
+	wizard_fire_essence_spawn_timer = 5.0
+	wizard_fire_essence_charges = 0
+	_clear_wizard_dynamic_talent_bonuses()
+
+
+func _clear_wizard_dynamic_talent_bonuses() -> void:
+	if temporary_buffs == null:
+		return
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_nearby_enemy_attack_speed", &"attack_speed_bonus", 0.0)
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_nearby_enemy_move_speed", &"movement_speed_bonus", 0.0)
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_nearby_enemy_elite_damage", &"elite_direct_damage_bonus", 0.0)
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_fire_surge_attack_speed", &"attack_speed_bonus", 0.0)
+	applied_wizard_nearby_enemy_attack_speed = -1.0
+	applied_wizard_nearby_enemy_move_speed = -1.0
+	applied_wizard_nearby_enemy_elite_damage = -1.0
+
+
 func apply_slow(multiplier: float, duration: float) -> void:
 	slow_multiplier = minf(slow_multiplier, clampf(multiplier, 0.05, 1.0))
 	slow_remaining = maxf(slow_remaining, duration)
@@ -761,13 +1035,17 @@ func apply_slow(multiplier: float, duration: float) -> void:
 
 func die() -> void:
 	_force_restore_hurt_slow_motion()
+	if _try_wizard_rebirth():
+		return
 	queue_free()
 
 
 func _update_timers(delta: float) -> void:
 	fire_cooldown_remaining = maxf(0.0, fire_cooldown_remaining - delta)
 	shockwave_cooldown_remaining = maxf(0.0, shockwave_cooldown_remaining - delta)
-	blessing_cooldown_remaining = maxf(0.0, blessing_cooldown_remaining - delta)
+	if not fire_surge_cooldown_pending:
+		blessing_cooldown_remaining = maxf(0.0, blessing_cooldown_remaining - delta)
+	_update_fire_surge(delta)
 	blessing_shield_remaining = maxf(0.0, blessing_shield_remaining - delta)
 	if blessing_damage_shield_active and blessing_shield_remaining <= 0.0:
 		blessing_damage_shield_active = false
@@ -826,6 +1104,8 @@ func _try_start_dash() -> void:
 	slide_window_remaining = dash_duration + slide_cancel_window
 	velocity = dash_direction * dash_speed
 	dash_started.emit(dash_direction)
+	if talent_wizard_dash_fireball_enabled:
+		_launch_wizard_dash_fireball()
 	_spawn_dash_smear()
 	_schedule_forward_dash_smear()
 
@@ -920,8 +1200,9 @@ func _try_fire_projectile() -> void:
 	pending_attack_projectile = true
 	pending_attack_target_position = get_global_mouse_position()
 	_play_action_animation_with_direction(&"attack", _get_action_animation_time(&"attack"), facing_direction)
-	_show_melee_telegraph(facing_direction)
-	_queue_holy_slash_effect(facing_direction)
+	if primary_ability == &"paladin_holy_strike":
+		_show_melee_telegraph(facing_direction)
+		_queue_holy_slash_effect(facing_direction)
 
 
 func _try_cast_shockwave() -> void:
@@ -934,20 +1215,27 @@ func _try_cast_shockwave() -> void:
 	shockwave_cooldown_remaining = shockwave_cooldown
 	pending_shockwave_target_position = get_global_mouse_position()
 	_play_action_animation_with_direction(&"ability", _get_action_animation_time(&"ability"), facing_direction)
-	get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_start_shockwave_effect)
+	if secondary_ability == &"wizard_fire_laser":
+		get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_cast_wizard_fire_laser)
+	else:
+		get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_start_shockwave_effect)
 
 
 func _try_cast_blessing() -> void:
 	if blessing_cooldown_remaining > 0.0:
 		return
+	if fire_surge_remaining > 0.0 or fire_surge_cooldown_pending:
+		return
 	if not _can_start_attack_now():
 		return
 	_interrupt_slide_for_attack()
 
-	blessing_cooldown_remaining = blessing_cooldown
+	if utility_ability == &"paladin_blessing":
+		blessing_cooldown_remaining = blessing_cooldown
 	pending_blessing = true
 	pending_blessing_is_attack = blessing_next_is_attack
-	blessing_next_is_attack = not blessing_next_is_attack
+	if utility_ability == &"paladin_blessing":
+		blessing_next_is_attack = not blessing_next_is_attack
 	_play_action_animation_with_direction(&"pummel", _get_action_animation_time(&"pummel"), facing_direction)
 
 
@@ -958,6 +1246,9 @@ func _maybe_apply_blessing() -> void:
 		return
 
 	pending_blessing = false
+	if utility_ability == &"wizard_fire_surge":
+		_start_fire_surge()
+		return
 	if pending_blessing_is_attack:
 		_apply_attack_blessing()
 	else:
@@ -987,6 +1278,285 @@ func _start_shockwave_effect() -> void:
 	_start_camera_shake(5.0, 0.12)
 	get_tree().create_timer(shockwave_visible_time).timeout.connect(_hide_shockwave_visual)
 	get_tree().create_timer(_get_shockwave_effect_damage_time()).timeout.connect(_perform_shockwave_attack.bind(shockwave_center))
+
+
+func _cast_wizard_fire_laser() -> void:
+	var target_position := pending_shockwave_target_position
+	var direction := target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	_spawn_wizard_fire_laser(global_position, direction)
+
+
+func _spawn_wizard_fire_laser(start_position: Vector2, direction: Vector2, chain_remaining_override: int = -1) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+	var laser := HOLY_FLAME_LASER_SCRIPT.new() as HolyFlameLaser
+	laser.length *= 2.0
+	laser.width *= 2.0
+	var laser_damage_multiplier := 1.5
+	if talent_wizard_short_laser_double_damage_enabled:
+		laser.length *= 0.5
+		laser_damage_multiplier *= 2.0
+	laser.setup(self, start_position, direction.normalized(), get_base_attack_damage() * laser_damage_multiplier, "wizard_fire_laser", true)
+	laser.chain_remaining = chain_remaining_override if chain_remaining_override >= 0 else _get_wizard_fire_laser_chain_count()
+	laser.collision_layer = 0
+	laser.collision_mask = 0
+	laser.set_collision_mask_value(enemy_collision_layer_number, true)
+	laser.set_collision_mask_value(jar_collision_layer_number, true)
+	get_tree().current_scene.add_child(laser)
+
+
+func spawn_chained_wizard_fire_laser(source_enemy: Node, remaining_chains: int, chain_range: float, excludes: Array = []) -> void:
+	var source_2d := source_enemy as Node2D
+	if source_2d == null:
+		return
+	var target := EFFECT_TARGETING.nearest_enemy(self, source_2d.global_position, chain_range, excludes)
+	if target == null:
+		return
+	var direction := target.global_position - source_2d.global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+	_spawn_wizard_fire_laser(source_2d.global_position, direction, remaining_chains)
+
+
+func _get_wizard_fire_laser_chain_count() -> int:
+	var chain_count := 1 if talent_wizard_fire_laser_chain_enabled else 0
+	if talent_wizard_attack_speed_laser_chain_enabled:
+		chain_count += floori(_get_current_attacks_per_second())
+	return maxi(chain_count, 0)
+
+
+func _get_current_attacks_per_second() -> float:
+	var attack_speed_bonus := stats.attack_speed_bonus if stats != null else 0.0
+	return fire_rate * maxf(1.0 + attack_speed_bonus, 0.1)
+
+
+func _start_fire_surge() -> void:
+	fire_surge_remaining = 10.0
+	fire_surge_fire_remaining = 0.0
+	fire_surge_cooldown_pending = true
+
+
+func _update_fire_surge(delta: float) -> void:
+	if fire_surge_remaining <= 0.0:
+		return
+
+	fire_surge_remaining = maxf(0.0, fire_surge_remaining - delta)
+	fire_surge_fire_remaining -= delta
+	while fire_surge_fire_remaining <= 0.0 and fire_surge_remaining > 0.0:
+		if talent_wizard_fire_surge_laser_enabled and talent_wizard_fire_surge_radial_fireballs_enabled:
+			fire_surge_fire_remaining += 5.0
+			_launch_wizard_radial_fire_lasers()
+		elif talent_wizard_fire_surge_laser_enabled:
+			fire_surge_fire_remaining += 2.0
+			_launch_fire_surge_laser()
+		elif talent_wizard_fire_surge_radial_fireballs_enabled:
+			fire_surge_fire_remaining += 5.0
+			_launch_wizard_radial_fireballs()
+		else:
+			fire_surge_fire_remaining += 2.0
+			var target := EFFECT_TARGETING.nearest_enemy(self, global_position, 700.0)
+			if target != null:
+				_launch_wizard_fireball(target.global_position)
+
+	if fire_surge_remaining <= 0.0:
+		fire_surge_cooldown_pending = false
+		blessing_cooldown_remaining = 10.0
+
+
+func _launch_fire_surge_laser() -> void:
+	var target := EFFECT_TARGETING.nearest_enemy(self, global_position, 700.0)
+	if target == null:
+		return
+	var direction := target.global_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+	_spawn_wizard_fire_laser(global_position, direction)
+
+
+func _launch_wizard_radial_fire_lasers() -> void:
+	for index in range(8):
+		var angle := TAU * float(index) / 8.0
+		_spawn_wizard_fire_laser(global_position, Vector2(cos(angle), sin(angle)))
+
+
+func _launch_wizard_fireball(target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var direction := target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+	if emit_attack_started_event:
+		attack_started.emit(global_position, direction, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
+
+	_spawn_wizard_fireball(global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode)
+
+
+func _spawn_wizard_fireball(start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+	var fireball := FIREBALL_SCRIPT.new() as FireballProjectile
+	var explosion_radius := 80.0 * maxf(radius_multiplier, 0.0)
+	fireball.lifetime *= maxf(lifetime_multiplier, 0.0)
+	var has_slide_fireball_bonus := consume_slide_fireball_bonus and next_wizard_slide_fireball_ready
+	var has_surge_left_click_bonus := consume_slide_fireball_bonus and talent_wizard_fire_surge_left_click_blast_enabled and fire_surge_remaining > 0.0
+	if has_slide_fireball_bonus or has_surge_left_click_bonus:
+		explosion_radius *= 4.0
+		fireball.lifetime *= 0.1
+	if has_slide_fireball_bonus:
+		next_wizard_slide_fireball_ready = false
+	fireball.setup(self, start_position, direction, get_base_attack_damage(), explosion_radius, allow_procs)
+	if talent_wizard_primary_fireball_laser_explosion_enabled:
+		fireball.explode_replacement_callback = Callable(self, "_replace_wizard_primary_fireball_explosion_with_laser")
+	if scatter_on_explode:
+		fireball.explode_callback = Callable(self, "_launch_wizard_fire_essence_explosion_scatter")
+	fireball.collision_layer = 1 << 2
+	fireball.collision_mask = 1 << 1
+	get_tree().current_scene.add_child(fireball)
+
+
+func _launch_wizard_dash_fireball() -> void:
+	var direction := dash_direction
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	_launch_wizard_fireball(global_position + direction.normalized() * 200.0, false, 2.0, 0.1)
+
+
+func _launch_wizard_primary_attack_pattern(target_position: Vector2, use_fire_essence_version: bool, emit_attack_started_event: bool = true) -> void:
+	var scatter_on_explode := use_fire_essence_version and talent_wizard_fire_essence_explosion_scatter_enabled
+	_launch_wizard_fireball(target_position, true, 1.0, 1.0, true, emit_attack_started_event, scatter_on_explode)
+	var offset_index := 0
+	if use_fire_essence_version:
+		_launch_wizard_offset_fireballs(target_position, 3, offset_index)
+		offset_index += 3
+	_launch_wizard_offset_fireballs(target_position, _get_wizard_move_speed_extra_fireball_count(), offset_index)
+
+
+func _launch_wizard_fire_essence_burst(target_position: Vector2) -> void:
+	_launch_wizard_primary_attack_pattern(target_position, true)
+
+
+func _launch_wizard_offset_fireballs(target_position: Vector2, count: int, start_index: int = 0) -> void:
+	if count <= 0:
+		return
+	var direction := target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	var center_angle := direction.angle()
+	for index in range(count):
+		var offset_index := start_index + index
+		var step := floori(float(offset_index) / 2.0) + 1
+		var sign_value := 1.0 if offset_index % 2 == 0 else -1.0
+		var angle := center_angle + deg_to_rad(10.0 * float(step) * sign_value)
+		_launch_wizard_fireball(global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, 1.0, 1.0, true)
+
+
+func _launch_wizard_fire_essence_explosion_scatter(origin: Vector2) -> void:
+	for index in range(8):
+		var angle := deg_to_rad(24.0) + TAU * float(index) / 8.0
+		var delay := 0.04 * float(index)
+		if delay <= 0.0:
+			_spawn_wizard_fireball(origin, Vector2(cos(angle), sin(angle)), false, 1.0, 1.0, true, false)
+		elif get_tree() != null:
+			get_tree().create_timer(delay).timeout.connect(
+				_spawn_wizard_spiral_fireball.bind(origin, Vector2(cos(angle), sin(angle)))
+			)
+
+
+func _spawn_wizard_spiral_fireball(origin: Vector2, direction: Vector2) -> void:
+	if not is_inside_tree():
+		return
+	_spawn_wizard_fireball(origin, direction, false, 1.0, 1.0, true, false)
+
+
+func _replace_wizard_primary_fireball_explosion_with_laser(origin: Vector2, _is_natural: bool) -> bool:
+	var target := EFFECT_TARGETING.nearest_enemy(self, origin, 700.0)
+	if target == null:
+		return true
+	var direction := target.global_position - origin
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+	_spawn_wizard_fire_laser(origin, direction)
+	return true
+
+
+func _spawn_fireball_duplicate(source_fireball: FireballProjectile, direction: Vector2) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var duplicate := FIREBALL_SCRIPT.new() as FireballProjectile
+	duplicate.owner_spawn_modifiers_applied = true
+	duplicate.speed = source_fireball.speed
+	duplicate.lifetime = source_fireball.lifetime
+	duplicate.target_group = source_fireball.target_group
+	duplicate.damages_containers = source_fireball.damages_containers
+	duplicate.explode_replacement_callback = source_fireball.explode_replacement_callback
+	duplicate.explode_callback = source_fireball.explode_callback
+	duplicate.setup(source_fireball.owner_player, source_fireball.global_position, direction, source_fireball.damage, source_fireball.explosion_radius, source_fireball.allow_procs)
+	duplicate.collision_layer = source_fireball.collision_layer
+	duplicate.collision_mask = source_fireball.collision_mask
+	get_tree().current_scene.add_child(duplicate)
+
+
+func _get_random_fireball_direction() -> Vector2:
+	return Vector2.RIGHT.rotated(randf_range(0.0, TAU))
+
+
+func _get_wizard_legendary_extra_fireball_count() -> int:
+	if not talent_wizard_legendary_extra_fireballs_enabled:
+		return 0
+	return _get_item_count_by_rarity(&"legendary")
+
+
+func _get_wizard_move_speed_extra_fireball_count() -> int:
+	if not talent_wizard_move_speed_extra_fireballs_enabled:
+		return 0
+	var move_speed_value := move_speed
+	if stats != null:
+		move_speed_value = stats.get_move_speed(move_speed)
+	return maxi(floori(move_speed_value / 100.0), 0)
+
+
+func _launch_wizard_radial_fireballs() -> void:
+	for index in range(8):
+		var angle := TAU * float(index) / 8.0
+		_launch_wizard_fireball(global_position + Vector2(cos(angle), sin(angle)) * 200.0)
+
+
+func _schedule_wizard_primary_echoes(target_position: Vector2, use_fire_essence_version: bool) -> void:
+	if not talent_wizard_max_hp_primary_echo_enabled or get_tree() == null:
+		return
+
+	var max_hp_value := max_hp
+	if stats != null:
+		max_hp_value = float(stats.max_hp)
+	var echo_count := floori(max_hp_value / 100.0)
+	for index in range(echo_count):
+		get_tree().create_timer(0.2 * float(index + 1)).timeout.connect(
+			_launch_wizard_primary_echo.bind(target_position, use_fire_essence_version)
+		)
+
+
+func _launch_wizard_primary_echo(target_position: Vector2, use_fire_essence_version: bool) -> void:
+	if not is_inside_tree():
+		return
+	_launch_wizard_primary_attack_pattern(target_position, use_fire_essence_version)
 
 
 func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
@@ -1053,7 +1623,7 @@ func _get_shockwave_radius() -> float:
 
 
 func _get_shockwave_hit_time() -> float:
-	return float(SHOCKWAVE_HIT_FRAME - 1) / animation_fps
+	return float(_get_ability_active_frame(&"secondary", SHOCKWAVE_HIT_FRAME) - 1) / animation_fps
 
 
 func _get_shockwave_effect_damage_time() -> float:
@@ -1212,7 +1782,7 @@ func _get_action_animation_time(animation_name: StringName) -> float:
 
 
 func _get_blessing_active_time() -> float:
-	return float(BLESSING_ACTIVE_FRAME - 1) / animation_fps
+	return float(_get_ability_active_frame(&"utility", BLESSING_ACTIVE_FRAME) - 1) / animation_fps
 
 
 func _update_sprite_animation(delta: float) -> void:
@@ -1280,7 +1850,14 @@ func _maybe_spawn_attack_projectile() -> void:
 
 	pending_attack_projectile = false
 	_hide_melee_telegraph()
-	_perform_melee_attack_at(pending_attack_target_position)
+	if primary_ability == &"wizard_fireball":
+		var used_fire_essence := wizard_fire_essence_charges > 0
+		if wizard_fire_essence_charges > 0:
+			wizard_fire_essence_charges -= 1
+		_launch_wizard_primary_attack_pattern(pending_attack_target_position, used_fire_essence)
+		_schedule_wizard_primary_echoes(pending_attack_target_position, used_fire_essence)
+	else:
+		_perform_melee_attack_at(pending_attack_target_position)
 
 
 func _get_attack_projectile_time() -> float:
@@ -1289,10 +1866,16 @@ func _get_attack_projectile_time() -> float:
 
 func _get_attack_base_windup_time() -> float:
 	var time: float = 0.0
-	for frame in range(ATTACK_PROJECTILE_FRAME):
+	for frame in range(_get_ability_active_frame(&"primary", ATTACK_PROJECTILE_FRAME)):
 		time += _get_attack_windup_frame_duration(frame)
 
 	return time
+
+
+func _get_ability_active_frame(action_name: StringName, fallback: int) -> int:
+	if character_definition != null and character_definition.has_method("get_active_frame"):
+		return clampi(character_definition.get_active_frame(action_name, fallback), 1, FRAMES_PER_DIRECTION)
+	return fallback
 
 
 func _get_attack_action_time() -> float:
@@ -1652,7 +2235,7 @@ func _play_spritesheet_effect(
 
 
 func _get_talent_definition(node_id: StringName) -> Dictionary:
-	return TALENT_CATALOG.definition(node_id)
+	return talent_catalog.definition(node_id)
 
 
 func _apply_talent_effect(node_id: StringName) -> void:
@@ -1753,6 +2336,79 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_holy_strike_double_tombs_enabled = true
 		&"holy_strike_undamaged_stationary":
 			talent_holy_strike_undamaged_stationary_enabled = true
+		&"wizard_slide_fireball_blast":
+			talent_wizard_slide_fireball_blast_enabled = true
+		&"wizard_poison_stack_damage":
+			talent_wizard_poison_stack_damage_enabled = true
+		&"wizard_nearby_enemy_attack_speed":
+			talent_wizard_nearby_enemy_attack_speed_enabled = true
+			_update_wizard_nearby_enemy_attack_speed()
+		&"wizard_nearby_damage_focus":
+			talent_wizard_nearby_damage_focus_enabled = true
+		&"wizard_fire_surge_left_click_blast":
+			talent_wizard_fire_surge_left_click_blast_enabled = true
+		&"wizard_nearby_kill_gold":
+			talent_wizard_nearby_kill_gold_enabled = true
+		&"wizard_dash_fireball":
+			talent_wizard_dash_fireball_enabled = true
+		&"wizard_nearby_enemy_move_speed":
+			talent_wizard_nearby_enemy_move_speed_enabled = true
+			_update_wizard_nearby_enemy_move_speed()
+		&"wizard_nearby_poison_aura":
+			talent_wizard_nearby_poison_aura_enabled = true
+			wizard_nearby_poison_aura_timer = 5.0
+		&"wizard_poisoned_kill_gold":
+			talent_wizard_poisoned_kill_gold_enabled = true
+		&"wizard_short_laser_double_damage":
+			talent_wizard_short_laser_double_damage_enabled = true
+		&"wizard_nearby_enemy_elite_damage":
+			talent_wizard_nearby_enemy_elite_damage_enabled = true
+			_update_wizard_nearby_enemy_elite_damage()
+		&"wizard_more_weaker_enemies":
+			talent_wizard_more_weaker_enemies_enabled = true
+		&"wizard_rebirth_level_to_atk":
+			talent_wizard_rebirth_level_to_atk_enabled = true
+		&"wizard_primary_fireball_laser_explosion":
+			talent_wizard_primary_fireball_laser_explosion_enabled = true
+		&"wizard_fire_surge_laser":
+			talent_wizard_fire_surge_laser_enabled = true
+		&"wizard_fire_laser_chain":
+			talent_wizard_fire_laser_chain_enabled = true
+		&"wizard_fire_surge_attack_speed":
+			talent_wizard_fire_surge_attack_speed_enabled = true
+			_update_wizard_fire_surge_attack_speed_bonus()
+		&"wizard_attack_speed_laser_chain":
+			talent_wizard_attack_speed_laser_chain_enabled = true
+		&"wizard_fire_essence_burst":
+			talent_wizard_fire_essence_burst_enabled = true
+			wizard_fire_essence_spawn_timer = 5.0
+		&"wizard_kill_move_speed_burst":
+			talent_wizard_kill_move_speed_burst_enabled = true
+		&"wizard_fire_surge_radial_fireballs":
+			talent_wizard_fire_surge_radial_fireballs_enabled = true
+		&"wizard_max_hp_primary_echo":
+			talent_wizard_max_hp_primary_echo_enabled = true
+		&"wizard_move_speed_extra_fireballs":
+			talent_wizard_move_speed_extra_fireballs_enabled = true
+		&"wizard_poisoned_death_fireball":
+			talent_wizard_poisoned_death_fireball_enabled = true
+		&"wizard_rare_item_move_speed":
+			talent_wizard_rare_item_move_speed_enabled = true
+			_update_item_talent_bonuses()
+		&"wizard_fire_essence_explosion_scatter":
+			talent_wizard_fire_essence_explosion_scatter_enabled = true
+		&"wizard_random_double_fireballs":
+			talent_wizard_random_double_fireballs_enabled = true
+		&"wizard_guaranteed_legendary_shop_jar":
+			talent_wizard_guaranteed_legendary_shop_jar_enabled = true
+		&"wizard_natural_fireball_radius":
+			talent_wizard_natural_fireball_radius_enabled = true
+		&"wizard_legendary_extra_fireballs":
+			talent_wizard_legendary_extra_fireballs_enabled = true
+		&"wizard_natural_fireball_heal":
+			talent_wizard_natural_fireball_heal_enabled = true
+		&"wizard_damage_taken_natural_explode_fireballs":
+			talent_wizard_damage_taken_natural_explode_fireballs_enabled = true
 		_:
 			if stats != null:
 				stats.apply_modifier(
@@ -1771,6 +2427,8 @@ func _apply_slide_finished_talents() -> void:
 		temporary_buffs.add_timed_stat_buff(&"talent_slide_defense_bonus", &"defense", float(stats.defense) * 0.5, 2.0, 1)
 	if talent_next_attack_after_slide_enabled:
 		next_attack_after_slide_ready = true
+	if talent_wizard_slide_fireball_blast_enabled:
+		next_wizard_slide_fireball_ready = true
 
 
 func _update_max_hp_from_atk_talent() -> void:
@@ -1805,6 +2463,13 @@ func _update_item_talent_bonuses() -> void:
 	if max_hp_delta != 0:
 		applied_item_max_hp_bonus = wanted_max_hp
 		stats.apply_modifier(&"max_hp", &"add", float(max_hp_delta))
+
+	var rare_item_count := _get_item_count_by_rarity(&"rare")
+	var wanted_rare_move_speed := rare_item_count * 10 if talent_wizard_rare_item_move_speed_enabled else 0
+	var rare_move_speed_delta := wanted_rare_move_speed - applied_wizard_rare_item_move_speed
+	if rare_move_speed_delta != 0:
+		applied_wizard_rare_item_move_speed = wanted_rare_move_speed
+		stats.apply_modifier(&"bonus_move_speed_flat", &"add", float(rare_move_speed_delta))
 
 
 func _get_total_item_count() -> int:
@@ -1852,6 +2517,86 @@ func _update_holy_strike_nearby_enemy_attack_speed() -> void:
 		return
 	applied_holy_strike_nearby_enemy_attack_speed = attack_speed_bonus
 	temporary_buffs.set_dynamic_stat_bonus(&"holy_strike_nearby_enemy_attack_speed", &"attack_speed_bonus", attack_speed_bonus)
+
+
+func _update_wizard_nearby_enemy_attack_speed() -> void:
+	if not talent_wizard_nearby_enemy_attack_speed_enabled or temporary_buffs == null or stats == null:
+		return
+
+	var nearby_enemy_count := EFFECT_TARGETING.enemies_surrounding(self, global_position).size()
+	var attack_speed_bonus := float(nearby_enemy_count) * 0.05
+	if is_equal_approx(attack_speed_bonus, applied_wizard_nearby_enemy_attack_speed):
+		return
+	applied_wizard_nearby_enemy_attack_speed = attack_speed_bonus
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_nearby_enemy_attack_speed", &"attack_speed_bonus", attack_speed_bonus)
+
+
+func _update_wizard_nearby_enemy_move_speed() -> void:
+	if not talent_wizard_nearby_enemy_move_speed_enabled or temporary_buffs == null or stats == null:
+		return
+
+	var nearby_enemy_count := EFFECT_TARGETING.enemies_surrounding(self, global_position).size()
+	var move_speed_bonus := float(nearby_enemy_count) * 0.05
+	if is_equal_approx(move_speed_bonus, applied_wizard_nearby_enemy_move_speed):
+		return
+	applied_wizard_nearby_enemy_move_speed = move_speed_bonus
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_nearby_enemy_move_speed", &"movement_speed_bonus", move_speed_bonus)
+
+
+func _update_wizard_nearby_enemy_elite_damage() -> void:
+	if not talent_wizard_nearby_enemy_elite_damage_enabled or temporary_buffs == null or stats == null:
+		return
+
+	var nearby_enemy_count := EFFECT_TARGETING.enemies_surrounding(self, global_position).size()
+	var elite_damage_bonus := float(nearby_enemy_count) * 0.1
+	if is_equal_approx(elite_damage_bonus, applied_wizard_nearby_enemy_elite_damage):
+		return
+	applied_wizard_nearby_enemy_elite_damage = elite_damage_bonus
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_nearby_enemy_elite_damage", &"elite_direct_damage_bonus", elite_damage_bonus)
+
+
+func _update_wizard_fire_surge_attack_speed_bonus() -> void:
+	if temporary_buffs == null:
+		return
+	var wanted_bonus := 0.5 if talent_wizard_fire_surge_attack_speed_enabled and fire_surge_remaining > 0.0 else 0.0
+	temporary_buffs.set_dynamic_stat_bonus(&"wizard_fire_surge_attack_speed", &"attack_speed_bonus", wanted_bonus)
+
+
+func _update_wizard_nearby_poison_aura(delta: float) -> void:
+	if not talent_wizard_nearby_poison_aura_enabled:
+		return
+
+	wizard_nearby_poison_aura_timer -= delta
+	while wizard_nearby_poison_aura_timer <= 0.0:
+		wizard_nearby_poison_aura_timer += 5.0
+		for enemy in EFFECT_TARGETING.enemies_surrounding(self, global_position):
+			if enemy.has_method("apply_poison_stacks"):
+				enemy.apply_poison_stacks(1, self)
+
+
+func _update_wizard_fire_essence_spawner(delta: float) -> void:
+	if not talent_wizard_fire_essence_burst_enabled:
+		return
+
+	wizard_fire_essence_spawn_timer -= delta
+	while wizard_fire_essence_spawn_timer <= 0.0:
+		wizard_fire_essence_spawn_timer += 5.0
+		_spawn_wizard_fire_essence()
+
+
+func _spawn_wizard_fire_essence() -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+	var distance := sqrt(randf()) * 400.0
+	var angle := randf_range(0.0, TAU)
+	var spawn_position := global_position + Vector2(cos(angle), sin(angle)) * distance
+	if movement_bounds_enabled:
+		spawn_position.x = clampf(spawn_position.x, movement_bounds.position.x, movement_bounds.end.x)
+		spawn_position.y = clampf(spawn_position.y, movement_bounds.position.y, movement_bounds.end.y)
+
+	var essence := FIRE_ESSENCE_PICKUP_SCRIPT.new() as Node2D
+	essence.setup(spawn_position, self)
+	get_tree().current_scene.add_child(essence)
 
 
 func _update_holy_strike_stationary_talents(delta: float) -> void:
@@ -1979,8 +2724,36 @@ func _get_distance_to_enemy(enemy: Node) -> float:
 	return global_position.distance_to(enemy_2d.global_position)
 
 
+func _is_enemy_nearby(enemy: Node) -> bool:
+	var enemy_2d := enemy as Node2D
+	return enemy_2d != null and _get_distance_to_enemy(enemy_2d) <= EFFECT_TARGETING.SURROUNDED_RADIUS
+
+
 func _enemy_has_status(enemy: Node, status_id: StringName) -> bool:
 	return enemy != null and enemy.has_method("has_status") and enemy.has_status(status_id)
+
+
+func _get_enemy_poison_stacks(enemy: Node) -> int:
+	if enemy != null and enemy.has_method("get_poison_stacks"):
+		return maxi(int(enemy.get_poison_stacks()), 0)
+	return 0
+
+
+func _is_enemy_poisoned(enemy: Node) -> bool:
+	return _enemy_has_status(enemy, &"poison") or _get_enemy_poison_stacks(enemy) > 0
+
+
+func _trigger_wizard_poisoned_death_fireball(enemy: Node) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var enemy_2d := enemy as Node2D
+	var origin := enemy_2d.global_position if enemy_2d != null else global_position
+	var target := EFFECT_TARGETING.nearest_enemy(self, origin, 700.0, [enemy])
+	if target != null:
+		_launch_talent_fireball(origin, target.global_position)
+	else:
+		_launch_talent_fireball(origin, origin + facing_direction)
 
 
 func _try_trigger_talent_fireball(enemy: Node, attack_info: Dictionary = {}) -> void:
@@ -2136,26 +2909,52 @@ func _launch_talent_fireball(start_position: Vector2, target_position: Vector2) 
 
 
 func _get_talent_coords() -> Array[Vector2i]:
-	return TALENT_CATALOG.coords()
+	if talent_catalog.has_method("coords"):
+		return talent_catalog.coords()
+	return []
 
 
 func _get_talent_node_id(coord: Vector2i) -> StringName:
-	return TALENT_CATALOG.node_id(coord)
+	if talent_catalog.has_method("node_id"):
+		return talent_catalog.node_id(coord)
+	return &""
 
 
 func _is_talent_coord_valid(coord: Vector2i) -> bool:
-	return TALENT_CATALOG.is_coord_valid(coord)
+	return talent_catalog.has_method("is_coord_valid") and talent_catalog.is_coord_valid(coord)
 
 
 func _is_talent_start_coord(coord: Vector2i) -> bool:
-	return TALENT_CATALOG.is_start_coord(coord)
+	return talent_catalog.has_method("is_start_coord") and talent_catalog.is_start_coord(coord)
 
 
 func _get_talent_neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
-	return TALENT_CATALOG.neighbor_coords(coord)
+	if talent_catalog.has_method("neighbor_coords"):
+		return talent_catalog.neighbor_coords(coord)
+	return []
+
+
+func _is_talent_start_node(node_id: StringName) -> bool:
+	if talent_catalog.has_method("start_nodes"):
+		return talent_catalog.start_nodes().has(node_id)
+	return _is_talent_start_coord(get_talent_node_grid_position(node_id))
+
+
+func _get_talent_ui_position_from_grid(coord: Vector2i) -> Vector2:
+	var spacing := Vector2(78.0, 86.0)
+	var center_x: float = 360.0
+	var bottom_y: float = 716.0
+	return Vector2(
+		center_x + (float(coord.x) - 3.0) * spacing.x,
+		bottom_y - float(coord.y) * spacing.y
+	)
 
 
 func _get_animation_texture(animation_name: StringName) -> Texture2D:
+	if character_definition != null:
+		var texture: Texture2D = character_definition.get_texture(animation_name)
+		if texture != null:
+			return texture
 	match animation_name:
 		&"attack":
 			return ATTACK_TEXTURE
@@ -2561,18 +3360,19 @@ func _get_frame_duration(animation_base: StringName, frame: int) -> float:
 
 
 func _get_attack_frame_duration(frame: int) -> float:
-	if frame < ATTACK_PROJECTILE_FRAME:
+	var primary_active_frame := _get_ability_active_frame(&"primary", ATTACK_PROJECTILE_FRAME)
+	if frame < primary_active_frame:
 		return _get_attack_windup_frame_duration(frame)
 
 	var slow_edge_frames: int = clampi(attack_slow_edge_frames, 0, FRAMES_PER_DIRECTION)
-	var slow_recovery_start: int = max(ATTACK_PROJECTILE_FRAME, FRAMES_PER_DIRECTION - slow_edge_frames)
+	var slow_recovery_start: int = max(primary_active_frame, FRAMES_PER_DIRECTION - slow_edge_frames)
 	if frame >= slow_recovery_start:
 		return 1.0 / maxf(attack_edge_animation_fps, 0.01)
 
 	var windup_time: float = _get_attack_base_windup_time()
 	var slow_recovery_frame_count: int = FRAMES_PER_DIRECTION - slow_recovery_start
 	var slow_recovery_time: float = float(slow_recovery_frame_count) / maxf(attack_edge_animation_fps, 0.01)
-	var middle_recovery_frame_count: int = slow_recovery_start - ATTACK_PROJECTILE_FRAME
+	var middle_recovery_frame_count: int = slow_recovery_start - primary_active_frame
 	if middle_recovery_frame_count <= 0:
 		return 1.0 / maxf(attack_edge_animation_fps, 0.01)
 
@@ -2581,7 +3381,8 @@ func _get_attack_frame_duration(frame: int) -> float:
 
 
 func _get_attack_windup_frame_duration(frame: int) -> float:
-	if frame < clampi(attack_slow_edge_frames, 0, ATTACK_PROJECTILE_FRAME):
+	var primary_active_frame := _get_ability_active_frame(&"primary", ATTACK_PROJECTILE_FRAME)
+	if frame < clampi(attack_slow_edge_frames, 0, primary_active_frame):
 		return 1.0 / maxf(attack_edge_animation_fps, 0.01)
 
 	return 1.0 / maxf(attack_fast_animation_fps, 0.01)

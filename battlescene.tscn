@@ -1,6 +1,56 @@
 [gd_scene format=3 uid="uid://dsdqrxayvpadb"]
 
 [ext_resource type="Script" uid="uid://32f4te2elhkb" path="res://battlescene.gd" id="1_pxal7"]
+[ext_resource type="Texture2D" uid="uid://c0m1b0ds8jviv" path="res://assets/containers/Urn G/urn-G-main-static-00.png" id="2_urn"]
+[ext_resource type="Texture2D" uid="uid://cro876snpsjw6" path="res://assets/containers/Barrel B/barrel-B-main-static-00.png" id="3_barrel"]
+[ext_resource type="Texture2D" uid="uid://b8wvjveql7663" path="res://assets/containers/Tomb A/tomb-A-main-static-00.png" id="4_tomb"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_urn"]
+radius = 28.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_barrel"]
+radius = 32.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_tomb"]
+radius = 64.0
 
 [node name="Battlescene" type="Node2D" unique_id=1986396668]
 script = ExtResource("1_pxal7")
+
+[node name="ContainerHitboxPreviews" type="Node2D" parent="." unique_id=1253431826]
+position = Vector2(960, 540)
+
+[node name="Urn" type="Node2D" parent="ContainerHitboxPreviews" unique_id=1802736770]
+position = Vector2(-220, 0)
+
+[node name="Sprite2D" type="Sprite2D" parent="ContainerHitboxPreviews/Urn" unique_id=852876919]
+scale = Vector2(2, 2)
+texture = ExtResource("2_urn")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ContainerHitboxPreviews/Urn" unique_id=739207899]
+position = Vector2(0, 12)
+scale = Vector2(0.82, 1.365)
+shape = SubResource("CircleShape2D_urn")
+
+[node name="Barrel" type="Node2D" parent="ContainerHitboxPreviews" unique_id=934514317]
+
+[node name="Sprite2D" type="Sprite2D" parent="ContainerHitboxPreviews/Barrel" unique_id=1794536359]
+scale = Vector2(2, 2)
+texture = ExtResource("3_barrel")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ContainerHitboxPreviews/Barrel" unique_id=1278476726]
+position = Vector2(-1.59, 22.68)
+scale = Vector2(1, 1.285)
+shape = SubResource("CircleShape2D_barrel")
+
+[node name="Tomb" type="Node2D" parent="ContainerHitboxPreviews" unique_id=849723439]
+position = Vector2(260, 0)
+
+[node name="Sprite2D" type="Sprite2D" parent="ContainerHitboxPreviews/Tomb" unique_id=1392648149]
+scale = Vector2(2, 2)
+texture = ExtResource("4_tomb")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ContainerHitboxPreviews/Tomb" unique_id=1631053519]
+position = Vector2(5.285, 5.925)
+scale = Vector2(0.85, 1.345)
+shape = SubResource("CircleShape2D_tomb")

@@ -32,6 +32,7 @@ func _run():
 
 	_test_main_scene_boot()
 	_test_pause_toggle()
+	await _test_combat_clear_waits_for_scene_enemies()
 	_test_shop_phase()
 	_test_talent_tree()
 	_test_required_items_exist()
@@ -65,7 +66,28 @@ func _test_main_scene_boot() -> void:
 	var containers_value: Variant = battle_scene.get("containers")
 	var containers: Array = containers_value if containers_value is Array else []
 	_assert(containers.size() > 0, "Combat containers spawn")
+	_test_container_hitboxes(containers)
 	_assert(int(battle_scene.get("phase")) == 0, "Battle starts in combat phase")
+
+
+func _test_container_hitboxes(containers: Array) -> void:
+	var checked_types := {}
+	for container in containers:
+		if checked_types.has(container.container_type):
+			continue
+		checked_types[container.container_type] = true
+		var collision := container.get_node_or_null("CollisionShape2D") as CollisionShape2D
+		_assert(collision != null, "Container has collision shape")
+		if collision == null:
+			continue
+		var circle := collision.shape as CircleShape2D
+		_assert(circle != null, "Container hitbox is circular")
+		if circle == null:
+			continue
+		var expected_radius: float = battle_scene.call("_get_container_collision_radius", int(container.container_type))
+		var expected_offset: Vector2 = battle_scene.call("_get_container_collision_offset", int(container.container_type))
+		_assert(is_equal_approx(circle.radius, expected_radius), "Container hitbox radius matches type")
+		_assert(collision.position.is_equal_approx(expected_offset), "Container hitbox offset matches type")
 
 
 func _test_pause_toggle() -> void:
@@ -88,11 +110,38 @@ func _test_pause_toggle() -> void:
 	_assert(pause_overlay != null and not pause_overlay.visible, "Pause overlay hides after resume")
 
 
+func _test_combat_clear_waits_for_scene_enemies() -> void:
+	if battle_scene == null:
+		return
+
+	var containers: Array = battle_scene.get("containers")
+	for container in containers.duplicate():
+		if is_instance_valid(container):
+			container.queue_free()
+	containers.clear()
+	var enemies: Array = battle_scene.get("enemies")
+	enemies.clear()
+	var stray_enemy := Node2D.new()
+	stray_enemy.name = "StrayEnemyForClearTest"
+	stray_enemy.add_to_group("enemy")
+	battle_scene.add_child(stray_enemy)
+	battle_scene.call("_check_combat_clear")
+	await process_frame
+	_assert(int(battle_scene.get("phase")) == 0, "Combat clear waits for enemy nodes still in the scene")
+
+	stray_enemy.queue_free()
+	await process_frame
+	battle_scene.call("_check_combat_clear")
+	await process_frame
+	_assert(int(battle_scene.get("phase")) == 1, "Combat clear proceeds after scene enemy nodes are gone")
+
+
 func _test_shop_phase() -> void:
 	if battle_scene == null:
 		return
 
-	battle_scene.call("_enter_shop_phase")
+	if int(battle_scene.get("phase")) != 1:
+		battle_scene.call("_enter_shop_phase")
 	var shop_containers_value: Variant = battle_scene.get("shop_containers")
 	var shop_data_value: Variant = battle_scene.get("shop_container_data")
 	var shop_containers: Array = shop_containers_value if shop_containers_value is Array else []
@@ -108,6 +157,24 @@ func _test_shop_phase() -> void:
 		var data: Dictionary = shop_data.get(container, {})
 		_assert(int(data.get("price", 0)) > 0, "Shop jar has positive price")
 
+	player.set("talent_wizard_guaranteed_legendary_shop_jar_enabled", true)
+	battle_scene.call("_spawn_shop_containers")
+	shop_containers_value = battle_scene.get("shop_containers")
+	shop_data_value = battle_scene.get("shop_container_data")
+	shop_containers = shop_containers_value if shop_containers_value is Array else []
+	shop_data = shop_data_value if shop_data_value is Dictionary else {}
+	var saw_legendary := false
+	for container in shop_containers:
+		var data: Dictionary = shop_data.get(container, {})
+		if int(data.get("tier", -1)) != 2:
+			continue
+		saw_legendary = true
+		var category := int(data.get("category", 0))
+		var expected_price := int(battle_scene.call("_get_shop_price", category, 2)) * 2
+		_assert(int(data.get("price", 0)) == expected_price, "Wizard legendary shop talent doubles legendary jar price")
+		break
+	_assert(saw_legendary, "Wizard legendary shop talent guarantees a legendary jar")
+
 
 func _test_talent_tree() -> void:
 	if player == null or battle_scene == null:
@@ -119,8 +186,14 @@ func _test_talent_tree() -> void:
 	_assert(talent_tree != null, "Talent tree UI controller exists")
 	_assert(talent_tree != null and bool(talent_tree.call("is_open")), "Talent tree UI opens")
 
-	battle_scene.call("_on_talent_button_pressed", &"talent_2_0")
-	_assert(player.unlocked_talents.has(&"talent_2_0"), "Talent unlock request unlocks talent")
+	var unlock_id: StringName = player.get_talent_node_ids()[0]
+	for node_id in player.get_talent_node_ids():
+		if player.can_unlock_talent(node_id):
+			unlock_id = node_id
+			break
+
+	battle_scene.call("_on_talent_button_pressed", unlock_id)
+	_assert(player.unlocked_talents.has(unlock_id), "Talent unlock request unlocks talent")
 	_assert(player.unspent_talent_points == 0, "Talent unlock consumes one point")
 
 
@@ -230,13 +303,16 @@ func _finish() -> void:
 
 
 func _cleanup_scene() -> void:
+	root.get_tree().paused = false
 	current_scene = null
+	player = null
 	if battle_scene != null and is_instance_valid(battle_scene):
 		if battle_scene.get_parent() != null:
 			battle_scene.get_parent().remove_child(battle_scene)
-		battle_scene.queue_free()
+		battle_scene.free()
 		await process_frame
 		await process_frame
 	battle_scene = null
-	player = null
 	item_database = null
+	await create_timer(0.1).timeout
+	await process_frame

@@ -198,7 +198,6 @@ func _apply_lifesteal(damage_dealt: float) -> void:
 		return
 	var heal_amount: float = damage_dealt * stats.lifesteal
 	owner_player.heal(heal_amount)
-	print("Lifesteal heals %s" % heal_amount)
 
 
 func _spread_bleeding_on_death(enemy: Variant) -> void:
@@ -207,7 +206,6 @@ func _spread_bleeding_on_death(enemy: Variant) -> void:
 	for target in _get_enemies_near(_extract_position(enemy), radius, [enemy]):
 		if target.has_method("apply_status_effect"):
 			target.apply_status_effect(&"bleeding", owner_player)
-	print("Open Wound spread bleeding")
 
 
 func _chain_lightning_on_bleeding_death(enemy: Variant) -> void:
@@ -228,8 +226,7 @@ func _chain_lightning_on_bleeding_death(enemy: Variant) -> void:
 		var excludes := []
 		if enemy is Object and is_instance_valid(enemy):
 			excludes.append(enemy)
-		if _trigger_chain_lightning(origin, excludes):
-			print("Bloodbolt Covenant triggers")
+		_trigger_chain_lightning(origin, excludes)
 
 
 func _poison_transfer_on_death(enemy: Variant) -> void:
@@ -245,7 +242,6 @@ func _poison_transfer_on_death(enemy: Variant) -> void:
 	if stacking_rule == &"shared_poison_transfer_scaled":
 		transfer_count += maxi(_get_item_count() - 1, 0)
 
-	var did_transfer := false
 	for index in range(transfer_count):
 		var target := _get_nearest_enemy(origin, radius, exclude)
 		if target == null:
@@ -254,10 +250,6 @@ func _poison_transfer_on_death(enemy: Variant) -> void:
 		exclude.append(target)
 		if target.has_method("apply_poison_stacks"):
 			target.apply_poison_stacks(stacks, owner_player)
-			did_transfer = true
-
-	if did_transfer:
-		print("Last Venom transfers poison stacks=%d targets=%d" % [stacks, exclude.size() - 1])
 
 
 func _fireball_on_dash(direction_value: Variant) -> void:
@@ -272,7 +264,6 @@ func _fireball_on_dash(direction_value: Variant) -> void:
 
 	direction = direction.normalized().rotated(deg_to_rad(_get_duplicate_spread_angle()))
 	_launch_fireball(start_position, start_position + direction * 240.0)
-	print("Blazing Dash launches fireball")
 
 
 func _container_break_random_proc(container: Variant, info_value: Variant) -> void:
@@ -302,11 +293,6 @@ func _run_container_break_random_proc_after_delay(origin: Vector2) -> void:
 			if nearest != null:
 				_launch_fireball(origin, nearest.global_position)
 				triggered = true
-
-	if triggered:
-		print("Chaos Hatch triggers %s" % choice)
-	else:
-		print("Chaos Hatch found no target for %s" % choice)
 
 
 func _is_direct_player_container_break(info: Dictionary) -> bool:
@@ -665,7 +651,6 @@ func _trigger_chain_lightning(origin: Vector2, already_hit: Array = []) -> bool:
 			target.take_damage(damage, {"source": "chain_lightning", "owner": owner_player})
 	if did_hit:
 		_play_chain_lightning_sfx(origin)
-		print("Chain lightning triggers")
 	return did_hit
 
 
@@ -766,7 +751,6 @@ func _launch_fireball(start_position: Vector2, target_position: Vector2) -> void
 	fireball.collision_layer = 1 << 2
 	fireball.collision_mask = 1 << 1
 	owner_player.get_tree().current_scene.add_child(fireball)
-	print("Fireball triggers")
 
 
 func _launch_fireball_from_event(arg1: Variant, arg2: Variant) -> void:

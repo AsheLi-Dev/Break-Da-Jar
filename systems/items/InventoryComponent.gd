@@ -19,7 +19,6 @@ func add_item(item: ItemDefinition) -> void:
 
 	item_counts[item.id] = int(item_counts.get(item.id, 0)) + 1
 	item_definitions_by_id[item.id] = item
-	print("Player received item: %s x%d" % [item.display_name, item_counts[item.id]])
 
 	for effect_index in range(item.effects.size()):
 		var effect: Resource = item.effects[effect_index]

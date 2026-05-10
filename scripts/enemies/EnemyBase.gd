@@ -30,9 +30,13 @@ var last_attack_info: Dictionary = {}
 var kill_notified: bool = false
 var hp_bar_root: Node2D
 var hp_bar_fill: Polygon2D
+var base_move_speed: float = 0.0
+var round_enrage_multiplier: float = 1.0
+var enrage_visual_base_modulates: Dictionary = {}
 
 
 func _ready() -> void:
+	base_move_speed = move_speed
 	hp = max_hp
 	add_to_group("enemy")
 	_ensure_status_effects()
@@ -138,6 +142,15 @@ func move_toward_position(world_position: Vector2, speed: float, delta: float) -
 
 	velocity = offset.normalized() * speed
 	move_and_slide()
+
+
+func set_round_enrage_multiplier(multiplier: float) -> void:
+	if base_move_speed <= 0.0:
+		base_move_speed = move_speed
+
+	round_enrage_multiplier = maxf(1.0, multiplier)
+	move_speed = base_move_speed * round_enrage_multiplier
+	_update_enrage_visuals()
 
 
 func try_claim_attack_token() -> bool:
@@ -268,6 +281,31 @@ func _update_hp_bar_position() -> void:
 func _hide_hp_bar() -> void:
 	if hp_bar_root != null:
 		hp_bar_root.visible = false
+
+
+func _update_enrage_visuals() -> void:
+	var progress := clampf((round_enrage_multiplier - 1.0) / 0.5, 0.0, 1.0)
+	var visuals := _get_enrage_visuals()
+	for visual in visuals:
+		if not is_instance_valid(visual):
+			continue
+		if not enrage_visual_base_modulates.has(visual):
+			enrage_visual_base_modulates[visual] = visual.modulate
+		var base_color: Color = enrage_visual_base_modulates[visual]
+		var target_color := Color(maxf(base_color.r, 1.35), base_color.g * 0.45, base_color.b * 0.45, base_color.a)
+		visual.modulate = base_color.lerp(target_color, progress)
+
+
+func _get_enrage_visuals() -> Array[CanvasItem]:
+	var visuals: Array[CanvasItem] = []
+	var sprite := get_node_or_null("Sprite2D") as CanvasItem
+	if sprite != null:
+		visuals.append(sprite)
+	else:
+		var debug_body := get_node_or_null("DebugBody") as CanvasItem
+		if debug_body != null:
+			visuals.append(debug_body)
+	return visuals
 
 
 func _play_death_sfx() -> void:

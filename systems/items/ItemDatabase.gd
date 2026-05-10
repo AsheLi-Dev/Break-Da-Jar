@@ -12,7 +12,6 @@ func load_items_from_folder(path: String) -> void:
 	items_by_id.clear()
 	all_items.clear()
 	_load_items_recursive(path)
-	print("Item database loaded %d items." % all_items.size())
 
 
 func _load_items_recursive(path: String) -> void:
