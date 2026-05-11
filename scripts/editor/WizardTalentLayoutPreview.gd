@@ -53,26 +53,34 @@ func _sync_mirrored_nodes() -> void:
 		return
 
 	_syncing_mirror = true
-	for index in range(11):
-		var left := get_node_or_null("flame_left_%d" % index) as Node2D
-		var right := get_node_or_null("flame_right_%d" % index) as Node2D
-		if left == null or right == null:
-			continue
-
-		var left_key := String(left.name)
-		var right_key := String(right.name)
-		var left_changed := _last_positions.has(left_key) and not left.position.is_equal_approx(_last_positions[left_key])
-		var right_changed := _last_positions.has(right_key) and not right.position.is_equal_approx(_last_positions[right_key])
-
-		if left_changed and not right_changed:
-			right.position = _mirror_position(left.position)
-		elif right_changed and not left_changed:
-			left.position = _mirror_position(right.position)
-		elif left_changed and right_changed:
-			right.position = _mirror_position(left.position)
+	for index in range(3):
+		_sync_mirrored_pair("flame_bottom_%d" % (index + 2), "flame_bottom_%d" % (8 - index))
+	for index in range(14):
+		_sync_mirrored_pair("flame_left_%d" % index, "flame_right_%d" % index)
+	for index in range(5):
+		_sync_mirrored_pair("flame_left_start_%d" % index, "flame_right_start_%d" % index)
 
 	_remember_positions()
 	_syncing_mirror = false
+
+
+func _sync_mirrored_pair(left_name: String, right_name: String) -> void:
+	var left := get_node_or_null(left_name) as Node2D
+	var right := get_node_or_null(right_name) as Node2D
+	if left == null or right == null:
+		return
+
+	var left_key := String(left.name)
+	var right_key := String(right.name)
+	var left_changed := _last_positions.has(left_key) and not left.position.is_equal_approx(_last_positions[left_key])
+	var right_changed := _last_positions.has(right_key) and not right.position.is_equal_approx(_last_positions[right_key])
+
+	if left_changed and not right_changed:
+		right.position = _mirror_position(left.position)
+	elif right_changed and not left_changed:
+		left.position = _mirror_position(right.position)
+	elif left_changed and right_changed:
+		right.position = _mirror_position(left.position)
 
 
 func _mirror_position(position: Vector2) -> Vector2:

@@ -67,8 +67,8 @@ func _build_ui() -> void:
 
 	panel = Panel.new()
 	panel.name = "TalentTreePanel"
-	panel.position = Vector2(600, 72)
-	panel.size = Vector2(720, 936)
+	panel.position = Vector2(600, 24)
+	panel.size = Vector2(720, 1032)
 	add_child(panel)
 
 	var title := Label.new()
@@ -96,7 +96,7 @@ func _build_ui() -> void:
 	var graph := Control.new()
 	graph.name = "Graph"
 	graph.position = Vector2(0, 96)
-	graph.size = Vector2(720, 820)
+	graph.size = Vector2(720, 900)
 	graph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(graph)
 

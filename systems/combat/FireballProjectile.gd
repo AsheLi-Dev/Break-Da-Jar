@@ -15,6 +15,7 @@ const FIREBALL_EXPLOSION_FRAME_SIZE := Vector2(64.0, 64.0)
 @export var explosion_radius: float = 80.0
 @export var target_group: StringName = &"enemy"
 @export var damages_containers: bool = true
+@export var explode_on_containers: bool = false
 @export var debug_color: Color = Color(1.0, 0.35, 0.08)
 @export var fireball_animation_fps: float = 24.0
 @export var fireball_visual_scale: float = 1.0
@@ -63,13 +64,13 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node) -> void:
-	if body.is_in_group(target_group) or _is_wall_body(body):
+	if body.is_in_group(target_group) or _is_wall_body(body) or _should_explode_on_container(body):
 		explode()
 
 
 func _on_area_entered(area: Area2D) -> void:
 	var parent := area.get_parent()
-	if area.is_in_group(target_group) or (parent != null and parent.is_in_group(target_group)):
+	if area.is_in_group(target_group) or (parent != null and parent.is_in_group(target_group)) or _should_explode_on_container(area):
 		explode()
 
 
@@ -90,6 +91,10 @@ func explode(is_natural: bool = false) -> void:
 	if is_natural and owner_player != null and owner_player.has_method("on_fireball_natural_explosion"):
 		owner_player.call("on_fireball_natural_explosion", self)
 	if explode_replacement_callback.is_valid() and bool(explode_replacement_callback.call(global_position, is_natural)):
+		_spawn_explosion_vfx()
+		_damage_containers_in_radius()
+		if explode_callback.is_valid():
+			explode_callback.call(global_position)
 		queue_free()
 		return
 	_spawn_explosion_vfx()
@@ -110,15 +115,7 @@ func explode(is_natural: bool = false) -> void:
 		if poison_stacks > 0 and enemy.has_method("apply_poison_stacks"):
 			enemy.apply_poison_stacks(poison_stacks, owner_player)
 
-	if damages_containers:
-		for container in get_tree().get_nodes_in_group("container"):
-			var container_2d := container as Node2D
-			if container_2d == null or container_2d.global_position.distance_to(global_position) > explosion_radius:
-				continue
-			if container is BreakableContainer and container.is_shop_container:
-				continue
-			if container.has_method("take_damage"):
-				container.take_damage(damage, {"source": "fireball", "owner": owner_player})
+	_damage_containers_in_radius()
 
 	if explode_callback.is_valid():
 		explode_callback.call(global_position)
@@ -128,6 +125,28 @@ func explode(is_natural: bool = false) -> void:
 
 func _is_wall_body(body: Node) -> bool:
 	return body is StaticBody2D or body is TileMap or body is TileMapLayer or body.is_in_group("wall") or body.is_in_group("walls")
+
+
+func _damage_containers_in_radius() -> void:
+	if not damages_containers:
+		return
+	for container in get_tree().get_nodes_in_group("container"):
+		var container_2d := container as Node2D
+		if container_2d == null or container_2d.global_position.distance_to(global_position) > explosion_radius:
+			continue
+		if container is BreakableContainer and container.is_shop_container:
+			continue
+		if container.has_method("take_damage"):
+			container.take_damage(damage, {"source": "fireball", "owner": owner_player})
+
+
+func _should_explode_on_container(node: Node) -> bool:
+	if not explode_on_containers:
+		return false
+	if node.is_in_group("container"):
+		return true
+	var parent := node.get_parent()
+	return parent != null and parent.is_in_group("container")
 
 
 func _ensure_nodes() -> void:

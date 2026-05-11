@@ -8,6 +8,8 @@ const FRAME_COUNT := 8
 @export var length: float = 250.0
 @export var width: float = 42.0
 @export var animation_fps: float = 24.0
+@export var damages_enemies: bool = true
+@export var damages_containers: bool = true
 
 var owner_player: Node
 var damage: float = 12.0
@@ -20,6 +22,7 @@ var attack_source: String = "player_attack"
 var allow_procs: bool = true
 var chain_remaining: int = 0
 var chain_range: float = 700.0
+var chain_damage_multiplier: float = 1.0
 
 
 func setup(new_owner_player: Node, origin: Vector2, new_direction: Vector2, new_damage: float, new_attack_source: String = "player_attack", new_allow_procs: bool = true) -> void:
@@ -85,16 +88,18 @@ func _make_sprite_frames() -> SpriteFrames:
 
 func _apply_damage() -> void:
 	for body in get_overlapping_bodies():
-		if body.is_in_group("enemy"):
+		if damages_enemies and body.is_in_group("enemy"):
 			_damage_enemy(body)
-		elif body.is_in_group("container"):
+		elif damages_containers and body.is_in_group("container"):
 			_damage_container(body)
 	for area in get_overlapping_areas():
 		var enemy := _get_enemy_target(area)
-		if enemy != null:
+		if damages_enemies and enemy != null:
 			_damage_enemy(enemy)
-		elif area.is_in_group("container"):
+		elif damages_containers and area.is_in_group("container"):
 			_damage_container(area)
+	if damages_containers:
+		_damage_containers_in_beam()
 
 
 func _get_enemy_target(node: Node) -> Node:
@@ -118,7 +123,7 @@ func _damage_enemy(enemy: Node) -> void:
 	else:
 		enemy.call("take_damage", damage)
 	if chain_remaining > 0 and owner_player != null and owner_player.has_method("spawn_chained_wizard_fire_laser"):
-		owner_player.call("spawn_chained_wizard_fire_laser", enemy, chain_remaining - 1, chain_range, damaged_bodies.duplicate())
+		owner_player.call("spawn_chained_wizard_fire_laser", enemy, chain_remaining - 1, chain_range, damaged_bodies.duplicate(), chain_damage_multiplier)
 
 
 func _damage_container(container: Node) -> void:
@@ -127,3 +132,22 @@ func _damage_container(container: Node) -> void:
 
 	damaged_containers.append(container)
 	container.take_damage(damage, {"source": attack_source, "owner": owner_player})
+
+
+func _damage_containers_in_beam() -> void:
+	if get_tree() == null:
+		return
+	for container in get_tree().get_nodes_in_group("container"):
+		var container_2d := container as Node2D
+		if container_2d == null or not _is_position_in_beam(container_2d.global_position):
+			continue
+		_damage_container(container)
+
+
+func _is_position_in_beam(world_position: Vector2) -> bool:
+	var local_position := to_local(world_position)
+	return (
+		local_position.x >= -length * 0.5
+		and local_position.x <= length * 0.5
+		and absf(local_position.y) <= width * 0.5
+	)

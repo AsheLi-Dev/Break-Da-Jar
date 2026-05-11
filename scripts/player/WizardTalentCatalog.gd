@@ -12,6 +12,21 @@ const POSITIONS := {
 	&"flame_bottom_6": Vector2(390, 758),
 	&"flame_bottom_7": Vector2(430, 748),
 	&"flame_bottom_8": Vector2(470, 730),
+	&"flame_left_start_0": Vector2(335, 610),
+	&"flame_left_start_1": Vector2(305, 592),
+	&"flame_left_start_2": Vector2(275, 574),
+	&"flame_left_start_3": Vector2(245, 556),
+	&"flame_left_start_4": Vector2(215, 538),
+	&"flame_center_start_0": Vector2(359, 600),
+	&"flame_center_start_1": Vector2(356, 570),
+	&"flame_center_start_2": Vector2(353, 540),
+	&"flame_center_start_3": Vector2(350, 510),
+	&"flame_center_start_4": Vector2(347, 480),
+	&"flame_right_start_0": Vector2(389, 610),
+	&"flame_right_start_1": Vector2(421, 592),
+	&"flame_right_start_2": Vector2(453, 574),
+	&"flame_right_start_3": Vector2(485, 556),
+	&"flame_right_start_4": Vector2(517, 538),
 	&"flame_bridge_center_0": Vector2(346, 598),
 	&"flame_left_0": Vector2(205, 560),
 	&"flame_left_1": Vector2(175, 510),
@@ -24,6 +39,9 @@ const POSITIONS := {
 	&"flame_left_8": Vector2(225, 150),
 	&"flame_left_9": Vector2(255, 112),
 	&"flame_left_10": Vector2(285, 80),
+	&"flame_left_11": Vector2(305, 138),
+	&"flame_left_12": Vector2(325, 196),
+	&"flame_left_13": Vector2(345, 254),
 	&"flame_center_0": Vector2(330, 565),
 	&"flame_center_1": Vector2(315, 508),
 	&"flame_center_2": Vector2(300, 452),
@@ -48,15 +66,27 @@ const POSITIONS := {
 	&"flame_right_8": Vector2(495, 150),
 	&"flame_right_9": Vector2(465, 112),
 	&"flame_right_10": Vector2(435, 80),
-	&"spark_0": Vector2(359, 401),
-	&"spark_1": Vector2(336, 429),
-	&"spark_2": Vector2(390, 435),
+	&"flame_right_11": Vector2(415, 138),
+	&"flame_right_12": Vector2(395, 196),
+	&"flame_right_13": Vector2(375, 254),
+	&"spark_0": Vector2(385, 72),
+	&"spark_1": Vector2(352, 94),
+	&"spark_2": Vector2(390, 128),
 	&"spark_3": Vector2(655, 283),
 	&"spark_4": Vector2(681, 370),
 	&"spark_5": Vector2(623, 335),
 	&"spark_6": Vector2(90, 246),
 	&"spark_7": Vector2(64, 324),
 	&"spark_8": Vector2(41, 286),
+	&"spark_9": Vector2(126, 438),
+	&"spark_10": Vector2(88, 405),
+	&"spark_11": Vector2(139, 388),
+	&"spark_12": Vector2(594, 438),
+	&"spark_13": Vector2(632, 405),
+	&"spark_14": Vector2(581, 388),
+	&"spark_15": Vector2(330, 360),
+	&"spark_16": Vector2(358, 398),
+	&"spark_17": Vector2(318, 424),
 }
 
 static var _layout_position_cache: Dictionary = {}
@@ -73,6 +103,30 @@ static func definition(id: StringName) -> Dictionary:
 	match id:
 		&"flame_bottom_5":
 			return {"name": "Venom\nSpark", "description": "Your attacks have 10% chance to apply 1 Poison stack.", "stat": &"poison_chance", "value": 0.1}
+		&"flame_left_start_0":
+			return {"name": "Fireball\nForce", "description": "Your Fireballs deal 20% increased damage.", "effect": &"wizard_fireball_damage_bonus"}
+		&"flame_left_start_1":
+			return {"name": "Culling\nFlame", "description": "After killing an enemy, gain 2 ATK for 5s, up to 10 ATK.", "effect": &"wizard_kill_atk_stack"}
+		&"flame_left_start_2":
+			return {"name": "Toxic\nSlide", "description": "After sliding, nearby enemies gain 1 Poison stack.", "effect": &"wizard_slide_nearby_poison"}
+		&"flame_left_start_3":
+			return {"name": "Wide\nBlast", "description": "Your Fireballs have 30% increased explosion radius.", "effect": &"wizard_fireball_radius_bonus"}
+		&"flame_center_start_0":
+			return {"name": "Swift\nFlame", "description": "Gain 20% movement speed.", "stat": &"movement_speed_bonus", "value": 0.2}
+		&"flame_center_start_1":
+			return {"name": "Burning\nStride", "description": "After killing an enemy, gain 10% movement speed for 3s, up to 30%.", "effect": &"wizard_kill_move_speed_stack"}
+		&"flame_center_start_2":
+			return {"name": "Extra\nSpark", "description": "Your left-click attack fires 1 additional Fireball.", "effect": &"wizard_primary_extra_fireball"}
+		&"flame_center_start_3":
+			return {"name": "Fast\nSparks", "description": "Your Fireballs have 40% increased travel speed.", "effect": &"wizard_fireball_speed_bonus"}
+		&"flame_right_start_0":
+			return {"name": "Quick\nCast", "description": "Gain 20% attack speed.", "stat": &"attack_speed_bonus", "value": 0.2}
+		&"flame_right_start_1":
+			return {"name": "Kindled\nCast", "description": "After killing an enemy, gain 10% attack speed for 5s, up to 30%.", "effect": &"wizard_kill_attack_speed_stack"}
+		&"flame_right_start_2":
+			return {"name": "Twin\nRay", "description": "Your right-click attack fires an additional Fire Laser at the nearest enemy.", "effect": &"wizard_extra_auto_fire_laser"}
+		&"flame_right_start_3":
+			return {"name": "Long\nRay", "description": "Your Fire Lasers have 30% increased range.", "effect": &"wizard_fire_laser_range_bonus"}
 		&"flame_bottom_4":
 			return {"name": "Slide\nBlast", "description": "After sliding, your next left-click Fireball has 300% increased explosion radius and 90% reduced travel distance.", "effect": &"wizard_slide_fireball_blast"}
 		&"flame_bottom_3":
@@ -136,9 +190,29 @@ static func definition(id: StringName) -> Dictionary:
 		&"flame_center_12":
 			return {"name": "Wild\nSparks", "description": "All Fireballs from all sources are doubled, but every Fireball launches in a random direction.", "effect": &"wizard_random_double_fireballs"}
 		&"flame_right_0":
-			return {"name": "Surge\nHaste", "description": "During Fire Surge, gain 50% attack speed.", "effect": &"wizard_fire_surge_attack_speed"}
+			return {"name": "Quick\nVitality", "description": "Killing an enemy that has lived for less than 2s grants 1 max HP, up to 20 per round.", "effect": &"wizard_quick_kill_max_hp"}
 		&"flame_right_1":
-			return {"name": "Rapid\nChain", "description": "Your Fire Lasers gain additional chains equal to your attacks per second, rounded down.", "effect": &"wizard_attack_speed_laser_chain"}
+			return {"name": "Opening\nBounty", "description": "For the first 10s of each round, enemies drop double gold.", "effect": &"wizard_early_round_enemy_gold"}
+		&"flame_right_2":
+			return {"name": "Jar\nBurst", "description": "Your Fireballs explode when they hit containers.", "effect": &"wizard_fireball_explodes_on_containers"}
+		&"flame_right_3":
+			return {"name": "Jar\nFlare", "description": "Breaking a container has 10% chance to trigger a Fire Laser. Your Fire Lasers no longer break containers.", "effect": &"wizard_container_break_laser_no_container_damage"}
+		&"flame_right_4":
+			return {"name": "Venom\nRay", "description": "When a poisoned enemy dies, trigger a Fire Laser from its position.", "effect": &"wizard_poisoned_death_fire_laser"}
+		&"flame_right_5":
+			return {"name": "Surge\nHaste", "description": "During Fire Surge, gain 50% attack speed.", "effect": &"wizard_fire_surge_attack_speed"}
+		&"flame_right_6":
+			return {"name": "Slide\nMomentum", "description": "After sliding, gain 5% attack speed and movement speed for 5s, stacking up to 50%.", "effect": &"wizard_slide_momentum"}
+		&"flame_right_7":
+			return {"name": "Living\nCircuit", "description": "Your Fire Lasers can chain to you, healing 1 HP without dealing damage.", "effect": &"wizard_fire_laser_chain_heals_player"}
+		&"flame_right_8":
+			return {"name": "Arc\nFocus", "description": "Your Fire Lasers deal 20% more damage for each chain.", "effect": &"wizard_fire_laser_chain_damage"}
+		&"flame_right_9":
+			return {"name": "Slide\nRay", "description": "After sliding, trigger a Fire Laser in your slide direction.", "effect": &"wizard_slide_fire_laser"}
+		&"flame_right_10":
+			return {"name": "Opening\nSurge", "description": "Gain 50% attack speed for the first 10s of each round.", "effect": &"wizard_opening_attack_speed"}
+		&"spark_5":
+			return {"name": "Wide\nSpoils", "description": "Map size and combat container count are increased by 30%.", "effect": &"wizard_large_map_more_containers"}
 		_:
 			return {"name": "+1\nATK", "description": "+1 ATK.", "stat": &"atk", "value": 1.0}
 
@@ -157,28 +231,29 @@ static func position(id: StringName) -> Vector2:
 
 static func connections() -> Array:
 	var result: Array = []
-	_add_path(result, [
-		&"flame_bottom_2",
-		&"flame_bottom_3",
-		&"flame_bottom_4",
-		&"flame_bottom_5",
-		&"flame_bottom_6",
-		&"flame_bottom_7",
-		&"flame_bottom_8",
-	])
-	_add_path(result, _ids("flame_left", 11))
+	_add_path(result, [&"flame_bottom_2", &"flame_bottom_3", &"flame_bottom_4"])
+	_add_path(result, [&"flame_bottom_6", &"flame_bottom_7", &"flame_bottom_8"])
+	_add_path(result, _ids("flame_left", 14))
 	_add_path(result, _ids("flame_center", 13))
-	_add_path(result, _ids("flame_right", 11))
+	_add_path(result, _ids("flame_right", 14))
+	_add_path(result, _branch_ids(&"flame_bottom_5", "flame_left_start", 5, &"flame_bottom_4"))
+	_add_path(result, _branch_ids(&"flame_bottom_5", "flame_center_start", 5, &"flame_bridge_center_0"))
+	_add_path(result, _branch_ids(&"flame_bottom_5", "flame_right_start", 5, &"flame_bottom_6"))
 	result.append([&"flame_bottom_2", &"flame_left_0"])
-	result.append([&"flame_bottom_5", &"flame_bridge_center_0"])
 	result.append([&"flame_bridge_center_0", &"flame_center_0"])
 	result.append([&"flame_bottom_8", &"flame_right_0"])
 	result.append([&"flame_left_5", &"spark_6"])
-	result.append([&"flame_center_2", &"spark_1"])
+	result.append([&"flame_center_5", &"spark_1"])
+	result.append([&"flame_center_0", &"spark_15"])
 	result.append([&"flame_right_4", &"spark_5"])
+	result.append([&"flame_bottom_3", &"spark_9"])
+	result.append([&"flame_bottom_8", &"spark_12"])
 	_add_path(result, [&"spark_0", &"spark_1", &"spark_2"])
 	_add_path(result, [&"spark_3", &"spark_4", &"spark_5"])
 	_add_path(result, [&"spark_6", &"spark_7", &"spark_8"])
+	_add_path(result, [&"spark_9", &"spark_10", &"spark_11"])
+	_add_path(result, [&"spark_12", &"spark_13", &"spark_14"])
+	_add_path(result, [&"spark_15", &"spark_16", &"spark_17"])
 	return result
 
 
@@ -190,6 +265,13 @@ static func _ids(prefix: String, count: int) -> Array[StringName]:
 	var result: Array[StringName] = []
 	for index in range(count):
 		result.append(StringName("%s_%d" % [prefix, index]))
+	return result
+
+
+static func _branch_ids(start_id: StringName, prefix: String, count: int, end_id: StringName) -> Array[StringName]:
+	var result: Array[StringName] = [start_id]
+	result.append_array(_ids(prefix, count))
+	result.append(end_id)
 	return result
 
 
@@ -211,7 +293,7 @@ static func _layout_positions() -> Dictionary:
 	for id in POSITIONS.keys():
 		var marker := root.get_node_or_null(String(id)) as Node2D
 		if marker != null:
-			positions[id] = marker.position
+			positions[id] = marker.global_position
 	root.free()
 	_layout_position_cache = positions
 	return _layout_position_cache
