@@ -31,6 +31,7 @@ func _run():
 	await process_frame
 
 	_test_main_scene_boot()
+	_test_dynamic_play_area_talent()
 	_test_pause_toggle()
 	await _test_combat_clear_waits_for_scene_enemies()
 	_test_shop_phase()
@@ -66,6 +67,7 @@ func _test_main_scene_boot() -> void:
 	var containers_value: Variant = battle_scene.get("containers")
 	var containers: Array = containers_value if containers_value is Array else []
 	_assert(containers.size() > 0, "Combat containers spawn")
+	_assert(containers.size() == 20, "Round 1 starts with 50% combat containers")
 	_test_container_hitboxes(containers)
 	_assert(int(battle_scene.get("phase")) == 0, "Battle starts in combat phase")
 
@@ -88,6 +90,51 @@ func _test_container_hitboxes(containers: Array) -> void:
 		var expected_offset: Vector2 = battle_scene.call("_get_container_collision_offset", int(container.container_type))
 		_assert(is_equal_approx(circle.radius, expected_radius), "Container hitbox radius matches type")
 		_assert(collision.position.is_equal_approx(expected_offset), "Container hitbox offset matches type")
+
+
+func _test_dynamic_play_area_talent() -> void:
+	if battle_scene == null or player == null:
+		return
+	player.set("talent_wizard_large_map_more_containers_enabled", true)
+	battle_scene.call("_refresh_play_area_from_player", true)
+	var expanded_rect: Rect2 = battle_scene.call("_get_play_area_rect")
+	_assert(expanded_rect.size.is_equal_approx(Vector2(1664, 1664)), "Wizard map size talent expands BattleScene play area by 30%")
+	_assert(expanded_rect.get_center().is_equal_approx(Vector2(1248, 702)), "Wizard map size talent scales BattleScene play area center by 30%")
+	_assert(int(battle_scene.call("_get_combat_container_count")) == 26, "Wizard map size talent increases scaled combat container count by 30%")
+	_assert(player.movement_bounds.size.is_equal_approx(expanded_rect.size), "Wizard map size talent updates player movement bounds")
+	player.set("talent_wizard_large_map_more_containers_enabled", false)
+	battle_scene.call("_refresh_play_area_from_player", true)
+
+	battle_scene.set("current_round", 6)
+	_assert(int(battle_scene.call("_get_combat_container_count")) == 40, "Round 6 returns to normal combat container count")
+	_assert(is_equal_approx(float(battle_scene.call("_get_round_enemy_max_hp_multiplier")), 1.1), "Round 6 adds 10% enemy max HP")
+	battle_scene.set("current_round", 7)
+	_assert(int(battle_scene.call("_get_combat_container_count")) == 44, "Round 7 adds 10% combat containers")
+	battle_scene.set("current_round", 20)
+	_assert(int(battle_scene.call("_get_combat_container_count")) == 96, "Round 20 adds 140% combat containers")
+	_assert(is_equal_approx(float(battle_scene.call("_get_round_enemy_max_hp_multiplier")), 2.5), "Round 20 adds 150% enemy max HP")
+	battle_scene.set("current_round", 5)
+	_assert(is_equal_approx(float(battle_scene.call("_get_round_enemy_max_hp_multiplier")), 1.0), "Round 5 has normal enemy max HP")
+	for round_index in range(1, 6):
+		battle_scene.set("current_round", round_index)
+		for _roll_index in range(10):
+			_assert(int(battle_scene.call("_roll_combat_container_type")) == 0, "Rounds 1-5 only roll jars")
+			_assert(int(battle_scene.call("_roll_small_combat_container_type")) == 0, "Rounds 1-5 fallback rolls only jars")
+	battle_scene.set("current_round", 6)
+	var round_six_type: int = battle_scene.call("_roll_combat_container_type")
+	_assert(round_six_type == 0 or round_six_type == 1, "Rounds 6-10 only roll jars and barrels")
+	seed(1)
+	var saw_round_six_jar := false
+	var saw_round_six_barrel := false
+	for _roll_index in range(100):
+		var rolled_type: int = battle_scene.call("_roll_combat_container_type")
+		_assert(rolled_type == 0 or rolled_type == 1, "Rounds 6-10 never roll tombs")
+		if rolled_type == 0:
+			saw_round_six_jar = true
+		elif rolled_type == 1:
+			saw_round_six_barrel = true
+	_assert(saw_round_six_jar and saw_round_six_barrel, "Rounds 6-10 can roll both jars and barrels")
+	battle_scene.set("current_round", 1)
 
 
 func _test_pause_toggle() -> void:

@@ -12,7 +12,7 @@ const ARENA_TILE_SCALE := 2.0
 const ARENA_GRID_SIZE := Vector2i(20, 20)
 const ARENA_TILE_SOURCE_ID := 0
 const CHARACTER_SPRITE_SCALE := Vector2(2.0, 2.0)
-const MAX_ROUNDS := 10
+const MAX_ROUNDS := 20
 const ROUND_CONTAINER_AUTO_BREAK_TIME := 30.0
 const RANDOM_CONTAINER_BREAK_MIN_TIME := 2.0
 const RANDOM_CONTAINER_BREAK_MAX_TIME := 3.0
@@ -150,6 +150,7 @@ var pause_overlay: Control
 var pause_input_controller: Node
 var talent_tree_ui: CanvasLayer
 var bgm_player: AudioStreamPlayer
+var applied_map_size_multiplier: float = 1.0
 
 
 func _ready() -> void:
@@ -200,11 +201,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _create_background() -> void:
+	var play_area_rect := _get_play_area_rect()
 	var blocked_area := ColorRect.new()
 	blocked_area.name = "BlockedArea"
 	blocked_area.color = Color(0.045, 0.052, 0.05)
-	blocked_area.position = PLAY_AREA_RECT.position - Vector2(900, 900)
-	blocked_area.size = PLAY_AREA_RECT.size + Vector2(1800, 1800)
+	blocked_area.position = play_area_rect.position - Vector2(900, 900)
+	blocked_area.size = play_area_rect.size + Vector2(1800, 1800)
 	blocked_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	blocked_area.z_index = -120
 	add_child(blocked_area)
@@ -215,6 +217,7 @@ func _create_background() -> void:
 
 
 func _create_arena_tile_map() -> void:
+	var play_area_rect := _get_play_area_rect()
 	var tile_set := TileSet.new()
 	tile_set.tile_size = ARENA_TILE_SIZE
 
@@ -229,7 +232,7 @@ func _create_arena_tile_map() -> void:
 	var arena := TileMapLayer.new()
 	arena.name = "ArenaTiles"
 	arena.tile_set = tile_set
-	arena.position = PLAY_AREA_RECT.position
+	arena.position = play_area_rect.position
 	arena.scale = Vector2(ARENA_TILE_SCALE, ARENA_TILE_SCALE)
 	arena.z_index = -100
 	add_child(arena)
@@ -238,8 +241,9 @@ func _create_arena_tile_map() -> void:
 
 
 func _fill_arena_tiles(arena: TileMapLayer) -> void:
-	var max_x := ARENA_GRID_SIZE.x - 1
-	var max_y := ARENA_GRID_SIZE.y - 1
+	var arena_grid_size := _get_arena_grid_size()
+	var max_x := arena_grid_size.x - 1
+	var max_y := arena_grid_size.y - 1
 
 	for y in range(2, max_y - 1):
 		for x in range(2, max_x - 1):
@@ -270,21 +274,22 @@ func _fill_arena_tiles(arena: TileMapLayer) -> void:
 
 
 func _create_arena_edge_decorations() -> void:
+	var play_area_rect := _get_play_area_rect()
 	var decorations := Node2D.new()
 	decorations.name = "ArenaEdgeDecorations"
 	decorations.z_index = -90
 	add_child(decorations)
 
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], PLAY_AREA_RECT.position + Vector2(245, 150), -0.18, 2.0, false)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[3], PLAY_AREA_RECT.position + Vector2(620, 130), 0.12, 2.0, true)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[1], Vector2(PLAY_AREA_RECT.end.x - 210, PLAY_AREA_RECT.position.y + 155), 0.2, 2.0, true)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(PLAY_AREA_RECT.position.x + 150, PLAY_AREA_RECT.position.y + 420), 0.3, 2.0, false)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], Vector2(PLAY_AREA_RECT.end.x - 145, PLAY_AREA_RECT.position.y + 540), -0.22, 2.0, false)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[3], Vector2(PLAY_AREA_RECT.position.x + 140, PLAY_AREA_RECT.end.y - 430), -0.08, 2.0, true)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(PLAY_AREA_RECT.end.x - 155, PLAY_AREA_RECT.end.y - 320), 0.16, 2.0, false)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[1], Vector2(PLAY_AREA_RECT.position.x + 330, PLAY_AREA_RECT.end.y - 150), -0.25, 2.0, false)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(PLAY_AREA_RECT.position.x + 820, PLAY_AREA_RECT.end.y - 140), 0.18, 2.0, true)
-	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], Vector2(PLAY_AREA_RECT.end.x - 390, PLAY_AREA_RECT.end.y - 150), 0.08, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], play_area_rect.position + Vector2(245, 150), -0.18, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[3], play_area_rect.position + Vector2(620, 130), 0.12, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[1], Vector2(play_area_rect.end.x - 210, play_area_rect.position.y + 155), 0.2, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(play_area_rect.position.x + 150, play_area_rect.position.y + 420), 0.3, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], Vector2(play_area_rect.end.x - 145, play_area_rect.position.y + 540), -0.22, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[3], Vector2(play_area_rect.position.x + 140, play_area_rect.end.y - 430), -0.08, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(play_area_rect.end.x - 155, play_area_rect.end.y - 320), 0.16, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[1], Vector2(play_area_rect.position.x + 330, play_area_rect.end.y - 150), -0.25, 2.0, false)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[2], Vector2(play_area_rect.position.x + 820, play_area_rect.end.y - 140), 0.18, 2.0, true)
+	_add_arena_edge_decoration(decorations, SKULL_DECOR_TEXTURES[0], Vector2(play_area_rect.end.x - 390, play_area_rect.end.y - 150), 0.08, 2.0, true)
 
 
 func _add_arena_edge_decoration(
@@ -305,6 +310,9 @@ func _add_arena_edge_decoration(
 
 
 func _create_arena_walls() -> void:
+	var play_area_center := _get_play_area_center()
+	var play_area_size := _get_play_area_size()
+	var play_area_rect := _get_play_area_rect()
 	var walls := StaticBody2D.new()
 	walls.name = "ArenaWalls"
 	walls.collision_layer = 1
@@ -316,26 +324,26 @@ func _create_arena_walls() -> void:
 	_add_arena_wall(
 		walls,
 		"TopWall",
-		PLAY_AREA_RECT.position + Vector2(PLAY_AREA_SIZE.x * 0.5, wall_thickness * 0.5),
-		Vector2(PLAY_AREA_SIZE.x, wall_thickness)
+		play_area_rect.position + Vector2(play_area_size.x * 0.5, wall_thickness * 0.5),
+		Vector2(play_area_size.x, wall_thickness)
 	)
 	_add_arena_wall(
 		walls,
 		"BottomWall",
-		Vector2(PLAY_AREA_CENTER.x, PLAY_AREA_RECT.end.y - wall_thickness * 0.5),
-		Vector2(PLAY_AREA_SIZE.x, wall_thickness)
+		Vector2(play_area_center.x, play_area_rect.end.y - wall_thickness * 0.5),
+		Vector2(play_area_size.x, wall_thickness)
 	)
 	_add_arena_wall(
 		walls,
 		"LeftWall",
-		PLAY_AREA_RECT.position + Vector2(wall_thickness * 0.5, PLAY_AREA_SIZE.y * 0.5),
-		Vector2(wall_thickness, PLAY_AREA_SIZE.y)
+		play_area_rect.position + Vector2(wall_thickness * 0.5, play_area_size.y * 0.5),
+		Vector2(wall_thickness, play_area_size.y)
 	)
 	_add_arena_wall(
 		walls,
 		"RightWall",
-		Vector2(PLAY_AREA_RECT.end.x - wall_thickness * 0.5, PLAY_AREA_CENTER.y),
-		Vector2(wall_thickness, PLAY_AREA_SIZE.y)
+		Vector2(play_area_rect.end.x - wall_thickness * 0.5, play_area_center.y),
+		Vector2(wall_thickness, play_area_size.y)
 	)
 
 
@@ -364,14 +372,14 @@ func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate() as Player
 	player.setup_character(DEFAULT_CHARACTER_ID)
 	player.name = "Player"
-	player.global_position = PLAYER_POSITION
+	player.global_position = _get_player_position()
 	player.set_collision_layer_value(1, false)
 	player.set_collision_layer_value(7, true)
 	player.collision_mask = 0
 	player.set_collision_mask_value(1, true)
 	_scale_actor_body(player)
 	player.movement_bounds_enabled = true
-	player.movement_bounds = PLAY_AREA_RECT
+	player.movement_bounds = _get_play_area_rect()
 	player.hp_changed.connect(_on_player_hp_changed)
 	player.experience_changed.connect(_on_player_progress_changed)
 	player.talent_points_changed.connect(_on_player_talent_points_changed)
@@ -380,18 +388,85 @@ func _spawn_player() -> void:
 
 
 func _create_camera() -> void:
+	var play_area_rect := _get_play_area_rect()
 	camera = Camera2D.new()
 	camera.set_script(CAMERA_SHAKE_SCRIPT)
 	camera.name = "PlayerCamera"
 	camera.zoom = CAMERA_ZOOM
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
-	camera.limit_left = int(PLAY_AREA_RECT.position.x)
-	camera.limit_top = int(PLAY_AREA_RECT.position.y)
-	camera.limit_right = int(PLAY_AREA_RECT.end.x)
-	camera.limit_bottom = int(PLAY_AREA_RECT.end.y)
+	camera.limit_left = int(play_area_rect.position.x)
+	camera.limit_top = int(play_area_rect.position.y)
+	camera.limit_right = int(play_area_rect.end.x)
+	camera.limit_bottom = int(play_area_rect.end.y)
 	player.add_child(camera)
 	camera.make_current()
+
+
+func _get_map_size_multiplier() -> float:
+	if is_instance_valid(player) and player.has_method("get_map_size_multiplier"):
+		return float(player.get_map_size_multiplier())
+	return 1.0
+
+
+func _get_play_area_size() -> Vector2:
+	return PLAY_AREA_SIZE * _get_map_size_multiplier()
+
+
+func _get_play_area_center() -> Vector2:
+	return PLAY_AREA_CENTER * _get_map_size_multiplier()
+
+
+func _get_play_area_rect() -> Rect2:
+	var play_area_size := _get_play_area_size()
+	return Rect2(_get_play_area_center() - play_area_size * 0.5, play_area_size)
+
+
+func _get_player_position() -> Vector2:
+	return _get_play_area_center() + (PLAYER_POSITION - PLAY_AREA_CENTER)
+
+
+func _get_arena_grid_size() -> Vector2i:
+	var play_area_size := _get_play_area_size()
+	var tile_world_size := float(ARENA_TILE_SIZE.x) * ARENA_TILE_SCALE
+	return Vector2i(
+		maxi(ARENA_GRID_SIZE.x, ceili(play_area_size.x / tile_world_size)),
+		maxi(ARENA_GRID_SIZE.y, ceili(play_area_size.y / tile_world_size))
+	)
+
+
+func _get_combat_container_count() -> int:
+	var multiplier := 1.0
+	if is_instance_valid(player) and player.has_method("get_combat_container_count_multiplier"):
+		multiplier = float(player.get_combat_container_count_multiplier())
+	return maxi(1, roundi(float(CONTAINER_COUNT) * _get_round_container_count_multiplier() * multiplier))
+
+
+func _get_round_container_count_multiplier() -> float:
+	if current_round <= 6:
+		return 0.4 + 0.1 * float(current_round)
+	return 1.0 + 0.1 * float(current_round - 6)
+
+
+func _refresh_play_area_from_player(force: bool = false) -> void:
+	var next_multiplier := _get_map_size_multiplier()
+	if not force and is_equal_approx(next_multiplier, applied_map_size_multiplier):
+		return
+	applied_map_size_multiplier = next_multiplier
+	for node_name in [&"BlockedArea", &"ArenaTiles", &"ArenaEdgeDecorations", &"ArenaWalls"]:
+		var existing := get_node_or_null(NodePath(String(node_name)))
+		if existing != null:
+			remove_child(existing)
+			existing.queue_free()
+	_create_background()
+	if is_instance_valid(player):
+		player.movement_bounds = _get_play_area_rect()
+	if is_instance_valid(camera):
+		var play_area_rect := _get_play_area_rect()
+		camera.limit_left = int(play_area_rect.position.x)
+		camera.limit_top = int(play_area_rect.position.y)
+		camera.limit_right = int(play_area_rect.end.x)
+		camera.limit_bottom = int(play_area_rect.end.y)
 
 
 func _start_bgm() -> void:
@@ -425,6 +500,7 @@ func _start_combat_round() -> void:
 	hud_message = "Round %d started." % current_round
 	status_panel.visible = false
 	_clear_shop_containers()
+	_refresh_play_area_from_player()
 	_spawn_containers()
 	if is_instance_valid(player):
 		player.emit_round_started(current_round)
@@ -438,9 +514,11 @@ func _maybe_spawn_round_healing_orb() -> void:
 	if not bool(player.should_spawn_round_healing_orb()):
 		return
 
-	var spawn_position := PLAY_AREA_RECT.position + Vector2(
-		randf_range(PLAY_AREA_SIZE.x * 0.2, PLAY_AREA_SIZE.x * 0.8),
-		randf_range(PLAY_AREA_SIZE.y * 0.2, PLAY_AREA_SIZE.y * 0.8)
+	var play_area_size := _get_play_area_size()
+	var play_area_rect := _get_play_area_rect()
+	var spawn_position := play_area_rect.position + Vector2(
+		randf_range(play_area_size.x * 0.2, play_area_size.x * 0.8),
+		randf_range(play_area_size.y * 0.2, play_area_size.y * 0.8)
 	)
 	_spawn_reward_pickup(RewardPickup.KIND_HEAL, maxi(1, roundi(player.max_hp * 0.25)), spawn_position)
 
@@ -460,8 +538,8 @@ func _spawn_containers() -> void:
 func _roll_combat_container_placements() -> Array[Dictionary]:
 	var occupied_cells: Dictionary = {}
 	var placements: Array[Dictionary] = []
-	var grid_cell_size: Vector2 = PLAY_AREA_SIZE / float(GRID_SIZE)
-	for _index in range(CONTAINER_COUNT):
+	var grid_cell_size: Vector2 = _get_play_area_size() / float(GRID_SIZE)
+	for _index in range(_get_combat_container_count()):
 		var container_type: int = _roll_combat_container_type()
 		var placement := _roll_container_placement(container_type, grid_cell_size, occupied_cells)
 		if placement.is_empty() and container_type == ContainerType.TOMB:
@@ -494,6 +572,7 @@ func _get_extra_tomb_container_count() -> int:
 
 
 func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occupied_cells: Dictionary) -> Dictionary:
+	var play_area_rect := _get_play_area_rect()
 	if container_type == ContainerType.TOMB:
 		var top_left_cell := _pick_free_tomb_cell(occupied_cells)
 		if top_left_cell == Vector2i(-1, -1):
@@ -503,7 +582,7 @@ func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occ
 			for column_offset in range(2):
 				occupied_cells[top_left_cell + Vector2i(column_offset, row_offset)] = true
 		return {
-			"position": PLAY_AREA_RECT.position + (Vector2(top_left_cell) + Vector2(1.0, 1.0)) * grid_cell_size,
+			"position": play_area_rect.position + (Vector2(top_left_cell) + Vector2(1.0, 1.0)) * grid_cell_size,
 		}
 
 	var cell := _pick_free_single_cell(occupied_cells)
@@ -511,7 +590,7 @@ func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occ
 		return {}
 
 	occupied_cells[cell] = true
-	var position: Vector2 = PLAY_AREA_RECT.position + (Vector2(cell) + Vector2(0.5, 0.5)) * grid_cell_size
+	var position: Vector2 = play_area_rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * grid_cell_size
 	position += Vector2(
 		randf_range(-grid_cell_size.x * 0.38, grid_cell_size.x * 0.38),
 		randf_range(-grid_cell_size.y * 0.38, grid_cell_size.y * 0.38)
@@ -554,10 +633,18 @@ func _pick_free_single_cell(occupied_cells: Dictionary) -> Vector2i:
 
 
 func _roll_combat_container_type() -> int:
+	if current_round <= 5:
+		return ContainerType.URN
+	if current_round <= 10:
+		return ContainerType.URN if randf() < 0.8 else ContainerType.BARREL
 	return CONTAINER_CATALOG.roll_combat_type()
 
 
 func _roll_small_combat_container_type() -> int:
+	if current_round <= 5:
+		return ContainerType.URN
+	if current_round <= 10:
+		return ContainerType.URN if randf() < 0.8 else ContainerType.BARREL
 	return CONTAINER_CATALOG.roll_small_combat_type()
 
 
@@ -948,6 +1035,9 @@ func _spawn_enemy(spawn_position: Vector2, enemy_scene: PackedScene) -> void:
 		return
 
 	enemy.global_position = spawn_position
+	enemy.set_meta(&"spawn_msec", Time.get_ticks_msec())
+	enemy.max_hp *= _get_round_enemy_max_hp_multiplier()
+	enemy.hp = enemy.max_hp
 	if is_instance_valid(player) and player.has_method("get_enemy_max_hp_multiplier"):
 		var hp_multiplier := float(player.get_enemy_max_hp_multiplier())
 		enemy.max_hp *= hp_multiplier
@@ -966,6 +1056,12 @@ func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
 	if enemy is AcidZombie or enemy is ZombieFireman:
 		return ACID_ZOMBIE_GOLD
 	return MELEE_ZOMBIE_GOLD
+
+
+func _get_round_enemy_max_hp_multiplier() -> float:
+	if current_round < 6:
+		return 1.0
+	return 1.0 + 0.1 * float(current_round - 5)
 
 
 func _on_enemy_died(enemy: EnemyBase) -> void:
@@ -1387,6 +1483,7 @@ func _on_player_talent_points_changed(_unspent_points: int, _pending_points: int
 
 
 func _on_player_talent_unlocked(_node_id: StringName) -> void:
+	_refresh_play_area_from_player()
 	_update_talent_tree_ui()
 
 

@@ -71,14 +71,13 @@ func _physics_process(delta: float) -> void:
 		_update_attack_hold_squash(delta)
 		return
 
-	_face_target(target.global_position)
-
 	if is_aiming:
 		_update_aim(delta)
 		_update_fireman_animation(delta)
 		_update_attack_hold_squash(delta)
 		return
 
+	_face_target(target.global_position)
 	_update_spacing(delta)
 
 	if cooldown_remaining <= 0.0:

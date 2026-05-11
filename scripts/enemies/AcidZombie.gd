@@ -66,13 +66,12 @@ func _physics_process(delta: float) -> void:
 		_update_zombie_animation(delta)
 		return
 
-	_face_target(target.global_position)
-
 	if is_aiming:
 		_update_aim(delta)
 		_update_zombie_animation(delta)
 		return
 
+	_face_target(target.global_position)
 	_update_spacing(delta)
 
 	if cooldown_remaining <= 0.0:

@@ -207,7 +207,7 @@ func _start_ranged_attack() -> void:
 	projectile_fired = false
 	locked_attack_direction = facing_direction
 	ranged_warning.visible = true
-	ranged_warning.set_point_position(1, locked_attack_direction * ranged_prefer_distance)
+	ranged_warning.set_point_position(1, _get_local_ranged_warning_end())
 	stop_moving()
 	_play_brute_animation(&"ranged_attack", true)
 
@@ -403,6 +403,10 @@ func _spawn_projectile(spawn_position: Vector2, direction: Vector2) -> Projectil
 	projectile.global_position = spawn_position
 	projectile.direction = direction
 	return projectile
+
+
+func _get_local_ranged_warning_end() -> Vector2:
+	return locked_attack_direction.rotated(-global_rotation) * ranged_prefer_distance
 
 
 func _spawn_shout_air_wave_vfx() -> void:
