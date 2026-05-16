@@ -10,6 +10,9 @@ $TestScripts = @(
     @{ Script = "res://scripts/test/ItemDatabaseSchemaTest.gd"; PassText = "ItemDatabaseSchemaTest: PASS" },
     @{ Script = "res://scripts/test/TalentCatalogContractTest.gd"; PassText = "TalentCatalogContractTest: PASS" },
     @{ Script = "res://scripts/test/EffectTargetingTest.gd"; PassText = "EffectTargetingTest: PASS" },
+    @{ Script = "res://scripts/test/PeriodicEffectTest.gd"; PassText = "PeriodicEffectTest: PASS" },
+    @{ Script = "res://scripts/test/EnemyStunStatusTest.gd"; PassText = "EnemyStunStatusTest: PASS" },
+    @{ Script = "res://scripts/test/AltarAffixTest.gd"; PassText = "AltarAffixTest: PASS" },
     @{ Script = "res://scripts/test/RefactorSmokeTest.gd"; PassText = "RefactorSmokeTest: PASS" }
 )
 

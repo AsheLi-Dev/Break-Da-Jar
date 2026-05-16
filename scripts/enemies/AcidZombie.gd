@@ -54,6 +54,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 
+	if is_stunned():
+		_handle_stunned_physics(delta)
+		return
+
 	if _update_knockback(delta):
 		return
 
@@ -86,6 +90,9 @@ func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {
 
 	last_damage_source = source
 	last_attack_info = attack_info
+	amount = _apply_incoming_damage_modifiers(amount)
+	if amount <= 0.0:
+		return 0.0
 	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
 	_update_hp_bar()
@@ -158,9 +165,29 @@ func _update_aim(delta: float) -> void:
 
 
 func _fire_projectile() -> void:
+	if is_stunned():
+		return
+
 	var direction: Vector2 = locked_attack_direction.normalized()
 	var projectile: Projectile = _spawn_projectile(_get_projectile_spawn_position(), direction)
 	projectile.setup(direction, damage, projectile_speed, projectile_lifetime)
+
+
+func _on_stun_applied() -> void:
+	super()
+	if is_aiming:
+		release_attack_token()
+	is_aiming = false
+	attack_elapsed = 0.0
+	projectile_fired = false
+	action_animation_remaining = 0.0
+	if aim_line != null:
+		aim_line.visible = false
+
+
+func _handle_stunned_physics(delta: float) -> void:
+	_on_stun_applied()
+	_update_zombie_animation(delta)
 
 
 func _get_projectile_spawn_position() -> Vector2:

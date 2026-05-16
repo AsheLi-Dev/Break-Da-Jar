@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://dsdqrxayvpadb"]
 
-[ext_resource type="Script" uid="uid://32f4te2elhkb" path="res://battlescene.gd" id="1_pxal7"]
+[ext_resource type="Script" path="res://battlescene.gd" id="1_pxal7"]
 [ext_resource type="Texture2D" uid="uid://c0m1b0ds8jviv" path="res://assets/containers/Urn G/urn-G-main-static-00.png" id="2_urn"]
 [ext_resource type="Texture2D" uid="uid://cro876snpsjw6" path="res://assets/containers/Barrel B/barrel-B-main-static-00.png" id="3_barrel"]
 [ext_resource type="Texture2D" uid="uid://b8wvjveql7663" path="res://assets/containers/Tomb A/tomb-A-main-static-00.png" id="4_tomb"]

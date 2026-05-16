@@ -101,6 +101,7 @@ var hp: float
 @export var shockwave_damage: float = 18.0
 @export var shockwave_radius: float = 118.0
 @export var shockwave_knockback: float = 430.0
+@export var shockwave_stun_duration: float = 1.0
 @export var shockwave_cooldown: float = 6.0
 @export var shockwave_visible_time: float = 0.16
 @export var blessing_cooldown: float = 10.0
@@ -125,6 +126,7 @@ var hp: float
 @export var slide_speed: float = 480.0
 @export var slide_duration: float = 0.5
 @export var slide_cancel_window: float = 0.3
+@export var slide_contact_stun_radius: float = 38.0
 @export var slide_sfx_volume_db: float = -4.0
 @export var invincible_time: float = 0.3
 
@@ -203,8 +205,9 @@ var talent_holy_strike_undamaged_stationary_enabled: bool = false
 var talent_wizard_slide_fireball_blast_enabled: bool = false
 var talent_wizard_fireball_damage_bonus_enabled: bool = false
 var talent_wizard_kill_atk_stack_enabled: bool = false
-var talent_wizard_slide_nearby_poison_enabled: bool = false
+var talent_wizard_slide_fireball_radius_buff_enabled: bool = false
 var talent_wizard_fireball_radius_bonus_enabled: bool = false
+var talent_wizard_nearby_damage_lifesteal_enabled: bool = false
 var talent_wizard_poison_stack_damage_enabled: bool = false
 var talent_wizard_nearby_enemy_attack_speed_enabled: bool = false
 var talent_wizard_nearby_damage_focus_enabled: bool = false
@@ -218,6 +221,8 @@ var talent_wizard_short_laser_double_damage_enabled: bool = false
 var talent_wizard_nearby_enemy_elite_damage_enabled: bool = false
 var talent_wizard_more_weaker_enemies_enabled: bool = false
 var talent_wizard_rebirth_level_to_atk_enabled: bool = false
+var talent_wizard_fireball_max_hp_bonus_damage_enabled: bool = false
+var talent_wizard_fireball_radius_per_atk_enabled: bool = false
 var talent_wizard_primary_fireball_laser_explosion_enabled: bool = false
 var talent_wizard_fire_surge_laser_enabled: bool = false
 var talent_wizard_fire_laser_chain_enabled: bool = false
@@ -241,7 +246,9 @@ var talent_wizard_kill_attack_speed_stack_enabled: bool = false
 var talent_wizard_primary_extra_fireball_enabled: bool = false
 var talent_wizard_extra_auto_fire_laser_enabled: bool = false
 var talent_wizard_fire_laser_range_bonus_enabled: bool = false
+var talent_wizard_elite_damage_lifesteal_enabled: bool = false
 var talent_wizard_fireball_speed_bonus_enabled: bool = false
+var talent_wizard_fireball_hit_heal_enabled: bool = false
 var talent_wizard_fire_surge_radial_fireballs_enabled: bool = false
 var talent_wizard_max_hp_primary_echo_enabled: bool = false
 var talent_wizard_move_speed_extra_fireballs_enabled: bool = false
@@ -249,6 +256,8 @@ var talent_wizard_poisoned_death_fireball_enabled: bool = false
 var talent_wizard_rare_item_move_speed_enabled: bool = false
 var talent_wizard_fire_essence_explosion_scatter_enabled: bool = false
 var talent_wizard_random_double_fireballs_enabled: bool = false
+var talent_wizard_chain_lightning_attack_speed_stack_enabled: bool = false
+var talent_wizard_fireball_explosion_chain_lightning_enabled: bool = false
 var talent_wizard_guaranteed_legendary_shop_jar_enabled: bool = false
 var talent_wizard_natural_fireball_radius_enabled: bool = false
 var talent_wizard_legendary_extra_fireballs_enabled: bool = false
@@ -262,6 +271,9 @@ var applied_wizard_nearby_enemy_attack_speed: float = -1.0
 var applied_wizard_nearby_enemy_move_speed: float = -1.0
 var applied_wizard_nearby_enemy_elite_damage: float = -1.0
 var holy_strike_zombie_inscription_kills: int = 0
+var altar_blessings: Dictionary = {}
+var altar_blessing_kill_gold_counter: int = 0
+var altar_blessing_kill_xp_counter: int = 0
 var holy_strike_stationary_time: float = 0.0
 var holy_strike_undamaged_time: float = 0.0
 var holy_strike_stationary_atk_timer: float = 0.0
@@ -271,6 +283,7 @@ var normal_kill_common_item_counter: int = 0
 var applied_item_defense_bonus: int = 0
 var applied_item_max_hp_bonus: int = 0
 var applied_wizard_rare_item_move_speed: int = 0
+var applied_talent_stat_values: Dictionary = {}
 var next_attack_after_slide_ready: bool = false
 var next_wizard_slide_fireball_ready: bool = false
 var next_attack_damage_bonus: float = 0.0
@@ -285,6 +298,7 @@ var dash_time_remaining: float = 0.0
 var dash_cooldown_remaining: float = 0.0
 var slide_time_remaining: float = 0.0
 var slide_window_remaining: float = 0.0
+var slide_stunned_targets: Array[Node] = []
 var invincible_remaining: float = 0.0
 var fire_cooldown_remaining: float = 0.0
 var shockwave_cooldown_remaining: float = 0.0
@@ -300,6 +314,7 @@ var blessing_shield_heals_on_block: bool = false
 var fire_surge_remaining: float = 0.0
 var fire_surge_fire_remaining: float = 0.0
 var fire_surge_cooldown_pending: bool = false
+var wizard_slide_fireball_radius_buff_remaining: float = 0.0
 var wizard_nearby_poison_aura_timer: float = 5.0
 var wizard_fire_essence_spawn_timer: float = 5.0
 var wizard_fire_essence_charges: int = 0
@@ -533,6 +548,12 @@ func on_fireball_natural_explosion(_fireball: FireballProjectile) -> void:
 		heal(1.0)
 
 
+func on_fireball_exploded(fireball: FireballProjectile) -> void:
+	if not talent_wizard_fireball_explosion_chain_lightning_enabled or fireball == null:
+		return
+	_trigger_holy_strike_chain_lightning(fireball.global_position)
+
+
 func _trigger_wizard_damage_taken_fireball_natural_explosions() -> void:
 	if not talent_wizard_damage_taken_natural_explode_fireballs_enabled or get_tree() == null:
 		return
@@ -696,12 +717,45 @@ func add_next_attack_damage_bonus(bonus: float) -> void:
 	next_attack_damage_bonus += maxf(bonus, 0.0)
 
 
+func add_altar_blessing(blessing_id: StringName) -> void:
+	if blessing_id == &"":
+		return
+
+	altar_blessings[blessing_id] = int(altar_blessings.get(blessing_id, 0)) + 1
+	if stats == null:
+		return
+
+	match blessing_id:
+		&"move_speed":
+			stats.apply_modifier(&"movement_speed_bonus", &"add", 0.2)
+		&"attack_speed":
+			stats.apply_modifier(&"attack_speed_bonus", &"add", 0.2)
+		&"fireball_proc":
+			stats.apply_modifier(&"fireball_chance", &"add", 0.2)
+		&"chain_lightning_proc":
+			stats.apply_modifier(&"chain_lightning_chance", &"add", 0.2)
+
+
+func has_altar_blessing(blessing_id: StringName) -> bool:
+	return int(altar_blessings.get(blessing_id, 0)) > 0
+
+
+func get_altar_blessing_count() -> int:
+	var count := 0
+	for blessing_count in altar_blessings.values():
+		count += int(blessing_count)
+	return count
+
+
 func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Dictionary = {}) -> float:
 	if enemy == null or not enemy.has_method("take_damage"):
 		return 0.0
 
 	var final_damage: float = raw_damage
 	if stats != null:
+		if talent_wizard_fireball_max_hp_bonus_damage_enabled and String(attack_info.get("source", "")) == "fireball":
+			final_damage += max_hp * 0.1
+			attack_info["wizard_fireball_max_hp_bonus_damage"] = max_hp * 0.1
 		if _should_consume_next_slide_attack(attack_info):
 			final_damage *= 1.5
 			next_attack_after_slide_ready = false
@@ -749,6 +803,12 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 
 	if bool(attack_info.get("direct", true)):
 		_apply_attack_status_procs(enemy, attack_info)
+		if talent_wizard_fireball_hit_heal_enabled and String(attack_info.get("source", "")) == "fireball":
+			heal(1.0)
+		if talent_wizard_nearby_damage_lifesteal_enabled and _is_enemy_nearby(enemy):
+			heal(damage_dealt * 0.12)
+		if talent_wizard_elite_damage_lifesteal_enabled and _is_elite_enemy(enemy):
+			heal(damage_dealt * 0.25)
 		if stats != null and stats.lifesteal > 0.0:
 			var heal_amount: float = damage_dealt * stats.lifesteal
 			heal(heal_amount)
@@ -756,6 +816,7 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 	if bool(attack_info.get("allow_procs", true)):
 		_apply_holy_strike_on_hit_talents(enemy, attack_info)
 		_try_trigger_talent_fireball(enemy, attack_info)
+		_try_trigger_talent_chain_lightning(enemy, attack_info)
 		attack_hit.emit(enemy, damage_dealt, attack_info)
 
 	return damage_dealt
@@ -911,6 +972,16 @@ func notify_enemy_killed(enemy: Node) -> void:
 		while holy_strike_zombie_inscription_kills >= 10:
 			holy_strike_zombie_inscription_kills -= 10
 			stats.apply_modifier(&"surrounded_enemy_count_bonus", &"add", 1.0)
+	if has_altar_blessing(&"kill_gold"):
+		altar_blessing_kill_gold_counter += 1
+		while altar_blessing_kill_gold_counter >= 10:
+			altar_blessing_kill_gold_counter -= 10
+			add_gold(1, "Greed Blessing")
+	if has_altar_blessing(&"kill_xp"):
+		altar_blessing_kill_xp_counter += 1
+		while altar_blessing_kill_xp_counter >= 10:
+			altar_blessing_kill_xp_counter -= 10
+			gain_experience(1)
 	enemy_killed.emit(enemy)
 
 
@@ -1008,12 +1079,20 @@ func _remove_talent_stat_effect(node_id: StringName) -> void:
 	if not definition.has("stat"):
 		return
 	var operation := StringName(definition.get("operation", &"add"))
+	var stat_name := StringName(definition.get("stat", &"atk"))
+	var value := float(definition.get("value", 1.0))
+	if operation == &"multiply_add":
+		var applied_value := float(applied_talent_stat_values.get(node_id, 0.0))
+		if applied_value != 0.0:
+			stats.apply_modifier(stat_name, &"add", -applied_value)
+			applied_talent_stat_values.erase(node_id)
+		return
 	if operation != &"add":
 		return
 	stats.apply_modifier(
-		StringName(definition.get("stat", &"atk")),
+		stat_name,
 		&"add",
-		-float(definition.get("value", 1.0))
+		-value
 	)
 
 
@@ -1021,8 +1100,9 @@ func _reset_wizard_talent_state_after_rebirth() -> void:
 	talent_wizard_slide_fireball_blast_enabled = false
 	talent_wizard_fireball_damage_bonus_enabled = false
 	talent_wizard_kill_atk_stack_enabled = false
-	talent_wizard_slide_nearby_poison_enabled = false
+	talent_wizard_slide_fireball_radius_buff_enabled = false
 	talent_wizard_fireball_radius_bonus_enabled = false
+	talent_wizard_nearby_damage_lifesteal_enabled = false
 	talent_wizard_poison_stack_damage_enabled = false
 	talent_wizard_nearby_enemy_attack_speed_enabled = false
 	talent_wizard_nearby_damage_focus_enabled = false
@@ -1036,6 +1116,8 @@ func _reset_wizard_talent_state_after_rebirth() -> void:
 	talent_wizard_nearby_enemy_elite_damage_enabled = false
 	talent_wizard_more_weaker_enemies_enabled = false
 	talent_wizard_rebirth_level_to_atk_enabled = false
+	talent_wizard_fireball_max_hp_bonus_damage_enabled = false
+	talent_wizard_fireball_radius_per_atk_enabled = false
 	talent_wizard_primary_fireball_laser_explosion_enabled = false
 	talent_wizard_fire_surge_laser_enabled = false
 	talent_wizard_fire_laser_chain_enabled = false
@@ -1059,7 +1141,9 @@ func _reset_wizard_talent_state_after_rebirth() -> void:
 	talent_wizard_primary_extra_fireball_enabled = false
 	talent_wizard_extra_auto_fire_laser_enabled = false
 	talent_wizard_fire_laser_range_bonus_enabled = false
+	talent_wizard_elite_damage_lifesteal_enabled = false
 	talent_wizard_fireball_speed_bonus_enabled = false
+	talent_wizard_fireball_hit_heal_enabled = false
 	talent_wizard_fire_surge_radial_fireballs_enabled = false
 	talent_wizard_max_hp_primary_echo_enabled = false
 	talent_wizard_move_speed_extra_fireballs_enabled = false
@@ -1067,6 +1151,8 @@ func _reset_wizard_talent_state_after_rebirth() -> void:
 	talent_wizard_rare_item_move_speed_enabled = false
 	talent_wizard_fire_essence_explosion_scatter_enabled = false
 	talent_wizard_random_double_fireballs_enabled = false
+	talent_wizard_chain_lightning_attack_speed_stack_enabled = false
+	talent_wizard_fireball_explosion_chain_lightning_enabled = false
 	talent_wizard_guaranteed_legendary_shop_jar_enabled = false
 	talent_wizard_natural_fireball_radius_enabled = false
 	talent_wizard_legendary_extra_fireballs_enabled = false
@@ -1076,6 +1162,7 @@ func _reset_wizard_talent_state_after_rebirth() -> void:
 		stats.apply_modifier(&"bonus_move_speed_flat", &"add", -float(applied_wizard_rare_item_move_speed))
 		applied_wizard_rare_item_move_speed = 0
 	next_wizard_slide_fireball_ready = false
+	wizard_slide_fireball_radius_buff_remaining = 0.0
 	wizard_nearby_poison_aura_timer = 5.0
 	wizard_fire_essence_spawn_timer = 5.0
 	wizard_fire_essence_charges = 0
@@ -1121,6 +1208,7 @@ func _update_timers(delta: float) -> void:
 	hurt_feedback_cooldown_remaining = maxf(0.0, hurt_feedback_cooldown_remaining - delta)
 	slide_window_remaining = maxf(0.0, slide_window_remaining - delta)
 	invincible_remaining = maxf(0.0, invincible_remaining - delta)
+	wizard_slide_fireball_radius_buff_remaining = maxf(0.0, wizard_slide_fireball_radius_buff_remaining - delta)
 	slow_remaining = maxf(0.0, slow_remaining - delta)
 	if slow_remaining <= 0.0:
 		slow_multiplier = 1.0
@@ -1200,6 +1288,7 @@ func _try_start_slide() -> void:
 	state = State.SLIDING
 	slide_time_remaining = slide_duration
 	slide_window_remaining = 0.0
+	slide_stunned_targets.clear()
 	invincible_remaining = maxf(invincible_remaining, invincible_time)
 	is_invincible = true
 	velocity = dash_direction * slide_speed
@@ -1217,8 +1306,8 @@ func _update_slide(delta: float) -> void:
 	velocity = dash_direction * current_slide_speed
 	move_and_slide()
 	_clamp_to_movement_bounds()
+	_apply_slide_contact_stun()
 
-	# Optional future upgrade: add a DashHitbox Area2D to damage or knock back enemies along the slide path.
 	if slide_time_remaining <= 0.0:
 		_finish_slide(true)
 
@@ -1248,6 +1337,7 @@ func _finish_slide(play_recovery: bool) -> void:
 
 	state = State.NORMAL
 	slide_time_remaining = 0.0
+	slide_stunned_targets.clear()
 	collision_mask = saved_collision_mask
 	_apply_slide_finished_talents()
 	dash_ended.emit(dash_direction)
@@ -1495,7 +1585,7 @@ func _launch_wizard_radial_fire_lasers() -> void:
 		_spawn_wizard_fire_laser(global_position, Vector2(cos(angle), sin(angle)))
 
 
-func _launch_wizard_fireball(target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false) -> void:
+func _launch_wizard_fireball(target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false) -> void:
 	if get_tree() == null or get_tree().current_scene == null:
 		return
 
@@ -1507,23 +1597,32 @@ func _launch_wizard_fireball(target_position: Vector2, consume_slide_fireball_bo
 	if emit_attack_started_event:
 		attack_started.emit(global_position, direction, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
 
-	_spawn_wizard_fireball(global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode)
+	_spawn_wizard_fireball(global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus)
 
 
-func _spawn_wizard_fireball(start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false) -> void:
+func _spawn_wizard_fireball(start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false) -> void:
 	if get_tree() == null or get_tree().current_scene == null:
 		return
 	var fireball := FIREBALL_SCRIPT.new() as FireballProjectile
 	var explosion_radius := 80.0 * maxf(radius_multiplier, 0.0)
 	fireball.lifetime *= maxf(lifetime_multiplier, 0.0)
-	var has_slide_fireball_bonus := consume_slide_fireball_bonus and next_wizard_slide_fireball_ready
+	var has_slide_fireball_bonus := force_slide_fireball_bonus or (consume_slide_fireball_bonus and next_wizard_slide_fireball_ready)
 	var has_surge_left_click_bonus := consume_slide_fireball_bonus and talent_wizard_fire_surge_left_click_blast_enabled and fire_surge_remaining > 0.0
+	var additive_radius_bonus := 0.0
+	if has_slide_fireball_bonus:
+		additive_radius_bonus += 0.3
+	if has_surge_left_click_bonus:
+		additive_radius_bonus += 0.5
 	if has_slide_fireball_bonus or has_surge_left_click_bonus:
-		explosion_radius *= 4.0
 		fireball.lifetime *= 0.1
+	if wizard_slide_fireball_radius_buff_remaining > 0.0:
+		additive_radius_bonus += 0.3
+	explosion_radius *= 1.0 + additive_radius_bonus
 	if talent_wizard_fireball_radius_bonus_enabled:
 		explosion_radius *= 1.3
-	if has_slide_fireball_bonus:
+	if talent_wizard_fireball_radius_per_atk_enabled:
+		explosion_radius *= _get_wizard_fireball_radius_per_atk_multiplier()
+	if has_slide_fireball_bonus and not force_slide_fireball_bonus:
 		next_wizard_slide_fireball_ready = false
 	fireball.setup(self, start_position, direction, _get_wizard_fireball_damage(), explosion_radius, allow_procs)
 	if talent_wizard_fireball_speed_bonus_enabled:
@@ -1547,6 +1646,11 @@ func _get_wizard_fireball_damage() -> float:
 	return damage
 
 
+func _get_wizard_fireball_radius_per_atk_multiplier() -> float:
+	var atk_value := stats.atk if stats != null else 0
+	return 1.0 + float(maxi(atk_value, 0) / 10) * 0.2
+
+
 func _launch_wizard_dash_fireball() -> void:
 	var direction := dash_direction
 	if direction.length_squared() <= 0.001:
@@ -1556,22 +1660,25 @@ func _launch_wizard_dash_fireball() -> void:
 
 func _launch_wizard_primary_attack_pattern(target_position: Vector2, use_fire_essence_version: bool, emit_attack_started_event: bool = true) -> void:
 	var scatter_on_explode := use_fire_essence_version and talent_wizard_fire_essence_explosion_scatter_enabled
-	_launch_wizard_fireball(target_position, true, 1.0, 1.0, true, emit_attack_started_event, scatter_on_explode)
+	var apply_slide_fireball_bonus := next_wizard_slide_fireball_ready
+	if apply_slide_fireball_bonus:
+		next_wizard_slide_fireball_ready = false
+	_launch_wizard_fireball(target_position, true, 1.0, 1.0, true, emit_attack_started_event, scatter_on_explode, apply_slide_fireball_bonus)
 	var offset_index := 0
 	if use_fire_essence_version:
-		_launch_wizard_offset_fireballs(target_position, 3, offset_index)
+		_launch_wizard_offset_fireballs(target_position, 3, offset_index, apply_slide_fireball_bonus)
 		offset_index += 3
 	if talent_wizard_primary_extra_fireball_enabled:
-		_launch_wizard_offset_fireballs(target_position, 1, offset_index)
+		_launch_wizard_offset_fireballs(target_position, 1, offset_index, apply_slide_fireball_bonus)
 		offset_index += 1
-	_launch_wizard_offset_fireballs(target_position, _get_wizard_move_speed_extra_fireball_count(), offset_index)
+	_launch_wizard_offset_fireballs(target_position, _get_wizard_move_speed_extra_fireball_count(), offset_index, apply_slide_fireball_bonus)
 
 
 func _launch_wizard_fire_essence_burst(target_position: Vector2) -> void:
 	_launch_wizard_primary_attack_pattern(target_position, true)
 
 
-func _launch_wizard_offset_fireballs(target_position: Vector2, count: int, start_index: int = 0) -> void:
+func _launch_wizard_offset_fireballs(target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false) -> void:
 	if count <= 0:
 		return
 	var direction := target_position - global_position
@@ -1586,7 +1693,7 @@ func _launch_wizard_offset_fireballs(target_position: Vector2, count: int, start
 		var step := floori(float(offset_index) / 2.0) + 1
 		var sign_value := 1.0 if offset_index % 2 == 0 else -1.0
 		var angle := center_angle + deg_to_rad(10.0 * float(step) * sign_value)
-		_launch_wizard_fireball(global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, 1.0, 1.0, true)
+		_launch_wizard_fireball(global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, 1.0, 1.0, true, false, false, force_slide_fireball_bonus)
 
 
 func _launch_wizard_fire_essence_explosion_scatter(origin: Vector2) -> void:
@@ -1685,8 +1792,10 @@ func _launch_wizard_primary_echo(target_position: Vector2, use_fire_essence_vers
 
 
 func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
-	var active_radius := _get_shockwave_radius()
+	_perform_scaled_shockwave_attack(shockwave_center, shockwave_damage, _get_shockwave_radius(), shockwave_knockback)
 
+
+func _perform_scaled_shockwave_attack(shockwave_center: Vector2, attack_damage: float, active_radius: float, knockback_force: float) -> void:
 	for body in get_tree().get_nodes_in_group("enemy"):
 		if not body.is_in_group("enemy"):
 			continue
@@ -1695,13 +1804,16 @@ func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
 			continue
 
 		if body.has_method("take_damage"):
-			deal_player_damage_to_enemy(body, shockwave_damage, {"source": "shockwave", "direct": true, "allow_procs": true})
+			deal_player_damage_to_enemy(body, attack_damage, {"source": "shockwave", "direct": true, "allow_procs": true})
 
 		if body.has_method("apply_knockback"):
 			var knockback_direction: Vector2 = (body_2d.global_position - shockwave_center).normalized()
 			if knockback_direction.length_squared() <= 0.001:
 				knockback_direction = facing_direction
-			body.call("apply_knockback", knockback_direction * shockwave_knockback)
+			body.call("apply_knockback", knockback_direction * knockback_force)
+
+		if body.has_method("apply_stun_duration"):
+			body.call("apply_stun_duration", shockwave_stun_duration, self)
 
 	for container in get_tree().get_nodes_in_group("container"):
 		var container_2d := container as Node2D
@@ -1710,7 +1822,16 @@ func _perform_shockwave_attack(shockwave_center: Vector2) -> void:
 		if container is BreakableContainer and container.is_shop_container:
 			continue
 		if container.has_method("take_damage"):
-			container.take_damage(shockwave_damage, {"source": "player_attack", "owner": self})
+			container.take_damage(attack_damage, {"source": "player_attack", "owner": self})
+
+
+func trigger_periodic_holy_retribution(target_position: Vector2, damage_multiplier: float, area_multiplier: float) -> void:
+	var radius_multiplier := sqrt(maxf(area_multiplier, 0.0))
+	var active_radius := _get_shockwave_radius() * radius_multiplier
+	var attack_damage := shockwave_damage * maxf(damage_multiplier, 0.0)
+	_play_holy_spell_effect_scaled(target_position, active_radius)
+	_start_camera_shake(4.0, 0.1)
+	_perform_scaled_shockwave_attack(target_position, attack_damage, active_radius, shockwave_knockback)
 
 
 func _get_shockwave_center() -> Vector2:
@@ -2129,6 +2250,8 @@ func _perform_melee_attack_at(target_position: Vector2) -> void:
 		var container_2d := container as Node2D
 		if container_2d == null or not _is_target_in_melee_hitbox(container_2d.global_position, direction):
 			continue
+		if container is BreakableContainer and container.is_shop_container:
+			continue
 		if container.has_method("take_damage"):
 			container.take_damage(projectile_damage, {"source": "player_attack", "owner": self})
 
@@ -2258,6 +2381,9 @@ func emit_round_started(round_index: int = 0) -> void:
 func emit_round_ended() -> void:
 	if talent_low_hp_round_end_heal_enabled and max_hp > 0.0 and hp / max_hp < 0.5:
 		heal(max_hp * 0.3)
+	if has_altar_blessing(&"round_common_item"):
+		for _index in range(int(altar_blessings.get(&"round_common_item", 0))):
+			_grant_random_common_item()
 	round_ended.emit()
 	if temporary_buffs != null:
 		temporary_buffs.clear_round_buffs()
@@ -2294,6 +2420,11 @@ func _play_holy_spell_effect(spawn_position: Vector2) -> void:
 		effect_position += shockwave_effect_damage_preview.position.rotated(_get_shockwave_direction_angle())
 		effect_scale = shockwave_effect_damage_preview.scale
 	_play_spritesheet_effect(HOLY_SPELL_TEXTURE, &"holy_spell", effect_position, SHOCKWAVE_EFFECT_FPS, effect_scale, HOLY_SPELL_FRAME_SIZE)
+
+
+func _play_holy_spell_effect_scaled(spawn_position: Vector2, active_radius: float) -> void:
+	var effect_scale := Vector2.ONE * (active_radius * 2.0 / float(HOLY_SPELL_FRAME_SIZE.x))
+	_play_spritesheet_effect(HOLY_SPELL_TEXTURE, &"holy_spell", spawn_position, SHOCKWAVE_EFFECT_FPS, effect_scale, HOLY_SPELL_FRAME_SIZE)
 
 
 func _queue_holy_slash_effect(direction: Vector2) -> void:
@@ -2495,10 +2626,12 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_wizard_fireball_damage_bonus_enabled = true
 		&"wizard_kill_atk_stack":
 			talent_wizard_kill_atk_stack_enabled = true
-		&"wizard_slide_nearby_poison":
-			talent_wizard_slide_nearby_poison_enabled = true
+		&"wizard_slide_fireball_radius_buff":
+			talent_wizard_slide_fireball_radius_buff_enabled = true
 		&"wizard_fireball_radius_bonus":
 			talent_wizard_fireball_radius_bonus_enabled = true
+		&"wizard_nearby_damage_lifesteal":
+			talent_wizard_nearby_damage_lifesteal_enabled = true
 		&"wizard_nearby_enemy_attack_speed":
 			talent_wizard_nearby_enemy_attack_speed_enabled = true
 			_update_wizard_nearby_enemy_attack_speed()
@@ -2527,6 +2660,10 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_wizard_more_weaker_enemies_enabled = true
 		&"wizard_rebirth_level_to_atk":
 			talent_wizard_rebirth_level_to_atk_enabled = true
+		&"wizard_fireball_max_hp_bonus_damage":
+			talent_wizard_fireball_max_hp_bonus_damage_enabled = true
+		&"wizard_fireball_radius_per_atk":
+			talent_wizard_fireball_radius_per_atk_enabled = true
 		&"wizard_primary_fireball_laser_explosion":
 			talent_wizard_primary_fireball_laser_explosion_enabled = true
 		&"wizard_fire_surge_laser":
@@ -2575,8 +2712,12 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_wizard_extra_auto_fire_laser_enabled = true
 		&"wizard_fire_laser_range_bonus":
 			talent_wizard_fire_laser_range_bonus_enabled = true
+		&"wizard_elite_damage_lifesteal":
+			talent_wizard_elite_damage_lifesteal_enabled = true
 		&"wizard_fireball_speed_bonus":
 			talent_wizard_fireball_speed_bonus_enabled = true
+		&"wizard_fireball_hit_heal":
+			talent_wizard_fireball_hit_heal_enabled = true
 		&"wizard_fire_surge_radial_fireballs":
 			talent_wizard_fire_surge_radial_fireballs_enabled = true
 		&"wizard_max_hp_primary_echo":
@@ -2592,6 +2733,10 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_wizard_fire_essence_explosion_scatter_enabled = true
 		&"wizard_random_double_fireballs":
 			talent_wizard_random_double_fireballs_enabled = true
+		&"wizard_chain_lightning_attack_speed_stack":
+			talent_wizard_chain_lightning_attack_speed_stack_enabled = true
+		&"wizard_fireball_explosion_chain_lightning":
+			talent_wizard_fireball_explosion_chain_lightning_enabled = true
 		&"wizard_guaranteed_legendary_shop_jar":
 			talent_wizard_guaranteed_legendary_shop_jar_enabled = true
 		&"wizard_natural_fireball_radius":
@@ -2604,11 +2749,12 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_wizard_damage_taken_natural_explode_fireballs_enabled = true
 		_:
 			if stats != null:
-				stats.apply_modifier(
-					StringName(definition.get("stat", &"atk")),
-					StringName(definition.get("operation", &"add")),
-					float(definition.get("value", 1.0))
-				)
+				var stat_name := StringName(definition.get("stat", &"atk"))
+				var operation := StringName(definition.get("operation", &"add"))
+				var value := float(definition.get("value", 1.0))
+				if operation == &"multiply_add":
+					applied_talent_stat_values[node_id] = float(round(float(stats.get(stat_name)) * value))
+				stats.apply_modifier(stat_name, operation, value)
 
 
 func _apply_slide_finished_talents() -> void:
@@ -2622,8 +2768,8 @@ func _apply_slide_finished_talents() -> void:
 		if direction.length_squared() <= 0.001:
 			direction = facing_direction
 		_spawn_wizard_fire_laser(global_position, direction.normalized())
-	if talent_wizard_slide_nearby_poison_enabled:
-		_apply_wizard_slide_nearby_poison()
+	if talent_wizard_slide_fireball_radius_buff_enabled:
+		_apply_wizard_slide_fireball_radius_buff()
 	if talent_slide_damage_reduction_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"talent_slide_damage_reduction", &"damage_reduction_bonus", 0.2, 2.0, 1)
 	if talent_slide_defense_bonus_enabled and temporary_buffs != null and stats != null:
@@ -2634,10 +2780,19 @@ func _apply_slide_finished_talents() -> void:
 		next_wizard_slide_fireball_ready = true
 
 
-func _apply_wizard_slide_nearby_poison() -> void:
-	for enemy in EFFECT_TARGETING.enemies_surrounding(self, global_position):
-		if enemy.has_method("apply_poison_stacks"):
-			enemy.apply_poison_stacks(1, self)
+func _apply_wizard_slide_fireball_radius_buff() -> void:
+	wizard_slide_fireball_radius_buff_remaining = 3.0
+
+
+func _apply_slide_contact_stun() -> void:
+	if stats == null or stats.slide_contact_stun_duration <= 0.0:
+		return
+
+	for enemy in EFFECT_TARGETING.enemies_near(self, global_position, slide_contact_stun_radius, slide_stunned_targets):
+		if not enemy.has_method("apply_stun_duration"):
+			continue
+		slide_stunned_targets.append(enemy)
+		enemy.apply_stun_duration(stats.slide_contact_stun_duration, self)
 
 
 func _update_max_hp_from_atk_talent() -> void:
@@ -3014,6 +3169,19 @@ func _try_trigger_talent_fireball(enemy: Node, attack_info: Dictionary = {}) -> 
 	_launch_talent_fireball(global_position, enemy_2d.global_position)
 
 
+func _try_trigger_talent_chain_lightning(enemy: Node, attack_info: Dictionary = {}) -> void:
+	if stats == null or stats.chain_lightning_chance <= 0.0:
+		return
+	if not _roll_holy_strike_proc(stats.chain_lightning_chance, attack_info):
+		return
+
+	var enemy_2d := enemy as Node2D
+	if enemy_2d == null:
+		return
+
+	_trigger_holy_strike_chain_lightning(enemy_2d.global_position, [enemy])
+
+
 func _apply_holy_strike_on_hit_talents(enemy: Node, attack_info: Dictionary) -> void:
 	if not _is_holy_strike_attack(attack_info):
 		return
@@ -3070,13 +3238,13 @@ func _launch_holy_strike_fireball_burst(origin: Vector2) -> void:
 		_launch_talent_fireball(origin, origin + Vector2(cos(angle), sin(angle)))
 
 
-func _trigger_holy_strike_chain_lightning(origin: Vector2) -> void:
+func _trigger_holy_strike_chain_lightning(origin: Vector2, already_hit: Array = []) -> void:
 	if get_tree().current_scene == null:
 		return
 
 	var damage := get_base_attack_damage() * 0.8
 	var current_position := origin
-	var hit: Array = []
+	var hit: Array = already_hit.duplicate()
 	var did_hit := false
 	for _index in range(5):
 		var target := EFFECT_TARGETING.nearest_enemy(self, current_position, 420.0, hit)
@@ -3088,10 +3256,26 @@ func _trigger_holy_strike_chain_lightning(origin: Vector2) -> void:
 		current_position = target.global_position
 		_spawn_holy_strike_chain_lightning_vfx(previous_position, current_position)
 		deal_player_damage_to_enemy(target, damage, {"source": "holy_strike_chain_lightning", "direct": true, "allow_procs": false})
+		_apply_chain_lightning_stun(target)
+		_apply_wizard_chain_lightning_attack_speed_stack()
 		did_hit = true
 
 	if did_hit:
 		SFX_PLAYER.play_2d(get_tree().current_scene, LIGHTNING_CHAIN_SFX, origin, -4.0, 0.96, 1.04)
+
+
+func _apply_wizard_chain_lightning_attack_speed_stack() -> void:
+	if not talent_wizard_chain_lightning_attack_speed_stack_enabled or temporary_buffs == null:
+		return
+	temporary_buffs.add_timed_stat_buff(&"wizard_chain_lightning_attack_speed_stack", &"attack_speed_bonus", 0.02, 3.0, 25)
+
+
+func _apply_chain_lightning_stun(target: Node) -> void:
+	if target == null or not target.has_method("apply_stun_duration"):
+		return
+	if stats == null or stats.chain_lightning_stun_duration <= 0.0:
+		return
+	target.apply_stun_duration(stats.chain_lightning_stun_duration, self)
 
 
 func _spawn_holy_strike_chain_lightning_vfx(start_position: Vector2, end_position: Vector2) -> void:

@@ -106,12 +106,18 @@ func _update_shout_attack(delta: float) -> void:
 
 
 func _fire_spread_projectiles() -> void:
+	if is_stunned():
+		return
+
 	var direction := locked_attack_direction.normalized()
 	var projectile := _spawn_acid_projectile(_get_projectile_spawn_position(), direction, acid_throw_scale, acid_throw_speed)
 	projectile.setup(direction, projectile_damage, acid_throw_speed, projectile_lifetime)
 
 
 func _do_ground_slam() -> void:
+	if is_stunned():
+		return
+
 	_spawn_slam_vfx()
 	_damage_players_in_radius(slam_radius, slam_damage)
 	_spawn_poison_puddle(global_position)
@@ -142,6 +148,9 @@ func _spawn_poison_puddle(spawn_position: Vector2) -> void:
 
 
 func _mutate_nearby_minion() -> void:
+	if is_stunned():
+		return
+
 	var minion := _find_mutation_target()
 	if minion == null:
 		return
@@ -177,6 +186,9 @@ func _find_mutation_target() -> ZombieMelee:
 
 
 func _damage_players_in_radius(radius: float, attack_damage: float) -> void:
+	if is_stunned():
+		return
+
 	for player in get_tree().get_nodes_in_group("player"):
 		var player_2d := player as Node2D
 		if player_2d == null or player_2d.global_position.distance_to(global_position) > radius:

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Texture2D" path="res://assets/items/dark_realistic_pixel_icons/storm_shackle.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_rule = &"first_copy_then_increment"
+stacking_notes = "First copy makes Chain Lightning stun for 0.6s; each extra copy adds 0.3s."
+effect_type = &"first_copy_stat_bonus"
+stat_name = &"chain_lightning_stun_duration"
+value = 0.6
+damage_scale = 0.3
+
+[resource]
+script = ExtResource("1_def")
+id = &"storm_shackle"
+display_name = "Storm Shackle"
+description = "Your Chain Lightning stuns enemies for 0.6s. Additional copies add 0.3s."
+category = &"attack"
+rarity = &"legendary"
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])

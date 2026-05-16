@@ -4,6 +4,11 @@ const SCREEN_SIZE := Vector2(1920, 1080)
 const PLAY_AREA_SIZE := Vector2(1280, 1280)
 const PLAY_AREA_CENTER := Vector2(960, 540)
 const PLAY_AREA_RECT := Rect2(PLAY_AREA_CENTER - PLAY_AREA_SIZE * 0.5, PLAY_AREA_SIZE)
+const ROUND_10_MAP_SIZE_MULTIPLIER := 1.15
+const ROUND_10_MAP_EXPAND_SHAKE_MAGNITUDE := 12.0
+const ROUND_10_MAP_EXPAND_SHAKE_DURATION := 0.22
+const ROUND_10_MAP_EXPAND_DELAY := 0.18
+const ROUND_10_MAP_EXPAND_ZOOM_FACTOR := 1.08
 const CAMERA_VISIBLE_SIZE := Vector2(1152, 648)
 const CAMERA_ZOOM := Vector2(SCREEN_SIZE.x / CAMERA_VISIBLE_SIZE.x, SCREEN_SIZE.y / CAMERA_VISIBLE_SIZE.y)
 const PLAYER_POSITION := PLAY_AREA_CENTER + Vector2(-500, 0)
@@ -41,6 +46,10 @@ const ITEM_DETAIL_CARD_POSITION := Vector2(1304.0, 24.0)
 const ITEM_DETAIL_CARD_ICON_SIZE := 104.0
 const ITEM_DETAIL_TEXT_BOX_MARGIN := Vector2(28.0, 18.0)
 const CONTAINER_HITBOX_PREVIEW_ROOT := NodePath("ContainerHitboxPreviews")
+const ALTAR_CLICK_RADIUS := 64.0
+const ALTAR_POSITION := PLAY_AREA_CENTER + Vector2(0.0, -210.0)
+const MAP_POISON_PUDDLE_INTERVAL := 4.0
+const MAP_POISON_PUDDLE_INITIAL_COUNT := 5
 
 const MELEE_ZOMBIE_GOLD := 3
 const ACID_ZOMBIE_GOLD := 4
@@ -61,7 +70,7 @@ const CAMERA_SHAKE_SCRIPT := preload("res://systems/combat/CameraShake.gd")
 const CONTAINER_CATALOG := preload("res://systems/battle/ContainerCatalog.gd")
 const REWARD_PICKUP_SCRIPT := preload("res://systems/items/RewardPickup.gd")
 const SHOP_ITEM_REWARD_VISUAL_SCRIPT := preload("res://systems/items/ShopItemRewardVisual.gd")
-const ITEM_ICON_DARK_PIXEL_MATERIAL: ShaderMaterial = preload("res://systems/items/ui/ItemIconDarkPixelMaterial.tres")
+const POISON_PUDDLE_SCRIPT := preload("res://systems/combat/PoisonPuddle.gd")
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const SHOP_RULES := preload("res://systems/battle/ShopRules.gd")
 const TALENT_TREE_UI_CONTROLLER := preload("res://systems/battle/TalentTreeUiController.gd")
@@ -110,6 +119,35 @@ enum ShopTier {
 	LEGENDARY,
 }
 
+const ELITE_AFFIXES: Array[Dictionary] = [
+	{"id": &"swift", "name": "Swift", "description": "+35% movement speed.", "move_speed_multiplier": 1.35},
+	{"id": &"poison_trail", "name": "Venom Trail", "description": "Leaves poison puddles while moving.", "interval": 1.0, "radius": 80.0, "duration": 5.0},
+	{"id": &"speed_aura", "name": "Haste Aura", "description": "Nearby normal enemies move faster.", "radius": 260.0, "multiplier": 1.3, "duration": 0.8, "interval": 0.5},
+	{"id": &"slow_regen", "name": "Regrowth", "description": "Regenerates health over time.", "regen_per_second": 2.0},
+	{"id": &"distant_hide", "name": "Distant Hide", "description": "Takes less damage when far away.", "start_distance": 260.0, "full_distance": 720.0, "max_reduction": 0.6},
+	{"id": &"acid_volley", "name": "Acid Spitter", "description": "Randomly fires acid projectiles.", "cooldown": 2.6, "speed": 330.0, "lifetime": 2.1, "damage_multiplier": 0.8},
+]
+
+const MAP_AFFIXES: Array[Dictionary] = [
+	{"id": &"poison_puddles", "name": "Toxic Ground", "description": "Poison puddles appear around the arena."},
+	{"id": &"elite_damage", "name": "Elite Fury", "description": "Elite enemies deal +30% damage.", "elite_damage_multiplier": 1.3},
+	{"id": &"normal_damage", "name": "Minion Fury", "description": "Normal enemies deal +20% damage.", "normal_damage_multiplier": 1.2},
+	{"id": &"enemy_health", "name": "Thick Horde", "description": "Enemies have +20% health.", "health_multiplier": 1.2},
+	{"id": &"enemy_speed", "name": "Ravenous Pace", "description": "Enemies move +30% faster.", "move_speed_multiplier": 1.3},
+	{"id": &"enemy_count", "name": "Swarming Horde", "description": "Enemies spawn +30% more often.", "spawn_multiplier": 1.3},
+	{"id": &"enemy_dodge", "name": "Shifting Horde", "description": "Enemies gain 10% dodge.", "dodge_chance": 0.1},
+]
+
+const ALTAR_BLESSINGS: Array[Dictionary] = [
+	{"id": &"move_speed", "name": "Wind Blessing", "description": "Move speed +20%."},
+	{"id": &"attack_speed", "name": "Tempo Blessing", "description": "Attack speed +20%."},
+	{"id": &"fireball_proc", "name": "Ember Blessing", "description": "Attacks have +20% fireball chance."},
+	{"id": &"chain_lightning_proc", "name": "Storm Blessing", "description": "Attacks have +20% chain lightning chance."},
+	{"id": &"round_common_item", "name": "Spoils Blessing", "description": "Gain a random common item each round end."},
+	{"id": &"kill_gold", "name": "Greed Blessing", "description": "Every 10 kills grants +1 gold."},
+	{"id": &"kill_xp", "name": "Scholar Blessing", "description": "Every 10 kills grants +1 XP."},
+]
+
 var containers: Array[BreakableContainer] = []
 var shop_containers: Array[BreakableContainer] = []
 var enemies: Array[EnemyBase] = []
@@ -130,6 +168,18 @@ var auto_break_triggered: bool = false
 var round_enrage_active: bool = false
 var round_enrage_elapsed: float = 0.0
 var shop_transition_pending: bool = false
+var round_10_map_expansion_effect_played: bool = false
+var altar_node: Node2D
+var altar_offer: Dictionary = {}
+var altar_accepted: bool = false
+var last_altar_map_affix_id: StringName = &""
+var last_altar_blessing_id: StringName = &""
+var pending_map_affix: Dictionary = {}
+var pending_altar_blessing: Dictionary = {}
+var pending_altar_reward_round: int = 0
+var active_map_affix: Dictionary = {}
+var active_map_affix_round: int = 0
+var map_poison_puddle_timer: float = 0.0
 
 var player: Player
 var camera: Camera2D
@@ -139,6 +189,7 @@ var status_label: Label
 var character_card: Control
 var character_card_stats_label: Label
 var character_card_items_grid: GridContainer
+var character_card_blessings_label: Label
 var character_card_items_signature: String = ""
 var item_detail_card: Control
 var item_detail_card_background: TextureRect
@@ -177,6 +228,7 @@ func _process(delta: float) -> void:
 
 	_update_round_timer(delta)
 	_update_random_container_break_timer(delta)
+	_update_active_map_affix(delta)
 	_cleanup_enemy_list()
 	_update_round_enrage(delta)
 	_update_hud()
@@ -185,6 +237,13 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _try_accept_altar_at_position(get_global_mouse_position()):
+			get_viewport().set_input_as_handled()
+			return
+		if _try_purchase_clicked_shop_container(get_global_mouse_position()):
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE or event.is_action_pressed("ui_cancel"):
 			_set_paused(not get_tree().paused)
@@ -404,9 +463,27 @@ func _create_camera() -> void:
 
 
 func _get_map_size_multiplier() -> float:
+	var multiplier := _get_round_map_size_multiplier()
 	if is_instance_valid(player) and player.has_method("get_map_size_multiplier"):
-		return float(player.get_map_size_multiplier())
-	return 1.0
+		multiplier *= float(player.get_map_size_multiplier())
+	return multiplier
+
+
+func _get_round_map_size_multiplier() -> float:
+	return ROUND_10_MAP_SIZE_MULTIPLIER if current_round >= 10 else 1.0
+
+
+func _should_play_round_10_map_expansion_effect() -> bool:
+	return current_round == 10 and not round_10_map_expansion_effect_played
+
+
+func _play_round_10_map_expansion_effect() -> void:
+	round_10_map_expansion_effect_played = true
+	if is_instance_valid(camera) and camera.has_method("start_shake"):
+		camera.call("start_shake", ROUND_10_MAP_EXPAND_SHAKE_MAGNITUDE, ROUND_10_MAP_EXPAND_SHAKE_DURATION)
+	await get_tree().create_timer(ROUND_10_MAP_EXPAND_DELAY).timeout
+	if is_instance_valid(camera) and camera.has_method("start_zoom_in"):
+		camera.call("start_zoom_in", ROUND_10_MAP_EXPAND_ZOOM_FACTOR, 0.12)
 
 
 func _get_play_area_size() -> Vector2:
@@ -497,14 +574,19 @@ func _start_combat_round() -> void:
 	round_enrage_active = false
 	round_enrage_elapsed = 0.0
 	shop_transition_pending = false
+	_clear_altar_offer()
+	_activate_pending_map_affix()
 	hud_message = "Round %d started." % current_round
 	status_panel.visible = false
 	_clear_shop_containers()
+	if _should_play_round_10_map_expansion_effect():
+		await _play_round_10_map_expansion_effect()
 	_refresh_play_area_from_player()
 	_spawn_containers()
 	if is_instance_valid(player):
 		player.emit_round_started(current_round)
 		_maybe_spawn_round_healing_orb()
+	_apply_starting_map_affix_effects()
 	_update_hud()
 
 
@@ -837,29 +919,63 @@ func _on_container_area_entered(area: Area2D, container: BreakableContainer) -> 
 	if projectile.target_group != &"enemy":
 		return
 
-	projectile.queue_free()
 	if container.is_shop_container:
-		_try_damage_shop_container(container, projectile.damage)
 		return
 
+	projectile.queue_free()
 	var owner_player: Node = projectile.owner_player
 	var attack_info: Dictionary = {"source": "player_attack", "owner": owner_player}
 	container.take_damage(projectile.damage, attack_info)
 
 
-func _try_damage_shop_container(container: BreakableContainer, damage: float) -> void:
+func _try_purchase_clicked_shop_container(click_position: Vector2) -> bool:
+	if phase != Phase.SHOP or game_over or _is_talent_tree_open():
+		return false
+	var container := _get_shop_container_at_position(click_position)
+	if container == null:
+		return false
+	return _try_purchase_shop_container(container)
+
+
+func _get_shop_container_at_position(world_position: Vector2) -> BreakableContainer:
+	for container in shop_containers:
+		if not is_instance_valid(container) or container.is_breaking:
+			continue
+		if _is_position_inside_container(container, world_position):
+			return container
+	return null
+
+
+func _is_position_inside_container(container: BreakableContainer, world_position: Vector2) -> bool:
+	var collision := container.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if collision == null or collision.shape == null:
+		return false
+
+	var local_position := collision.to_local(world_position)
+	if collision.shape is CircleShape2D:
+		return local_position.length() <= (collision.shape as CircleShape2D).radius
+	if collision.shape is RectangleShape2D:
+		var size := (collision.shape as RectangleShape2D).size
+		return absf(local_position.x) <= size.x * 0.5 and absf(local_position.y) <= size.y * 0.5
+
+	return false
+
+
+func _try_purchase_shop_container(container: BreakableContainer) -> bool:
+	if not is_instance_valid(container) or container.is_breaking:
+		return false
 	var data: Dictionary = shop_container_data.get(container, {})
 	var price: int = int(data.get("price", 0))
-	if container.hp - damage <= 0.0 and gold < price:
+	if gold < price:
 		_play_shop_insufficient_gold_sfx(container.global_position)
 		hud_message = "Not enough gold. Need %d." % price
 		_update_hud()
-		return
+		return false
 
-	if container.hp - damage <= 0.0:
-		gold -= price
-		hud_message = "Spent %d gold." % price
-	container.take_damage(damage, {"source": "shop_purchase", "owner": player})
+	gold -= price
+	hud_message = "Spent %d gold." % price
+	container.take_damage(container.hp, {"source": "shop_purchase", "owner": player})
+	return true
 
 
 func _mark_container_broken(container: BreakableContainer) -> void:
@@ -999,6 +1115,7 @@ func _get_modified_enemy_spawn_count(base_count: int) -> int:
 	var multiplier := 1.0
 	if is_instance_valid(player) and player.has_method("get_enemy_spawn_count_multiplier"):
 		multiplier = float(player.get_enemy_spawn_count_multiplier())
+	multiplier *= _get_active_map_affix_value(&"spawn_multiplier", 1.0)
 	return maxi(1, int(ceilf(float(base_count) * multiplier)))
 
 
@@ -1007,9 +1124,15 @@ func _pick_basic_zombie_scene(melee_chance: float) -> PackedScene:
 		return BURNING_ZOMBIE_SCENE
 
 	if randf() < melee_chance:
-		if randf() < 0.35:
+		if current_round >= 5 and randf() < 0.35:
 			return UNDEAD_DARK_KNIGHT_SCENE
 		return MELEE_ZOMBIE_SCENE
+
+	if current_round < 3:
+		return MELEE_ZOMBIE_SCENE
+
+	if current_round < 7:
+		return ACID_ZOMBIE_SCENE
 
 	if randf() < 0.5:
 		return ZOMBIE_FIREMAN_SCENE
@@ -1048,6 +1171,8 @@ func _spawn_enemy(spawn_position: Vector2, enemy_scene: PackedScene) -> void:
 	add_child(enemy)
 	_scale_actor_body(enemy)
 	_apply_current_round_enrage_to_enemy(enemy)
+	_apply_current_map_affix_to_enemy(enemy)
+	_apply_elite_affix(enemy)
 
 
 func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
@@ -1059,9 +1184,10 @@ func _get_enemy_gold_reward(enemy: EnemyBase) -> int:
 
 
 func _get_round_enemy_max_hp_multiplier() -> float:
+	var altar_multiplier := _get_active_map_affix_value(&"health_multiplier", 1.0)
 	if current_round < 6:
-		return 1.0
-	return 1.0 + 0.1 * float(current_round - 5)
+		return altar_multiplier
+	return (1.0 + 0.1 * float(current_round - 5)) * altar_multiplier
 
 
 func _on_enemy_died(enemy: EnemyBase) -> void:
@@ -1099,6 +1225,268 @@ func _spawn_reward_pickup(kind: StringName, amount: int, spawn_position: Vector2
 	var pickup := REWARD_PICKUP_SCRIPT.new() as RewardPickup
 	pickup.setup(kind, amount, spawn_position, player)
 	add_child(pickup)
+
+
+func _roll_elite_affix() -> Dictionary:
+	return ELITE_AFFIXES.pick_random().duplicate(true)
+
+
+func _apply_elite_affix(enemy: EnemyBase) -> void:
+	if enemy == null or not enemy.is_elite:
+		return
+
+	var affix := _roll_elite_affix()
+	var affix_id: StringName = affix.get("id", &"")
+	if affix_id == &"":
+		return
+
+	if affix_id == &"swift":
+		enemy.base_move_speed *= float(affix.get("move_speed_multiplier", 1.35))
+		enemy.set_map_move_speed_multiplier(enemy.map_move_speed_multiplier)
+	enemy.set_elite_affix(affix_id, String(affix.get("name", "Elite")), affix)
+
+
+func _roll_altar_offer() -> Dictionary:
+	var map_affix: Dictionary = _pick_different_entry(MAP_AFFIXES, last_altar_map_affix_id)
+	var blessing: Dictionary = _pick_different_entry(ALTAR_BLESSINGS, last_altar_blessing_id)
+	last_altar_map_affix_id = StringName(map_affix.get("id", &""))
+	last_altar_blessing_id = StringName(blessing.get("id", &""))
+	return {
+		"map_affix": map_affix,
+		"blessing": blessing,
+	}
+
+
+func _pick_different_entry(entries: Array[Dictionary], previous_id: StringName) -> Dictionary:
+	if entries.is_empty():
+		return {}
+
+	var candidates: Array[Dictionary] = []
+	for entry in entries:
+		if entries.size() > 1 and StringName(entry.get("id", &"")) == previous_id:
+			continue
+		candidates.append(entry)
+	if candidates.is_empty():
+		candidates = entries.duplicate()
+	return candidates.pick_random().duplicate(true)
+
+
+func _spawn_altar_offer() -> void:
+	_clear_altar_offer()
+	if phase != Phase.SHOP or game_over:
+		return
+
+	altar_offer = _roll_altar_offer()
+	altar_accepted = false
+	altar_node = Node2D.new()
+	altar_node.name = "ChallengeAltar"
+	altar_node.global_position = _get_altar_position()
+	add_child(altar_node)
+
+	var base := Polygon2D.new()
+	base.name = "AltarBase"
+	base.color = Color(0.34, 0.18, 0.48, 0.95)
+	base.polygon = PackedVector2Array([
+		Vector2(0.0, -42.0),
+		Vector2(36.0, -12.0),
+		Vector2(24.0, 38.0),
+		Vector2(-24.0, 38.0),
+		Vector2(-36.0, -12.0),
+	])
+	altar_node.add_child(base)
+
+	var core := Polygon2D.new()
+	core.name = "AltarCore"
+	core.color = Color(0.72, 1.0, 0.28, 0.9)
+	core.polygon = _circle_polygon(14.0, 16)
+	core.position = Vector2(0.0, -8.0)
+	altar_node.add_child(core)
+
+	var label := Label.new()
+	label.name = "AltarLabel"
+	label.position = Vector2(-180.0, 52.0)
+	label.size = Vector2(360.0, 92.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override("font_color", Color(0.92, 0.9, 0.66))
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	label.add_theme_font_size_override("font_size", 17)
+	label.text = _get_altar_offer_text(false)
+	altar_node.add_child(label)
+
+
+func _clear_altar_offer() -> void:
+	if altar_node != null and is_instance_valid(altar_node):
+		altar_node.queue_free()
+	altar_node = null
+	altar_offer.clear()
+	altar_accepted = false
+
+
+func _try_accept_altar_at_position(world_position: Vector2) -> bool:
+	if phase != Phase.SHOP or altar_accepted or altar_node == null or not is_instance_valid(altar_node):
+		return false
+	if world_position.distance_to(altar_node.global_position) > ALTAR_CLICK_RADIUS:
+		return false
+
+	var map_affix: Dictionary = altar_offer.get("map_affix", {})
+	var blessing: Dictionary = altar_offer.get("blessing", {})
+	if map_affix.is_empty() or blessing.is_empty():
+		return false
+
+	altar_accepted = true
+	pending_map_affix = map_affix.duplicate(true)
+	pending_altar_blessing = blessing.duplicate(true)
+	pending_altar_reward_round = current_round + 1
+	var label := altar_node.get_node_or_null("AltarLabel") as Label
+	if label != null:
+		label.text = _get_altar_offer_text(true)
+	hud_message = "Altar accepted. Next round: %s." % String(map_affix.get("name", "Challenge"))
+	_update_hud()
+	return true
+
+
+func _activate_pending_map_affix() -> void:
+	active_map_affix.clear()
+	active_map_affix_round = 0
+	map_poison_puddle_timer = 0.0
+	if pending_map_affix.is_empty():
+		return
+
+	active_map_affix = pending_map_affix.duplicate(true)
+	active_map_affix_round = current_round
+	pending_map_affix.clear()
+	map_poison_puddle_timer = MAP_POISON_PUDDLE_INTERVAL
+
+
+func _complete_active_altar_challenge() -> void:
+	if active_map_affix.is_empty() or active_map_affix_round != current_round:
+		active_map_affix.clear()
+		active_map_affix_round = 0
+		return
+
+	active_map_affix.clear()
+	active_map_affix_round = 0
+	if pending_altar_reward_round == current_round and not pending_altar_blessing.is_empty():
+		_grant_altar_blessing(StringName(pending_altar_blessing.get("id", &"")))
+		hud_message = "Blessing received: %s." % String(pending_altar_blessing.get("name", "Blessing"))
+	pending_altar_blessing.clear()
+	pending_altar_reward_round = 0
+
+
+func _grant_altar_blessing(blessing_id: StringName) -> void:
+	if blessing_id == &"" or not is_instance_valid(player):
+		return
+	if player.has_method("add_altar_blessing"):
+		player.add_altar_blessing(blessing_id)
+
+
+func _apply_starting_map_affix_effects() -> void:
+	if StringName(active_map_affix.get("id", &"")) != &"poison_puddles":
+		return
+	for _index in range(MAP_POISON_PUDDLE_INITIAL_COUNT):
+		_spawn_map_poison_puddle()
+
+
+func _update_active_map_affix(delta: float) -> void:
+	if phase != Phase.COMBAT or active_map_affix.is_empty():
+		return
+	if StringName(active_map_affix.get("id", &"")) != &"poison_puddles":
+		return
+
+	map_poison_puddle_timer = maxf(map_poison_puddle_timer - delta, 0.0)
+	if map_poison_puddle_timer > 0.0:
+		return
+
+	map_poison_puddle_timer = MAP_POISON_PUDDLE_INTERVAL
+	_spawn_map_poison_puddle()
+
+
+func _spawn_map_poison_puddle() -> void:
+	var play_area_rect := _get_play_area_rect()
+	var margin := 120.0
+	var spawn_position := Vector2(
+		randf_range(play_area_rect.position.x + margin, play_area_rect.end.x - margin),
+		randf_range(play_area_rect.position.y + margin, play_area_rect.end.y - margin)
+	)
+	var puddle := POISON_PUDDLE_SCRIPT.new() as PoisonPuddle
+	puddle.setup(spawn_position, 110.0, 8.0)
+	add_child(puddle)
+
+
+func _apply_current_map_affix_to_enemy(enemy: EnemyBase) -> void:
+	if enemy == null or active_map_affix.is_empty():
+		return
+
+	var move_multiplier := _get_active_map_affix_value(&"move_speed_multiplier", 1.0)
+	if move_multiplier != 1.0:
+		enemy.set_map_move_speed_multiplier(move_multiplier)
+
+	var dodge := _get_active_map_affix_value(&"dodge_chance", 0.0)
+	if dodge > 0.0:
+		enemy.dodge_chance = maxf(enemy.dodge_chance, dodge)
+
+	var damage_multiplier := 1.0
+	if enemy.is_elite:
+		damage_multiplier = _get_active_map_affix_value(&"elite_damage_multiplier", 1.0)
+	else:
+		damage_multiplier = _get_active_map_affix_value(&"normal_damage_multiplier", 1.0)
+	if damage_multiplier != 1.0:
+		_multiply_enemy_damage(enemy, damage_multiplier)
+
+
+func _multiply_enemy_damage(enemy: EnemyBase, multiplier: float) -> void:
+	for property_name in [&"damage", &"melee_damage", &"shout_damage", &"projectile_damage", &"contact_damage", &"explosion_damage"]:
+		if not _object_has_property(enemy, property_name):
+			continue
+		var value: Variant = enemy.get(property_name)
+		if value is int or value is float:
+			enemy.set(property_name, float(value) * multiplier)
+
+
+func _object_has_property(object: Object, property_name: StringName) -> bool:
+	for property in object.get_property_list():
+		if StringName(property.get("name", "")) == property_name:
+			return true
+	return false
+
+
+func _get_active_map_affix_value(key: StringName, default_value: float) -> float:
+	if active_map_affix.is_empty():
+		return default_value
+	if not active_map_affix.has(key):
+		return default_value
+	return float(active_map_affix.get(key, default_value))
+
+
+func _get_altar_offer_text(accepted: bool) -> String:
+	var map_affix: Dictionary = altar_offer.get("map_affix", {})
+	var blessing: Dictionary = altar_offer.get("blessing", {})
+	var prefix := "Accepted" if accepted else "Click altar"
+	return "%s\nMap: %s\nReward: %s" % [
+		prefix,
+		String(map_affix.get("description", "")),
+		String(blessing.get("description", "")),
+	]
+
+
+func _get_altar_position() -> Vector2:
+	var play_area_rect := _get_play_area_rect()
+	return Vector2(
+		clampf(ALTAR_POSITION.x, play_area_rect.position.x + 120.0, play_area_rect.end.x - 120.0),
+		clampf(ALTAR_POSITION.y, play_area_rect.position.y + 120.0, play_area_rect.end.y - 120.0)
+	)
+
+
+func _circle_polygon(radius: float, points: int) -> PackedVector2Array:
+	var polygon := PackedVector2Array()
+	for point in range(points):
+		var angle := TAU * float(point) / float(points)
+		polygon.append(Vector2(cos(angle), sin(angle)) * radius)
+	return polygon
 
 
 func request_enemy_attack_token(enemy: EnemyBase) -> bool:
@@ -1154,11 +1542,13 @@ func _enter_shop_phase() -> void:
 	phase = Phase.SHOP
 	round_time_remaining = 0.0
 	random_container_break_time_remaining = 0.0
-	hud_message = "Shop phase. Shoot jars to buy items, or press Enter for next round."
+	hud_message = "Shop phase. Click jars to buy items, or press Enter for next round."
 	if is_instance_valid(player):
 		player.emit_round_ended()
 		player.settle_round_level_rewards()
+	_complete_active_altar_challenge()
 	_spawn_shop_containers()
+	_spawn_altar_offer()
 	_maybe_show_talent_tree()
 	_update_hud()
 
@@ -1298,13 +1688,36 @@ func _create_character_card(canvas: CanvasLayer) -> void:
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	character_card.add_child(scroll)
 
+	var scroll_content := VBoxContainer.new()
+	scroll_content.name = "EquipmentContent"
+	scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_content.add_theme_constant_override("separation", 10)
+	scroll.add_child(scroll_content)
+
 	character_card_items_grid = GridContainer.new()
 	character_card_items_grid.name = "EquipmentGrid"
 	character_card_items_grid.columns = 5
 	character_card_items_grid.add_theme_constant_override("h_separation", 7)
 	character_card_items_grid.add_theme_constant_override("v_separation", 7)
 	character_card_items_grid.mouse_filter = Control.MOUSE_FILTER_PASS
-	scroll.add_child(character_card_items_grid)
+	scroll_content.add_child(character_card_items_grid)
+
+	var blessings_title := Label.new()
+	blessings_title.name = "BlessingsLabel"
+	blessings_title.text = "Blessings"
+	blessings_title.add_theme_color_override("font_color", Color(0.88, 0.82, 0.62))
+	blessings_title.add_theme_font_size_override("font_size", 15)
+	blessings_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll_content.add_child(blessings_title)
+
+	character_card_blessings_label = Label.new()
+	character_card_blessings_label.name = "Blessings"
+	character_card_blessings_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	character_card_blessings_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	character_card_blessings_label.add_theme_color_override("font_color", Color(0.78, 0.92, 0.6))
+	character_card_blessings_label.add_theme_font_size_override("font_size", 13)
+	character_card_blessings_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll_content.add_child(character_card_blessings_label)
 
 
 func _create_item_detail_card(canvas: CanvasLayer) -> void:
@@ -1335,7 +1748,6 @@ func _create_item_detail_card(canvas: CanvasLayer) -> void:
 	item_detail_card_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	item_detail_card_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	item_detail_card_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	item_detail_card_icon.material = ITEM_ICON_DARK_PIXEL_MATERIAL
 	item_detail_card_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	item_detail_card.add_child(item_detail_card_icon)
 
@@ -1549,7 +1961,14 @@ func _update_hud() -> void:
 			hud_message,
 		]
 
-	hud_label.text = "Round: %d/%d   Phase: %s   Gold: %d   HP: %d   Lv: %d   EXP: %d/%d   Talent: %d   %s: %d   Zombies: %d%s" % [
+	var map_label := "None"
+	if not active_map_affix.is_empty():
+		map_label = String(active_map_affix.get("name", "Challenge"))
+	var blessing_count := 0
+	if is_instance_valid(player) and player.has_method("get_altar_blessing_count"):
+		blessing_count = int(player.get_altar_blessing_count())
+
+	hud_label.text = "Round: %d/%d   Phase: %s   Gold: %d   HP: %d   Lv: %d   EXP: %d/%d   Talent: %d   Map: %s   Blessings: %d   %s: %d   Zombies: %d%s" % [
 		current_round,
 		MAX_ROUNDS,
 		phase_label,
@@ -1559,6 +1978,8 @@ func _update_hud() -> void:
 		experience,
 		required_experience,
 		unspent_talents,
+		map_label,
+		blessing_count,
 		objective_label,
 		objective_count,
 		enemies.size(),
@@ -1611,6 +2032,7 @@ func _rebuild_character_card_items() -> void:
 		child.queue_free()
 
 	if not is_instance_valid(player) or player.inventory == null:
+		_update_character_card_blessings()
 		return
 
 	var item_ids: Array = player.inventory.item_definitions_by_id.keys()
@@ -1623,6 +2045,7 @@ func _rebuild_character_card_items() -> void:
 		if item == null:
 			continue
 		character_card_items_grid.add_child(_create_character_card_item_icon(item, count))
+	_update_character_card_blessings()
 
 
 func _create_character_card_item_icon(item: ItemDefinition, count: int) -> Control:
@@ -1634,7 +2057,6 @@ func _create_character_card_item_icon(item: ItemDefinition, count: int) -> Contr
 
 	var icon := TextureRect.new()
 	icon.texture = item.icon
-	icon.material = ITEM_ICON_DARK_PIXEL_MATERIAL
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1661,17 +2083,52 @@ func _create_character_card_item_icon(item: ItemDefinition, count: int) -> Contr
 
 
 func _get_character_card_items_signature() -> String:
-	if not is_instance_valid(player) or player.inventory == null:
+	if not is_instance_valid(player):
 		return ""
 
 	var parts: Array[String] = []
-	var item_ids: Array = player.inventory.item_definitions_by_id.keys()
-	item_ids.sort()
-	for item_id in item_ids:
-		var count := player.inventory.get_item_count(item_id)
+	if player.inventory != null:
+		var item_ids: Array = player.inventory.item_definitions_by_id.keys()
+		item_ids.sort()
+		for item_id in item_ids:
+			var count := player.inventory.get_item_count(item_id)
+			if count > 0:
+				parts.append("item:%s:%d" % [String(item_id), count])
+	var blessing_ids: Array = player.altar_blessings.keys()
+	blessing_ids.sort()
+	for blessing_id in blessing_ids:
+		var count := int(player.altar_blessings.get(blessing_id, 0))
 		if count > 0:
-			parts.append("%s:%d" % [String(item_id), count])
+			parts.append("blessing:%s:%d" % [String(blessing_id), count])
 	return "|".join(parts)
+
+
+func _update_character_card_blessings() -> void:
+	if character_card_blessings_label == null:
+		return
+	if not is_instance_valid(player) or player.altar_blessings.is_empty():
+		character_card_blessings_label.text = "None"
+		return
+
+	var lines: Array[String] = []
+	var blessing_ids: Array = player.altar_blessings.keys()
+	blessing_ids.sort()
+	for blessing_id in blessing_ids:
+		var count := int(player.altar_blessings.get(blessing_id, 0))
+		if count <= 0:
+			continue
+		var display_name := _get_altar_blessing_display_name(StringName(blessing_id))
+		if count > 1:
+			display_name += " x%d" % count
+		lines.append(display_name)
+	character_card_blessings_label.text = "None" if lines.is_empty() else "\n".join(lines)
+
+
+func _get_altar_blessing_display_name(blessing_id: StringName) -> String:
+	for blessing in ALTAR_BLESSINGS:
+		if StringName(blessing.get("id", &"")) == blessing_id:
+			return String(blessing.get("name", String(blessing_id)))
+	return String(blessing_id)
 
 
 func _show_item_detail_card(item: ItemDefinition) -> void:

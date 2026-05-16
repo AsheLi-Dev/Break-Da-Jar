@@ -26,6 +26,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 
+	if is_stunned():
+		_handle_stunned_physics(delta)
+		return
+
 	if _update_knockback(delta):
 		return
 
@@ -68,6 +72,9 @@ func _update_explosion_windup(delta: float) -> void:
 
 
 func _explode() -> void:
+	if is_stunned():
+		return
+
 	if explosion_warning != null:
 		explosion_warning.visible = false
 
@@ -79,6 +86,14 @@ func _explode() -> void:
 			player.take_damage(explosion_damage)
 
 	die()
+
+
+func _on_stun_applied() -> void:
+	super()
+	is_exploding = false
+	explosion_elapsed = 0.0
+	if explosion_warning != null:
+		explosion_warning.visible = false
 
 
 func _ensure_explosion_warning() -> void:

@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
 [ext_resource type="Script" path="res://systems/items/effects/MissingHpSummonEffect.gd" id="2_summon"]
 [ext_resource type="PackedScene" path="res://scenes/summons/SkeletonArcher.tscn" id="3_archer"]
-[ext_resource type="Texture2D" path="res://assets/items/skull-and-bone-rpg-icons/6.png" id="item_icon"]
+[ext_resource type="Texture2D" path="res://assets/items/dark_realistic_pixel_icons/marrow_bow_choir.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_summon")

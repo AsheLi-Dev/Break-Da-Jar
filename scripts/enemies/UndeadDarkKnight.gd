@@ -67,6 +67,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 
+	if is_stunned():
+		_handle_stunned_physics(delta)
+		return
+
 	if _update_knockback(delta):
 		_update_hold_squash(delta)
 		return
@@ -261,12 +265,36 @@ func _set_hold_squash(squash_scale: Vector2) -> void:
 
 
 func _damage_players_in_radius(radius: float, attack_damage: float) -> void:
+	if is_stunned():
+		return
+
 	for node in get_tree().get_nodes_in_group("player"):
 		var player := node as Node2D
 		if player == null or not player.has_method("take_damage"):
 			continue
 		if player.global_position.distance_to(global_position) <= radius:
 			player.call("take_damage", attack_damage)
+
+
+func _on_stun_applied() -> void:
+	super()
+	if state == State.LEAP_SLAM:
+		release_attack_token()
+	state = State.CHASE
+	state_time = 0.0
+	attack_elapsed = 0.0
+	slam_resolved = false
+	leap_target_locked = false
+	if slam_warning != null:
+		slam_warning.visible = false
+	slam_telegraph_active = false
+	_reset_hold_squash()
+
+
+func _handle_stunned_physics(delta: float) -> void:
+	_on_stun_applied()
+	_play_dark_knight_animation(&"idle")
+	_update_hold_squash(delta)
 
 
 func _update_slam_warning(visible: bool, progress: float = 0.0) -> void:

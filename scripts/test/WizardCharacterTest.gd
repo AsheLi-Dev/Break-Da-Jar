@@ -51,16 +51,19 @@ func _run() -> void:
 	_test_start_talent_poison_chance()
 	_test_wizard_fireball_damage_bonus_talent()
 	_test_wizard_kill_atk_stack_talent()
-	_test_wizard_slide_nearby_poison_talent()
+	_test_wizard_slide_fireball_radius_buff_talent()
 	_test_wizard_fireball_radius_bonus_talent()
+	_test_wizard_nearby_damage_lifesteal_talent()
 	_test_wizard_start_move_speed_talent()
 	_test_wizard_kill_move_speed_stack_talent()
 	_test_wizard_primary_extra_fireball_talent()
 	_test_wizard_fireball_speed_bonus_talent()
+	_test_wizard_fireball_hit_heal_talent()
 	_test_wizard_start_attack_speed_talent()
 	_test_wizard_kill_attack_speed_stack_talent()
 	_test_wizard_extra_auto_fire_laser_talent()
 	_test_wizard_fire_laser_range_bonus_talent()
+	_test_wizard_elite_damage_lifesteal_talent()
 	_test_slide_fireball_blast_talent()
 	_test_poison_stack_damage_talent()
 	_test_nearby_enemy_attack_speed_talent()
@@ -75,6 +78,9 @@ func _run() -> void:
 	_test_nearby_enemy_elite_damage_talent()
 	_test_more_weaker_enemies_talent()
 	_test_fire_essence_burst_talent()
+	_test_fireball_max_hp_bonus_damage_talent()
+	_test_atk_percent_bonus_talent()
+	_test_fireball_radius_per_atk_talent()
 	_test_kill_move_speed_burst_talent()
 	_test_fire_surge_radial_fireballs_talent()
 	_test_max_hp_primary_echo_talent()
@@ -104,7 +110,11 @@ func _run() -> void:
 	_test_fire_laser_chain_prefers_new_targets_then_repeats()
 	_test_slide_fire_laser_talent()
 	_test_fire_laser_damages_containers_in_beam()
+	_test_fire_laser_ignores_shop_containers()
 	_test_opening_attack_speed_talent()
+	_test_attack_chain_lightning_chance_talent()
+	_test_chain_lightning_attack_speed_stack_talent()
+	_test_fireball_explosion_chain_lightning_talent()
 	_test_large_map_more_containers_talent()
 
 	_finish()
@@ -236,26 +246,44 @@ func _test_wizard_kill_atk_stack_talent() -> void:
 	player.set("talent_wizard_kill_atk_stack_enabled", false)
 
 
-func _test_wizard_slide_nearby_poison_talent() -> void:
+func _test_wizard_slide_fireball_radius_buff_talent() -> void:
 	player.unspent_talent_points = 1
 	var unlocked := _unlock_talent_for_test(&"flame_left_start_2")
-	_assert(unlocked, "Wizard left third slide poison talent unlocks")
+	_assert(unlocked, "Wizard left third slide Fireball radius talent unlocks")
 
-	var nearby_enemy := PoisonProbeEnemy.new()
-	nearby_enemy.add_to_group("enemy")
-	nearby_enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
-	scene.add_child(nearby_enemy)
-	var distant_enemy := PoisonProbeEnemy.new()
-	distant_enemy.add_to_group("enemy")
-	distant_enemy.global_position = player.global_position + Vector2.RIGHT * 300.0
-	scene.add_child(distant_enemy)
-
+	_clear_fireballs()
 	player.call("_apply_slide_finished_talents")
-	_assert(nearby_enemy.poison_stacks == 1, "Wizard left third talent applies 1 Poison stack to nearby enemies after sliding")
-	_assert(distant_enemy.poison_stacks == 0, "Wizard left third talent ignores enemies that are not nearby")
-	player.set("talent_wizard_slide_nearby_poison_enabled", false)
-	nearby_enemy.queue_free()
-	distant_enemy.queue_free()
+	_assert(is_equal_approx(float(player.get("wizard_slide_fireball_radius_buff_remaining")), 3.0), "Wizard left third talent grants a 3s Fireball radius buff after sliding")
+	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0)
+	await process_frame
+	var fireball := _find_fireball_with_radius(104.0)
+	_assert(fireball != null, "Wizard left third talent increases Fireball explosion radius by 30% after sliding")
+
+	_clear_fireballs()
+	player.call("_apply_slide_finished_talents")
+	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0)
+	await process_frame
+	fireball = _find_fireball_with_radius(104.0)
+	_assert(fireball != null, "Wizard left third talent does not stack from repeated slides")
+
+	_clear_fireballs()
+	player.set("talent_wizard_slide_fireball_blast_enabled", true)
+	player.set("next_wizard_slide_fireball_ready", true)
+	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0, true)
+	await process_frame
+	fireball = _find_fireball_with_radius(128.0)
+	_assert(fireball != null, "Wizard left third talent stacks additively with Slide Blast radius")
+
+	_clear_fireballs()
+	player.set("talent_wizard_slide_fireball_blast_enabled", false)
+	player.set("wizard_slide_fireball_radius_buff_remaining", 3.0)
+	player.call("_update_timers", 3.0)
+	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0)
+	await process_frame
+	fireball = _find_fireball_with_radius(80.0)
+	_assert(fireball != null, "Wizard left third talent expires after 3s")
+	player.set("talent_wizard_slide_fireball_radius_buff_enabled", false)
+	player.set("wizard_slide_fireball_radius_buff_remaining", 0.0)
 
 
 func _test_wizard_fireball_radius_bonus_talent() -> void:
@@ -270,6 +298,34 @@ func _test_wizard_fireball_radius_bonus_talent() -> void:
 	_assert(fireball != null and is_equal_approx(fireball.explosion_radius, 104.0), "Wizard left fourth talent grants 30% Fireball explosion radius")
 	player.set("talent_wizard_fireball_radius_bonus_enabled", false)
 	_clear_fireballs()
+
+
+func _test_wizard_nearby_damage_lifesteal_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"flame_left_start_4")
+	_assert(unlocked, "Wizard left fifth nearby damage lifesteal talent unlocks")
+
+	var nearby_enemy := DamageProbeEnemy.new()
+	nearby_enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
+	scene.add_child(nearby_enemy)
+
+	player.hp = player.max_hp - 50.0
+	var before_hp := player.hp
+	player.deal_player_damage_to_enemy(nearby_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.hp, before_hp + nearby_enemy.last_damage * 0.12), "Wizard left fifth talent heals for 12% of damage dealt to nearby enemies")
+
+	var distant_enemy := DamageProbeEnemy.new()
+	distant_enemy.global_position = player.global_position + Vector2.RIGHT * 300.0
+	scene.add_child(distant_enemy)
+
+	player.hp = player.max_hp - 50.0
+	before_hp = player.hp
+	player.deal_player_damage_to_enemy(distant_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.hp, before_hp), "Wizard left fifth talent ignores distant enemies")
+
+	player.set("talent_wizard_nearby_damage_lifesteal_enabled", false)
+	nearby_enemy.queue_free()
+	distant_enemy.queue_free()
 
 
 func _test_wizard_start_move_speed_talent() -> void:
@@ -324,6 +380,29 @@ func _test_wizard_fireball_speed_bonus_talent() -> void:
 	_assert(fireball != null and is_equal_approx(fireball.speed, 728.0), "Wizard center fourth talent grants 40% Fireball speed")
 	player.set("talent_wizard_fireball_speed_bonus_enabled", false)
 	_clear_fireballs()
+
+
+func _test_wizard_fireball_hit_heal_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"flame_center_start_4")
+	_assert(unlocked, "Wizard center fifth Fireball hit heal talent unlocks")
+
+	var enemy := DamageProbeEnemy.new()
+	enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
+	scene.add_child(enemy)
+
+	player.hp = player.max_hp - 10.0
+	var before_hp := player.hp
+	player.deal_player_damage_to_enemy(enemy, 100.0, {"source": "fireball", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.hp, before_hp + 1.0), "Wizard center fifth talent heals 1 HP when Fireball hits")
+
+	player.hp = player.max_hp - 10.0
+	before_hp = player.hp
+	player.deal_player_damage_to_enemy(enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.hp, before_hp), "Wizard center fifth talent ignores non-Fireball hits")
+
+	player.set("talent_wizard_fireball_hit_heal_enabled", false)
+	enemy.queue_free()
 
 
 func _test_wizard_start_attack_speed_talent() -> void:
@@ -385,6 +464,34 @@ func _test_wizard_fire_laser_range_bonus_talent() -> void:
 	player.set("talent_wizard_fire_laser_range_bonus_enabled", false)
 
 
+func _test_wizard_elite_damage_lifesteal_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"flame_right_start_4")
+	_assert(unlocked, "Wizard right fifth elite damage lifesteal talent unlocks")
+
+	var elite_enemy := EliteDamageProbeEnemy.new()
+	elite_enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
+	scene.add_child(elite_enemy)
+
+	player.hp = player.max_hp - 50.0
+	var before_hp := player.hp
+	player.deal_player_damage_to_enemy(elite_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.hp, before_hp + elite_enemy.last_damage * 0.25), "Wizard right fifth talent heals for 25% of damage dealt to elite enemies")
+
+	var normal_enemy := DamageProbeEnemy.new()
+	normal_enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
+	scene.add_child(normal_enemy)
+
+	player.hp = player.max_hp - 50.0
+	before_hp = player.hp
+	player.deal_player_damage_to_enemy(normal_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.hp, before_hp), "Wizard right fifth talent ignores non-elite enemies")
+
+	player.set("talent_wizard_elite_damage_lifesteal_enabled", false)
+	elite_enemy.queue_free()
+	normal_enemy.queue_free()
+
+
 func _test_slide_fireball_blast_talent() -> void:
 	player.unspent_talent_points = 1
 	var unlocked := _unlock_talent_for_test(&"flame_bottom_4")
@@ -393,10 +500,22 @@ func _test_slide_fireball_blast_talent() -> void:
 	_assert(bool(player.get("next_wizard_slide_fireball_ready")), "Wizard slide fireball blast arms after slide")
 	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0, true)
 	await process_frame
-	var fireball := _find_fireball_with_radius(320.0)
-	_assert(fireball != null, "Wizard slide fireball blast increases explosion radius by 300%")
+	var fireball := _find_fireball_with_radius(104.0)
+	_assert(fireball != null, "Wizard slide fireball blast increases explosion radius by 30%")
 	_assert(fireball != null and is_equal_approx(fireball.lifetime, 0.15), "Wizard slide fireball blast reduces travel distance by 90%")
 	_assert(not bool(player.get("next_wizard_slide_fireball_ready")), "Wizard slide fireball blast is consumed by left-click fireball")
+
+	_clear_fireballs()
+	player.set("talent_wizard_primary_extra_fireball_enabled", true)
+	player.call("_apply_slide_finished_talents")
+	player.call("_launch_wizard_primary_attack_pattern", player.global_position + Vector2.RIGHT * 200.0, false)
+	await process_frame
+	_assert(_count_fireballs_with_radius(104.0) == 2, "Wizard slide fireball blast applies to all Fireballs generated by the next left-click attack")
+	for boosted_fireball in _collect_fireballs_with_radius(104.0):
+		_assert(is_equal_approx(boosted_fireball.lifetime, 0.15), "Wizard slide fireball blast reduces travel distance for all Fireballs generated by the next left-click attack")
+	_assert(not bool(player.get("next_wizard_slide_fireball_ready")), "Wizard slide fireball blast is consumed after the full left-click attack")
+	player.set("talent_wizard_primary_extra_fireball_enabled", false)
+	_clear_fireballs()
 
 
 func _test_poison_stack_damage_talent() -> void:
@@ -453,8 +572,8 @@ func _test_fire_surge_left_click_blast_talent() -> void:
 	player.call("_start_fire_surge")
 	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0, true)
 	await process_frame
-	var empowered_fireball := _find_fireball_with_radius(320.0)
-	_assert(empowered_fireball != null, "Wizard fire surge left-click blast increases explosion radius by 300%")
+	var empowered_fireball := _find_fireball_with_radius(120.0)
+	_assert(empowered_fireball != null, "Wizard fire surge left-click blast increases explosion radius by 50%")
 	_assert(empowered_fireball != null and is_equal_approx(empowered_fireball.lifetime, 0.15), "Wizard fire surge left-click blast reduces travel distance by 90%")
 
 	player.call("_update_fire_surge", 10.0)
@@ -610,6 +729,71 @@ func _test_fire_essence_burst_talent() -> void:
 	_assert(_count_nodes_with_class("FireballProjectile") == before_fireballs + 4, "Wizard fire essence attack fires the original Fireball plus three extra Fireballs")
 	var fireball := _find_fireball_with_allow_procs(true)
 	_assert(fireball != null, "Wizard fire essence burst Fireballs allow normal procs")
+
+
+func _test_fireball_max_hp_bonus_damage_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"flame_left_11")
+	_assert(unlocked, "Wizard left eleventh Fireball max HP damage talent unlocks")
+
+	var old_max_hp := player.max_hp
+	player.max_hp = 200.0
+	var enemy := DamageProbeEnemy.new()
+	enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
+	scene.add_child(enemy)
+
+	player.deal_player_damage_to_enemy(enemy, 100.0, {"source": "fireball", "direct": true, "allow_procs": false, "allow_crit": false})
+	var nearby_focus_multiplier := 1.5
+	var expected_fireball_damage := (100.0 + player.max_hp * 0.1) * player.get_stats().get_damage_multiplier() * nearby_focus_multiplier
+	_assert(is_equal_approx(enemy.last_damage, expected_fireball_damage), "Wizard left eleventh talent adds 10% max HP damage to Fireballs")
+
+	player.deal_player_damage_to_enemy(enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	var expected_non_fireball_damage := 100.0 * player.get_stats().get_damage_multiplier() * nearby_focus_multiplier
+	_assert(is_equal_approx(enemy.last_damage, expected_non_fireball_damage), "Wizard left eleventh talent does not affect non-Fireball damage")
+
+	player.max_hp = old_max_hp
+	player.set("talent_wizard_fireball_max_hp_bonus_damage_enabled", false)
+	enemy.queue_free()
+
+
+func _test_atk_percent_bonus_talent() -> void:
+	player.unspent_talent_points = 1
+	var old_atk := player.get_stats().atk
+	player.get_stats().atk = 50
+	var unlocked := _unlock_talent_for_test(&"flame_left_12")
+	_assert(unlocked, "Wizard left twelfth ATK percent talent unlocks")
+	_assert(player.get_stats().atk == 60, "Wizard left twelfth talent increases ATK by 20%")
+
+	player.call("_remove_talent_stat_effect", &"flame_left_12")
+	_assert(player.get_stats().atk == 50, "Wizard left twelfth talent rollback removes the applied ATK bonus")
+	player.unlocked_talents.erase(&"flame_left_12")
+	player.get_stats().atk = old_atk
+
+
+func _test_fireball_radius_per_atk_talent() -> void:
+	player.unspent_talent_points = 1
+	var old_atk := player.get_stats().atk
+	player.get_stats().atk = 50
+	var unlocked := _unlock_talent_for_test(&"flame_left_13")
+	_assert(unlocked, "Wizard left thirteenth Fireball radius per ATK talent unlocks")
+
+	_clear_fireballs()
+	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0)
+	await process_frame
+	var fireball := _find_node_with_class("FireballProjectile") as FireballProjectile
+	_assert(fireball != null and is_equal_approx(fireball.explosion_radius, 208.0), "Wizard left thirteenth talent grants 20% Fireball radius per 10 ATK")
+
+	_clear_fireballs()
+	await process_frame
+	player.get_stats().atk = 70
+	player.call("_launch_wizard_fireball", player.global_position + Vector2.RIGHT * 200.0)
+	await process_frame
+	fireball = _find_node_with_class("FireballProjectile") as FireballProjectile
+	_assert(fireball != null and is_equal_approx(fireball.explosion_radius, 249.6), "Wizard left thirteenth talent updates Fireball radius from current ATK")
+
+	player.get_stats().atk = old_atk
+	player.set("talent_wizard_fireball_radius_per_atk_enabled", false)
+	_clear_fireballs()
 
 
 func _test_kill_move_speed_burst_talent() -> void:
@@ -1242,6 +1426,22 @@ func _test_fire_laser_damages_containers_in_beam() -> void:
 	container.queue_free()
 
 
+func _test_fire_laser_ignores_shop_containers() -> void:
+	var container := BreakableContainer.new()
+	container.max_hp = 100.0
+	container.is_shop_container = true
+	container.global_position = player.global_position + Vector2.RIGHT * 220.0
+	scene.add_child(container)
+
+	player.call("_spawn_wizard_fire_laser", player.global_position, Vector2.RIGHT)
+	await process_frame
+	var laser := _find_newest_laser()
+	if laser != null:
+		laser.call("_apply_damage")
+	_assert(is_equal_approx(container.hp, container.max_hp), "Wizard Fire Laser does not damage shop containers directly")
+	container.queue_free()
+
+
 func _test_opening_attack_speed_talent() -> void:
 	player.unspent_talent_points = 1
 	var unlocked := _unlock_talent_for_test(&"flame_right_10")
@@ -1253,6 +1453,88 @@ func _test_opening_attack_speed_talent() -> void:
 	var buffs: TemporaryBuffComponent = player.get_temporary_buffs()
 	var buff: Dictionary = buffs.buffs.get(&"wizard_opening_attack_speed", {})
 	_assert(is_equal_approx(float(buff.get("time_left", 0.0)), 10.0), "Wizard opening attack speed talent lasts 10s")
+
+
+func _test_attack_chain_lightning_chance_talent() -> void:
+	player.unspent_talent_points = 1
+	var before_chance := player.get_stats().chain_lightning_chance
+	var unlocked := _unlock_talent_for_test(&"flame_right_11")
+	_assert(unlocked, "Wizard right eleventh attack Chain Lightning talent unlocks")
+	_assert(is_equal_approx(player.get_stats().chain_lightning_chance, before_chance + 0.5), "Wizard right eleventh talent grants 50% Chain Lightning chance")
+
+	var source_enemy := DamageProbeEnemy.new()
+	source_enemy.add_to_group("enemy")
+	source_enemy.global_position = player.global_position + Vector2.RIGHT * 500.0
+	scene.add_child(source_enemy)
+	var chained_enemy := DamageProbeEnemy.new()
+	chained_enemy.add_to_group("enemy")
+	chained_enemy.global_position = source_enemy.global_position + Vector2.RIGHT * 16.0
+	scene.add_child(chained_enemy)
+
+	player.get_stats().chain_lightning_chance = 1.0
+	player.deal_player_damage_to_enemy(source_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": true, "allow_crit": false})
+	_assert(chained_enemy.last_damage > 0.0, "Wizard right eleventh talent can trigger Chain Lightning from attacks")
+
+	player.get_stats().chain_lightning_chance = before_chance
+	source_enemy.queue_free()
+	chained_enemy.queue_free()
+
+
+func _test_chain_lightning_attack_speed_stack_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"flame_right_12")
+	_assert(unlocked, "Wizard right twelfth Chain Lightning attack speed talent unlocks")
+
+	var old_attack_speed := player.get_stats().attack_speed_bonus
+	player.get_stats().attack_speed_bonus = 0.0
+	player.get_temporary_buffs().call("_remove_buff", &"wizard_chain_lightning_attack_speed_stack")
+
+	var enemies: Array[DamageProbeEnemy] = []
+	var origin := Vector2(10000.0, 10000.0)
+	for index in range(3):
+		var enemy := DamageProbeEnemy.new()
+		enemy.add_to_group("enemy")
+		enemy.global_position = origin + Vector2.RIGHT * (float(index) * 16.0)
+		scene.add_child(enemy)
+		enemies.append(enemy)
+
+	player.call("_trigger_holy_strike_chain_lightning", origin)
+	var buff: Dictionary = player.get_temporary_buffs().buffs.get(&"wizard_chain_lightning_attack_speed_stack", {})
+	_assert(int(buff.get("stacks", 0)) == 3, "Wizard right twelfth talent gains one attack speed stack per Chain Lightning hit")
+	_assert(is_equal_approx(player.get_stats().attack_speed_bonus, 0.06), "Wizard right twelfth talent grants 2% attack speed per stack")
+	_assert(is_equal_approx(float(buff.get("time_left", 0.0)), 3.0), "Wizard right twelfth talent stacks last 3s")
+
+	for _index in range(30):
+		player.call("_apply_wizard_chain_lightning_attack_speed_stack")
+	buff = player.get_temporary_buffs().buffs.get(&"wizard_chain_lightning_attack_speed_stack", {})
+	_assert(int(buff.get("stacks", 0)) == 25, "Wizard right twelfth talent caps at 25 stacks")
+	_assert(is_equal_approx(player.get_stats().attack_speed_bonus, 0.5), "Wizard right twelfth talent caps at 50% attack speed")
+
+	player.get_temporary_buffs().call("_remove_buff", &"wizard_chain_lightning_attack_speed_stack")
+	player.get_stats().attack_speed_bonus = old_attack_speed
+	player.set("talent_wizard_chain_lightning_attack_speed_stack_enabled", false)
+	for enemy in enemies:
+		enemy.queue_free()
+
+
+func _test_fireball_explosion_chain_lightning_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"flame_right_13")
+	_assert(unlocked, "Wizard right thirteenth Fireball explosion Chain Lightning talent unlocks")
+
+	var fireball := _make_test_fireball(player)
+	fireball.global_position = Vector2(12000.0, 12000.0)
+
+	var chain_target := DamageProbeEnemy.new()
+	chain_target.add_to_group("enemy")
+	chain_target.global_position = fireball.global_position + Vector2.RIGHT * 80.0
+	scene.add_child(chain_target)
+
+	fireball.explode()
+	_assert(chain_target.last_damage > 0.0, "Wizard right thirteenth talent triggers Chain Lightning when Fireballs explode")
+
+	player.set("talent_wizard_fireball_explosion_chain_lightning_enabled", false)
+	chain_target.queue_free()
 
 
 func _test_large_map_more_containers_talent() -> void:
@@ -1283,6 +1565,16 @@ func _find_node_with_class_recursive(node: Node, class_name_value: String) -> No
 
 func _find_fireball_with_radius(radius: float) -> FireballProjectile:
 	return _find_fireball_with_radius_recursive(scene, radius)
+
+
+func _count_fireballs_with_radius(radius: float) -> int:
+	return _collect_fireballs_with_radius(radius).size()
+
+
+func _collect_fireballs_with_radius(radius: float) -> Array[FireballProjectile]:
+	var result: Array[FireballProjectile] = []
+	_collect_fireballs_with_radius_recursive(scene, radius, result)
+	return result
 
 
 func _find_fireball_with_allow_procs(allow_procs: bool) -> FireballProjectile:
@@ -1371,6 +1663,14 @@ func _find_fireball_with_radius_recursive(node: Node, radius: float) -> Fireball
 		if found != null:
 			return found
 	return null
+
+
+func _collect_fireballs_with_radius_recursive(node: Node, radius: float, result: Array[FireballProjectile]) -> void:
+	var fireball := node as FireballProjectile
+	if fireball != null and is_equal_approx(fireball.explosion_radius, radius):
+		result.append(fireball)
+	for child in node.get_children():
+		_collect_fireballs_with_radius_recursive(child, radius, result)
 
 
 func _count_nodes_with_class_recursive(node: Node, class_name_value: String) -> int:
@@ -1518,6 +1818,21 @@ class DamageProbeEnemy:
 	extends Node2D
 
 	var last_damage: float = 0.0
+
+	func take_damage(amount: float, _source: Node = null, _attack_info: Dictionary = {}) -> float:
+		last_damage = amount
+		return amount
+
+
+class EliteDamageProbeEnemy:
+	extends EnemyBase
+
+	var last_damage: float = 0.0
+
+	func _init() -> void:
+		is_elite = true
+		max_hp = 1000.0
+		hp = max_hp
 
 	func take_damage(amount: float, _source: Node = null, _attack_info: Dictionary = {}) -> float:
 		last_damage = amount

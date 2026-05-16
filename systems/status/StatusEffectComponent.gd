@@ -6,12 +6,14 @@ class_name StatusEffectComponent
 @export var poison_duration: float = 4.0
 @export var poison_damage_per_stack: float = 5.0
 @export var poison_max_stacks: int = 10
+@export var stun_duration: float = 1.0
 
 var owner_enemy: EnemyBase
 var status_owner_player: Node
 var bleeding_time_left: float = 0.0
 var poison_time_left: float = 0.0
 var poison_stacks: int = 0
+var stun_time_left: float = 0.0
 var dot_tick_timer: float = 0.0
 
 
@@ -29,6 +31,7 @@ func tick(delta: float) -> void:
 
 	bleeding_time_left = maxf(0.0, bleeding_time_left - delta)
 	poison_time_left = maxf(0.0, poison_time_left - delta)
+	stun_time_left = maxf(0.0, stun_time_left - delta)
 	if poison_time_left <= 0.0:
 		poison_stacks = 0
 
@@ -44,6 +47,8 @@ func apply_status_effect(id: StringName, source_player: Node = null) -> void:
 			apply_bleeding(source_player)
 		&"poison":
 			apply_poison(source_player)
+		&"stun":
+			apply_stun(source_player)
 
 
 func apply_bleeding(source_player: Node = null) -> void:
@@ -63,8 +68,22 @@ func apply_poison_stacks(amount: int, source_player: Node = null) -> void:
 		status_owner_player = source_player
 
 
+func apply_stun(source_player: Node = null) -> void:
+	apply_stun_duration(stun_duration, source_player)
+
+
+func apply_stun_duration(duration: float, source_player: Node = null) -> void:
+	stun_time_left = maxf(stun_time_left, duration)
+	if source_player != null and is_instance_valid(source_player):
+		status_owner_player = source_player
+
+
 func get_poison_stacks() -> int:
 	return poison_stacks
+
+
+func get_stun_time_left() -> float:
+	return stun_time_left
 
 
 func has_status(id: StringName) -> bool:
@@ -73,6 +92,8 @@ func has_status(id: StringName) -> bool:
 			return bleeding_time_left > 0.0
 		&"poison":
 			return poison_time_left > 0.0 and poison_stacks > 0
+		&"stun":
+			return stun_time_left > 0.0
 		_:
 			return false
 

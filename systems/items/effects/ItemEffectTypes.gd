@@ -2,6 +2,7 @@ extends RefCounted
 class_name ItemEffectTypes
 
 const APPLY_POISON_NEAR_CONTAINER := &"apply_poison_near_container"
+const APPLY_STUN_NEAR_CONTAINER := &"apply_stun_near_container"
 const CHAIN_LIGHTNING := &"chain_lightning"
 const CHAIN_LIGHTNING_ON_BLEEDING_DEATH := &"chain_lightning_on_bleeding_death"
 const CHANCE_HEAL_ON_KILL := &"chance_heal_on_kill"
@@ -32,6 +33,7 @@ const SUMMON_TURRETS_ON_ROUND_START := &"summon_turrets_on_round_start"
 static func all() -> Array[StringName]:
 	return [
 		APPLY_POISON_NEAR_CONTAINER,
+		APPLY_STUN_NEAR_CONTAINER,
 		CHAIN_LIGHTNING,
 		CHAIN_LIGHTNING_ON_BLEEDING_DEATH,
 		CHANCE_HEAL_ON_KILL,

@@ -11,6 +11,7 @@ const PERIODIC_BLOOD_CLAW := &"periodic_blood_claw"
 const PERIODIC_CHAIN_LIGHTNING := &"periodic_chain_lightning"
 const PERIODIC_DAMAGE_SHIELD := &"periodic_damage_shield"
 const PERIODIC_EXPLOSIVE_TRAP := &"periodic_explosive_trap"
+const PERIODIC_HOLY_RETRIBUTION := &"periodic_holy_retribution"
 const PERIODIC_INVINCIBILITY := &"periodic_invincibility"
 const PERIODIC_TIMED_STAT_BUFF := &"periodic_timed_stat_buff"
 const STATIONARY_ATTACK_SPEED := &"stationary_attack_speed"
@@ -43,6 +44,7 @@ static func all_modes() -> Array[StringName]:
 		PERIODIC_CHAIN_LIGHTNING,
 		PERIODIC_DAMAGE_SHIELD,
 		PERIODIC_EXPLOSIVE_TRAP,
+		PERIODIC_HOLY_RETRIBUTION,
 		PERIODIC_INVINCIBILITY,
 		PERIODIC_TIMED_STAT_BUFF,
 		STATIONARY_ATTACK_SPEED,

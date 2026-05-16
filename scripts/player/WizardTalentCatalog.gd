@@ -108,9 +108,11 @@ static func definition(id: StringName) -> Dictionary:
 		&"flame_left_start_1":
 			return {"name": "Culling\nFlame", "description": "After killing an enemy, gain 2 ATK for 5s, up to 10 ATK.", "effect": &"wizard_kill_atk_stack"}
 		&"flame_left_start_2":
-			return {"name": "Toxic\nSlide", "description": "After sliding, nearby enemies gain 1 Poison stack.", "effect": &"wizard_slide_nearby_poison"}
+			return {"name": "Slide\nBloom", "description": "After sliding, your Fireball explosion radius is increased by 30% for 3s. Does not stack. This bonus is additive with Slide Blast and Surge Blast.", "effect": &"wizard_slide_fireball_radius_buff"}
 		&"flame_left_start_3":
 			return {"name": "Wide\nBlast", "description": "Your Fireballs have 30% increased explosion radius.", "effect": &"wizard_fireball_radius_bonus"}
+		&"flame_left_start_4":
+			return {"name": "Close\nDrain", "description": "Damage dealt to nearby enemies heals you for 12% of the damage dealt.", "effect": &"wizard_nearby_damage_lifesteal"}
 		&"flame_center_start_0":
 			return {"name": "Swift\nFlame", "description": "Gain 20% movement speed.", "stat": &"movement_speed_bonus", "value": 0.2}
 		&"flame_center_start_1":
@@ -119,6 +121,8 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Extra\nSpark", "description": "Your left-click attack fires 1 additional Fireball.", "effect": &"wizard_primary_extra_fireball"}
 		&"flame_center_start_3":
 			return {"name": "Fast\nSparks", "description": "Your Fireballs have 40% increased travel speed.", "effect": &"wizard_fireball_speed_bonus"}
+		&"flame_center_start_4":
+			return {"name": "Siphon\nSpark", "description": "Fireball hits restore 1 HP.", "effect": &"wizard_fireball_hit_heal"}
 		&"flame_right_start_0":
 			return {"name": "Quick\nCast", "description": "Gain 20% attack speed.", "stat": &"attack_speed_bonus", "value": 0.2}
 		&"flame_right_start_1":
@@ -127,8 +131,10 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Twin\nRay", "description": "Your right-click attack fires an additional Fire Laser at the nearest enemy.", "effect": &"wizard_extra_auto_fire_laser"}
 		&"flame_right_start_3":
 			return {"name": "Long\nRay", "description": "Your Fire Lasers have 30% increased range.", "effect": &"wizard_fire_laser_range_bonus"}
+		&"flame_right_start_4":
+			return {"name": "Elite\nDrain", "description": "Damage dealt to elite enemies heals you for 25% of the damage dealt.", "effect": &"wizard_elite_damage_lifesteal"}
 		&"flame_bottom_4":
-			return {"name": "Slide\nBlast", "description": "After sliding, your next left-click Fireball has 300% increased explosion radius and 90% reduced travel distance.", "effect": &"wizard_slide_fireball_blast"}
+			return {"name": "Slide\nBlast", "description": "After sliding, your next left-click Fireball has 30% increased explosion radius and 90% reduced travel distance.", "effect": &"wizard_slide_fireball_blast"}
 		&"flame_bottom_3":
 			return {"name": "Toxic\nKindling", "description": "Deal 5% increased damage to enemies for each Poison stack on them.", "effect": &"wizard_poison_stack_damage"}
 		&"flame_bottom_2":
@@ -142,7 +148,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"flame_left_0":
 			return {"name": "Close\nBurn", "description": "Deal 50% more damage to nearby enemies and 50% less damage to enemies that are not nearby.", "effect": &"wizard_nearby_damage_focus"}
 		&"flame_left_1":
-			return {"name": "Surge\nBlast", "description": "During Fire Surge, your left-click Fireballs have 300% increased explosion radius and 90% reduced travel distance.", "effect": &"wizard_fire_surge_left_click_blast"}
+			return {"name": "Surge\nBlast", "description": "During Fire Surge, your left-click Fireballs have 50% increased explosion radius and 90% reduced travel distance.", "effect": &"wizard_fire_surge_left_click_blast"}
 		&"flame_left_2":
 			return {"name": "Close\nCoins", "description": "Killing a nearby enemy grants 1 extra gold.", "effect": &"wizard_nearby_kill_gold"}
 		&"flame_left_3":
@@ -161,6 +167,12 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Wild\nHorde", "description": "Enemies are 100% more numerous but have 30% less max HP.", "effect": &"wizard_more_weaker_enemies"}
 		&"flame_left_10":
 			return {"name": "Phoenix\nDebt", "description": "When you die, revive and reset your level and talents. After reviving, gain 1 ATK for each lost level.", "effect": &"wizard_rebirth_level_to_atk"}
+		&"flame_left_11":
+			return {"name": "Vital\nFire", "description": "Your Fireballs deal bonus damage equal to 10% of your maximum HP.", "effect": &"wizard_fireball_max_hp_bonus_damage"}
+		&"flame_left_12":
+			return {"name": "Arcane\nMight", "description": "Increase your ATK by 20%.", "stat": &"atk", "operation": &"multiply_add", "value": 0.2}
+		&"flame_left_13":
+			return {"name": "Might\nBloom", "description": "For every 10 ATK you have, your Fireball explosion radius increases by 20%.", "effect": &"wizard_fireball_radius_per_atk"}
 		&"flame_bridge_center_0":
 			return {"name": "Fire\nEssence", "description": "Every 5s, a Fire Essence appears within 400px for 5s. Pick it up within 300px to make your next left-click attack fire three extra Fireballs.", "effect": &"wizard_fire_essence_burst"}
 		&"flame_center_0":
@@ -211,6 +223,12 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Slide\nRay", "description": "After sliding, trigger a Fire Laser in your slide direction.", "effect": &"wizard_slide_fire_laser"}
 		&"flame_right_10":
 			return {"name": "Opening\nSurge", "description": "Gain 50% attack speed for the first 10s of each round.", "effect": &"wizard_opening_attack_speed"}
+		&"flame_right_11":
+			return {"name": "Storm\nCast", "description": "Your attacks have 50% chance to trigger Chain Lightning.", "stat": &"chain_lightning_chance", "value": 0.5}
+		&"flame_right_12":
+			return {"name": "Storm\nTempo", "description": "Each enemy hit by Chain Lightning grants 2% attack speed for 3s, up to 50%.", "effect": &"wizard_chain_lightning_attack_speed_stack"}
+		&"flame_right_13":
+			return {"name": "Storm\nBloom", "description": "Fireball explosions trigger Chain Lightning.", "effect": &"wizard_fireball_explosion_chain_lightning"}
 		&"spark_5":
 			return {"name": "Wide\nSpoils", "description": "Map size and combat container count are increased by 30%.", "effect": &"wizard_large_map_more_containers"}
 		_:

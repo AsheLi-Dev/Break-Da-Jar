@@ -92,6 +92,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 
+	if is_stunned():
+		_handle_stunned_physics(delta)
+		return
+
 	if _update_knockback(delta):
 		_update_attack_hold_squash(delta)
 		return
@@ -347,6 +351,8 @@ func _damage_overlapping_players(area: Area2D, attack_damage: float) -> void:
 
 
 func _try_damage_player(body: Node, attack_damage: float) -> void:
+	if is_stunned():
+		return
 	if hit_targets.has(body):
 		return
 
@@ -355,6 +361,35 @@ func _try_damage_player(body: Node, attack_damage: float) -> void:
 		body.call("take_damage", attack_damage)
 		if state == State.SHOUT_ATTACK and body.has_method("apply_slow"):
 			body.call("apply_slow", shout_slow_multiplier, shout_slow_duration)
+
+
+func _on_stun_applied() -> void:
+	super()
+	match state:
+		State.MELEE_ATTACK, State.RANGED_ATTACK, State.SHOUT_ATTACK:
+			release_attack_token()
+	state = State.CHASE
+	state_time = 0.0
+	attack_elapsed = 0.0
+	projectile_fired = false
+	shout_air_wave_spawned = false
+	if melee_warning != null:
+		melee_warning.visible = false
+	if shout_warning != null:
+		shout_warning.visible = false
+	if ranged_warning != null:
+		ranged_warning.visible = false
+	if melee_hitbox != null:
+		melee_hitbox.monitoring = false
+	if shout_hitbox != null:
+		shout_hitbox.monitoring = false
+	_reset_attack_hold_squash()
+
+
+func _handle_stunned_physics(delta: float) -> void:
+	_on_stun_applied()
+	_play_brute_animation(&"idle")
+	_update_attack_hold_squash(delta)
 
 
 func _disable_hitbox() -> void:
@@ -368,6 +403,9 @@ func _disable_hitbox() -> void:
 
 
 func _fire_spread_projectiles() -> void:
+	if is_stunned():
+		return
+
 	var base_angle: float = locked_attack_direction.angle()
 	for angle_offset_degrees in [-projectile_spread_degrees, 0.0, projectile_spread_degrees]:
 		var angle: float = base_angle + deg_to_rad(float(angle_offset_degrees))

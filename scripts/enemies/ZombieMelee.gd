@@ -64,6 +64,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 
+	if is_stunned():
+		_handle_stunned_physics(delta)
+		return
+
 	if _update_knockback(delta):
 		_update_attack_hold_squash(delta)
 		return
@@ -110,6 +114,9 @@ func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {
 
 	last_damage_source = source
 	last_attack_info = attack_info
+	amount = _apply_incoming_damage_modifiers(amount)
+	if amount <= 0.0:
+		return 0.0
 	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
 	_update_hp_bar()
@@ -216,12 +223,35 @@ func _damage_overlapping_players() -> void:
 
 
 func _try_damage_player(body: Node) -> void:
+	if is_stunned():
+		return
 	if hit_targets.has(body):
 		return
 
 	if body.is_in_group("player") and body.has_method("take_damage"):
 		hit_targets.append(body)
 		body.call("take_damage", damage)
+
+
+func _on_stun_applied() -> void:
+	super()
+	if attack_phase != &"idle":
+		release_attack_token()
+	attack_phase = &"idle"
+	attack_elapsed = 0.0
+	action_animation_remaining = 0.0
+	post_attack_fatigue_remaining = 0.0
+	if attack_area != null:
+		attack_area.monitoring = false
+	if warning_cone != null:
+		warning_cone.visible = false
+	_reset_attack_hold_squash()
+
+
+func _handle_stunned_physics(delta: float) -> void:
+	_on_stun_applied()
+	_update_zombie_animation(delta)
+	_update_attack_hold_squash(delta)
 
 
 func _disable_hitbox() -> void:

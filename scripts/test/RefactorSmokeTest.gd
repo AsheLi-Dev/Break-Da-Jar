@@ -105,7 +105,14 @@ func _test_dynamic_play_area_talent() -> void:
 	player.set("talent_wizard_large_map_more_containers_enabled", false)
 	battle_scene.call("_refresh_play_area_from_player", true)
 
+	battle_scene.set("current_round", 10)
+	battle_scene.call("_refresh_play_area_from_player", true)
+	var round_ten_rect: Rect2 = battle_scene.call("_get_play_area_rect")
+	_assert(round_ten_rect.size.is_equal_approx(Vector2(1472, 1472)), "Round 10 expands BattleScene play area by 15%")
+	_assert(player.movement_bounds.size.is_equal_approx(round_ten_rect.size), "Round 10 updates player movement bounds")
+
 	battle_scene.set("current_round", 6)
+	battle_scene.call("_refresh_play_area_from_player", true)
 	_assert(int(battle_scene.call("_get_combat_container_count")) == 40, "Round 6 returns to normal combat container count")
 	_assert(is_equal_approx(float(battle_scene.call("_get_round_enemy_max_hp_multiplier")), 1.1), "Round 6 adds 10% enemy max HP")
 	battle_scene.set("current_round", 7)
@@ -203,6 +210,29 @@ func _test_shop_phase() -> void:
 		_assert(container.get_node_or_null("ShopLabel") != null, "Shop jar has price label")
 		var data: Dictionary = shop_data.get(container, {})
 		_assert(int(data.get("price", 0)) > 0, "Shop jar has positive price")
+
+	var first_shop_container := shop_containers[0] as BreakableContainer
+	var first_shop_data: Dictionary = shop_data.get(first_shop_container, {})
+	var first_shop_price := int(first_shop_data.get("price", 0))
+	_assert(battle_scene.call("_get_shop_container_at_position", first_shop_container.global_position) == first_shop_container, "Shop jar can be selected by click position")
+
+	var projectile := Projectile.new()
+	projectile.damage = first_shop_container.max_hp
+	projectile.target_group = &"enemy"
+	battle_scene.call("_on_container_area_entered", projectile, first_shop_container)
+	_assert(is_equal_approx(first_shop_container.hp, first_shop_container.max_hp), "Player attacks do not damage shop jars")
+	projectile.free()
+
+	battle_scene.set("gold", maxi(first_shop_price - 1, 0))
+	var bought_without_gold := bool(battle_scene.call("_try_purchase_shop_container", first_shop_container))
+	_assert(not bought_without_gold, "Shop jar purchase fails without enough gold")
+	_assert(is_equal_approx(first_shop_container.hp, first_shop_container.max_hp), "Unaffordable shop jar stays intact")
+
+	battle_scene.set("gold", first_shop_price)
+	var bought_with_gold := bool(battle_scene.call("_try_purchase_shop_container", first_shop_container))
+	_assert(bought_with_gold, "Shop jar purchase succeeds with enough gold")
+	_assert(int(battle_scene.get("gold")) == 0, "Shop jar purchase spends its price")
+	_assert(first_shop_container.is_breaking, "Purchased shop jar breaks immediately")
 
 	player.set("talent_wizard_guaranteed_legendary_shop_jar_enabled", true)
 	battle_scene.call("_spawn_shop_containers")

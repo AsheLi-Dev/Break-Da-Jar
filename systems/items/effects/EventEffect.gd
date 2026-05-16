@@ -97,6 +97,8 @@ func _on_player_event(arg1: Variant = null, arg2: Variant = null, arg3: Variant 
 	match effect_type:
 		&"apply_poison_near_container":
 			_apply_poison_near_position(_extract_position(arg1), 1)
+		&"apply_stun_near_container":
+			_apply_stun_near_position(_extract_position(arg1))
 		&"spread_bleeding_on_death":
 			_spread_bleeding_on_death(arg1)
 		&"chain_lightning":
@@ -622,6 +624,13 @@ func _apply_poison_near_position(origin: Vector2, stacks: int) -> void:
 			enemy.apply_poison_stacks(stacks, owner_player)
 
 
+func _apply_stun_near_position(origin: Vector2) -> void:
+	var stun_duration := value + damage_scale * float(maxi(_get_item_count() - 1, 0))
+	for enemy in _get_enemies_near(origin, radius):
+		if enemy.has_method("apply_stun_duration"):
+			enemy.apply_stun_duration(stun_duration, owner_player)
+
+
 func _trigger_chain_lightning(origin: Vector2, already_hit: Array = []) -> bool:
 	var stats: StatsComponent = owner_player.get_stats()
 	if stats == null:
@@ -647,11 +656,20 @@ func _trigger_chain_lightning(origin: Vector2, already_hit: Array = []) -> bool:
 		did_hit = true
 		if target.is_in_group("enemy") and owner_player.has_method("deal_player_damage_to_enemy"):
 			owner_player.deal_player_damage_to_enemy(target, damage, {"source": "chain_lightning", "direct": true, "allow_procs": false})
+			_apply_chain_lightning_stun(target, stats)
 		elif target.has_method("take_damage"):
 			target.take_damage(damage, {"source": "chain_lightning", "owner": owner_player})
 	if did_hit:
 		_play_chain_lightning_sfx(origin)
 	return did_hit
+
+
+func _apply_chain_lightning_stun(target: Node, stats: StatsComponent) -> void:
+	if target == null or not target.has_method("apply_stun_duration"):
+		return
+	if stats.chain_lightning_stun_duration <= 0.0:
+		return
+	target.apply_stun_duration(stats.chain_lightning_stun_duration, owner_player)
 
 
 func _spawn_chain_lightning_vfx(start_position: Vector2, end_position: Vector2) -> void:

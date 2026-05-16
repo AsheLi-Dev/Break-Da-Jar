@@ -99,6 +99,8 @@ func _process(delta: float) -> void:
 			_update_periodic_blood_blade(delta)
 		&"periodic_explosive_trap":
 			_update_periodic_explosive_trap(delta)
+		&"periodic_holy_retribution":
+			_update_periodic_holy_retribution(delta)
 		&"periodic_invincibility":
 			_update_periodic_invincibility(delta)
 		&"periodic_damage_shield":
@@ -291,6 +293,27 @@ func _update_periodic_explosive_trap(delta: float) -> void:
 	periodic_remaining = internal_cooldown
 
 
+func _update_periodic_holy_retribution(delta: float) -> void:
+	periodic_remaining -= delta
+	if periodic_remaining > 0.0:
+		return
+
+	var owner_2d := owner_player as Node2D
+	if owner_2d == null:
+		return
+
+	var target := _get_nearest_enemy(owner_2d.global_position, radius)
+	if target == null:
+		return
+
+	var extra_copies := float(maxi(_get_item_count() - 1, 0))
+	var damage_multiplier := value + damage_scale * extra_copies
+	var area_multiplier := value + damage_scale * extra_copies
+	if owner_player.has_method("trigger_periodic_holy_retribution"):
+		owner_player.call("trigger_periodic_holy_retribution", target.global_position, damage_multiplier, area_multiplier)
+	periodic_remaining = internal_cooldown
+
+
 func _update_periodic_invincibility(delta: float) -> void:
 	periodic_remaining -= delta
 	if periodic_remaining > 0.0:
@@ -360,11 +383,23 @@ func _trigger_auto_chain_lightning(origin: Vector2, damage_multiplier: float) ->
 		did_hit = true
 		if owner_player != null and owner_player.has_method("deal_player_damage_to_enemy"):
 			owner_player.deal_player_damage_to_enemy(target, damage, {"source": "periodic_chain_lightning", "direct": true, "allow_procs": false})
+			_apply_chain_lightning_stun(target)
 		elif target.has_method("take_damage"):
 			target.take_damage(damage)
 
 	if did_hit:
 		_play_chain_lightning_sfx(origin)
+
+
+func _apply_chain_lightning_stun(target: Node) -> void:
+	if owner_player == null or not owner_player.has_method("get_stats"):
+		return
+	if target == null or not target.has_method("apply_stun_duration"):
+		return
+	var stats: StatsComponent = owner_player.get_stats()
+	if stats == null or stats.chain_lightning_stun_duration <= 0.0:
+		return
+	target.apply_stun_duration(stats.chain_lightning_stun_duration, owner_player)
 
 
 func _launch_blood_claw(start_position: Vector2, target_position: Vector2) -> void:

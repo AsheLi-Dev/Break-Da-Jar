@@ -129,6 +129,8 @@ func _damage_enemy(enemy: Node) -> void:
 func _damage_container(container: Node) -> void:
 	if damaged_containers.has(container) or not container.has_method("take_damage"):
 		return
+	if container is BreakableContainer and container.is_shop_container:
+		return
 
 	damaged_containers.append(container)
 	container.take_damage(damage, {"source": attack_source, "owner": owner_player})

@@ -1,8 +1,6 @@
 extends Node2D
 class_name ShopItemRewardVisual
 
-const ITEM_ICON_DARK_PIXEL_MATERIAL: ShaderMaterial = preload("res://systems/items/ui/ItemIconDarkPixelMaterial.tres")
-
 @export var hover_duration: float = 0.45
 @export var fly_speed: float = 900.0
 @export var collect_distance: float = 22.0
@@ -91,7 +89,6 @@ func _ensure_visual() -> void:
 	icon_sprite = Sprite2D.new()
 	icon_sprite.name = "Icon"
 	icon_sprite.texture = item.icon if item != null else null
-	icon_sprite.material = ITEM_ICON_DARK_PIXEL_MATERIAL
 	icon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon_sprite.position = hover_offset
 	if icon_sprite.texture != null:

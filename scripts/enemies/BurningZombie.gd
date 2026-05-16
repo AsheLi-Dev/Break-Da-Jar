@@ -53,6 +53,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 
+	if is_stunned():
+		_handle_stunned_physics(delta)
+		return
+
 	if _update_knockback(delta):
 		_update_burning_animation(delta)
 		return
@@ -77,6 +81,9 @@ func take_damage(amount: float, source: Node = null, attack_info: Dictionary = {
 
 	last_damage_source = source
 	last_attack_info = attack_info
+	amount = _apply_incoming_damage_modifiers(amount)
+	if amount <= 0.0:
+		return 0.0
 	var old_hp: float = hp
 	hp = maxf(0.0, hp - amount)
 	_update_hp_bar()
@@ -107,6 +114,8 @@ func die() -> void:
 
 
 func _try_contact_damage() -> void:
+	if is_stunned():
+		return
 	if contact_damage_remaining > 0.0 or target == null:
 		return
 	if not _is_target_inside_contact_damage_shape():
@@ -114,6 +123,12 @@ func _try_contact_damage() -> void:
 	if target.has_method("take_damage"):
 		target.call("take_damage", contact_damage)
 		contact_damage_remaining = contact_damage_interval
+
+
+func _handle_stunned_physics(delta: float) -> void:
+	_on_stun_applied()
+	action_animation_remaining = 0.0
+	_update_burning_animation(delta)
 
 
 func _face_target(world_position: Vector2) -> void:

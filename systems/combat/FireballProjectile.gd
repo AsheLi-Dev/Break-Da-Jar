@@ -90,6 +90,8 @@ func explode(is_natural: bool = false) -> void:
 		explosion_radius *= maxf(float(owner_player.call("get_fireball_natural_explosion_radius_multiplier")), 0.0)
 	if is_natural and owner_player != null and owner_player.has_method("on_fireball_natural_explosion"):
 		owner_player.call("on_fireball_natural_explosion", self)
+	if owner_player != null and owner_player.has_method("on_fireball_exploded"):
+		owner_player.call("on_fireball_exploded", self)
 	if explode_replacement_callback.is_valid() and bool(explode_replacement_callback.call(global_position, is_natural)):
 		_spawn_explosion_vfx()
 		_damage_containers_in_radius()

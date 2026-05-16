@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/PeriodicEffect.gd" id="2_periodic"]
+[ext_resource type="Texture2D" path="res://assets/items/dark_realistic_pixel_icons/judgment_bell.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_periodic")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "One runtime trigger handles all copies. Every 5s, cast Holy Retribution at the nearest enemy. Each extra copy adds +50% damage and +50% area linearly."
+mode = &"periodic_holy_retribution"
+value = 1.0
+radius = 99999.0
+damage_scale = 0.5
+interval = 5.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"judgment_bell"
+display_name = "Judgment Bell"
+description = "Every 5s, cast Holy Retribution on the nearest enemy. Copies add +50% damage and area."
+category = &"attack"
+rarity = &"legendary"
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])

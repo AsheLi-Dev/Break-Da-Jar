@@ -32,6 +32,8 @@ signal stat_changed(stat_name: StringName, value: Variant)
 @export var fireball_chance: float = 0.0
 @export var chain_lightning_damage_scale_override: float = -1.0
 @export var chain_lightning_can_target_containers: bool = false
+@export var chain_lightning_stun_duration: float = 0.0
+@export var slide_contact_stun_duration: float = 0.0
 @export var fireball_poison_stacks: int = 0
 @export var permanent_growth_bonus_per_unique: float = 0.0
 
@@ -172,6 +174,12 @@ func _add_stat(stat_name: StringName, value: float) -> void:
 		&"chain_lightning_can_target_containers":
 			chain_lightning_can_target_containers = value >= 1.0
 			_emit_change(stat_name, chain_lightning_can_target_containers)
+		&"chain_lightning_stun_duration":
+			chain_lightning_stun_duration = maxf(0.0, chain_lightning_stun_duration + value)
+			_emit_change(stat_name, chain_lightning_stun_duration)
+		&"slide_contact_stun_duration":
+			slide_contact_stun_duration = maxf(0.0, slide_contact_stun_duration + value)
+			_emit_change(stat_name, slide_contact_stun_duration)
 		&"fireball_poison_stacks":
 			fireball_poison_stacks += int(round(value))
 			_emit_change(stat_name, fireball_poison_stacks)
@@ -253,6 +261,10 @@ func _get_numeric_stat(stat_name: StringName) -> float:
 			return fireball_chance
 		&"chain_lightning_damage_scale_override":
 			return chain_lightning_damage_scale_override
+		&"chain_lightning_stun_duration":
+			return chain_lightning_stun_duration
+		&"slide_contact_stun_duration":
+			return slide_contact_stun_duration
 		&"fireball_poison_stacks":
 			return fireball_poison_stacks
 		&"permanent_growth_bonus_per_unique":

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Texture2D" path="res://assets/items/dark_realistic_pixel_icons/stunning_rupture.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_event")
+stacking_rule = &"shared_trigger_scaled_by_copies"
+stacking_notes = "One listener handles all copies. When a container breaks, nearby enemies are stunned for 1s; each extra copy adds 0.5s."
+event_name = &"container_broken"
+effect_type = &"apply_stun_near_container"
+value = 1.0
+damage_scale = 0.5
+radius = 160.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"stunning_rupture"
+display_name = "Stunning Rupture"
+description = "Breaking a container stuns nearby enemies for 1s. Copies add +0.5s stun."
+category = &"utility"
+rarity = &"legendary"
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])
