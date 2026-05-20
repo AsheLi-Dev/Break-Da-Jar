@@ -159,10 +159,17 @@ func _cleanup_scene() -> void:
 	root.get_tree().paused = false
 	current_scene = null
 	player = null
+	_cleanup_audio_players()
 	if battle_scene != null and is_instance_valid(battle_scene):
 		if battle_scene.get_parent() != null:
 			battle_scene.get_parent().remove_child(battle_scene)
 		battle_scene.free()
-		await process_frame
-		await process_frame
 	battle_scene = null
+	for _index in range(12):
+		await process_frame
+
+
+func _cleanup_audio_players() -> void:
+	for child in root.get_children():
+		if child is AudioStreamPlayer or child is AudioStreamPlayer2D:
+			child.queue_free()

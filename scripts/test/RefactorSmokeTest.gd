@@ -287,6 +287,7 @@ func _test_runtime_items():
 	if player == null or item_database == null:
 		return
 
+	player.setup_character(&"wizard")
 	var runtime_item_ids: Array[StringName] = [
 		&"auto_fireball",
 		&"static_conduit",
@@ -383,6 +384,7 @@ func _cleanup_scene() -> void:
 	root.get_tree().paused = false
 	current_scene = null
 	player = null
+	await create_timer(1.0).timeout
 	if battle_scene != null and is_instance_valid(battle_scene):
 		if battle_scene.get_parent() != null:
 			battle_scene.get_parent().remove_child(battle_scene)
@@ -391,5 +393,5 @@ func _cleanup_scene() -> void:
 		await process_frame
 	battle_scene = null
 	item_database = null
-	await create_timer(0.1).timeout
-	await process_frame
+	for _index in range(12):
+		await process_frame

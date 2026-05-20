@@ -12,11 +12,14 @@ const RUN_FPS := 12.0
 const IDLE_TEXTURE_PATH := "res://assets/summons/5archer/idle.png"
 const RUN_TEXTURE_PATH := "res://assets/summons/5archer/run.png"
 const ATTACK_TEXTURE_PATH := "res://assets/summons/5archer/attack1.png"
+const DIE_TEXTURE_PATH := "res://assets/summons/5archer/die.png"
 
 @export var follow_lerp_speed: float = 8.0
 @export var follow_radius: float = 64.0
 @export var attack_range: float = 620.0
 @export var damage_inherit_multiplier: float = 1.0
+@export var damage_growth_per_second: float = 0.0
+@export var poison_chance: float = 0.0
 @export var attack_speed_inherit_multiplier: float = 0.75
 @export var target_group: StringName = &"enemy"
 
@@ -35,6 +38,13 @@ var current_direction_row: int = -1
 var idle_texture: Texture2D
 var run_texture: Texture2D
 var attack_texture: Texture2D
+var die_texture: Texture2D
+var timed_attack_speed_multiplier: float = 1.0
+var timed_attack_speed_remaining: float = 0.0
+var die_when_timed_attack_speed_ends: bool = false
+var alive_time: float = 0.0
+var dying: bool = false
+var death_elapsed: float = 0.0
 
 
 func setup(new_owner: Node2D, new_follow_offset: Vector2) -> void:
@@ -47,16 +57,23 @@ func _ready() -> void:
 	idle_texture = _load_texture(IDLE_TEXTURE_PATH)
 	run_texture = _load_texture(RUN_TEXTURE_PATH)
 	attack_texture = _load_texture(ATTACK_TEXTURE_PATH)
+	die_texture = _load_texture(DIE_TEXTURE_PATH)
 	_set_animation_texture(idle_texture)
 	if owner_player != null and is_instance_valid(owner_player):
 		global_position = owner_player.global_position + follow_offset
 
 
 func _process(delta: float) -> void:
+	if dying:
+		_update_death(delta)
+		return
+
 	if owner_player == null or not is_instance_valid(owner_player):
 		queue_free()
 		return
 
+	_update_timed_attack_speed(delta)
+	alive_time += delta
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	if attacking:
 		_update_attack(delta)
@@ -76,6 +93,36 @@ func _process(delta: float) -> void:
 
 func set_follow_offset(new_follow_offset: Vector2) -> void:
 	follow_offset = new_follow_offset
+
+
+func play_death_and_free() -> void:
+	if dying:
+		return
+	dying = true
+	attacking = false
+	attack_target = null
+	if owner_player != null and is_instance_valid(owner_player) and owner_player.has_method("remove_necromancer_skeleton_archer"):
+		owner_player.call("remove_necromancer_skeleton_archer", self)
+	death_elapsed = 0.0
+	_set_animation_texture(die_texture)
+	_set_frame(0)
+
+
+func apply_timed_attack_speed_multiplier(multiplier: float, duration: float, die_on_expire: bool = false) -> void:
+	timed_attack_speed_multiplier = maxf(multiplier, 1.0)
+	timed_attack_speed_remaining = maxf(duration, timed_attack_speed_remaining)
+	die_when_timed_attack_speed_ends = die_when_timed_attack_speed_ends or die_on_expire
+
+
+func _update_timed_attack_speed(delta: float) -> void:
+	if timed_attack_speed_remaining <= 0.0:
+		return
+	timed_attack_speed_remaining = maxf(0.0, timed_attack_speed_remaining - delta)
+	if timed_attack_speed_remaining <= 0.0:
+		timed_attack_speed_multiplier = 1.0
+		if die_when_timed_attack_speed_ends:
+			die_when_timed_attack_speed_ends = false
+			play_death_and_free()
 
 
 func _follow_owner(delta: float) -> void:
@@ -116,6 +163,14 @@ func _update_attack(delta: float) -> void:
 		attack_target = null
 
 
+func _update_death(delta: float) -> void:
+	death_elapsed += delta
+	var frame_index := mini(int(floorf(death_elapsed * ATTACK_FPS)), FRAMES_PER_DIRECTION - 1)
+	_set_frame(frame_index)
+	if frame_index >= FRAMES_PER_DIRECTION - 1:
+		queue_free()
+
+
 func _deal_attack_damage() -> void:
 	var target := attack_target
 	if target == null or not is_instance_valid(target):
@@ -128,12 +183,24 @@ func _deal_attack_damage() -> void:
 		owner_player.deal_player_damage_to_enemy(target, damage, {"source": "skeleton_archer", "direct": true, "allow_procs": false})
 	elif target.has_method("take_damage"):
 		target.take_damage(damage)
+	_maybe_apply_poison(target)
+
+
+func _maybe_apply_poison(target: Node) -> void:
+	if poison_chance <= 0.0 or randf() >= poison_chance:
+		return
+	var status_owner: Node = owner_player if owner_player != null and is_instance_valid(owner_player) else null
+	if target.has_method("apply_status_effect"):
+		target.apply_status_effect(&"poison", status_owner)
+	elif target.has_method("apply_poison_stacks"):
+		target.apply_poison_stacks(1, status_owner)
 
 
 func _get_attack_damage() -> float:
+	var growth_multiplier := 1.0 + float(floori(alive_time)) * damage_growth_per_second
 	if owner_player != null and owner_player.has_method("get_base_attack_damage"):
-		return owner_player.get_base_attack_damage() * damage_inherit_multiplier
-	return 6.0
+		return owner_player.get_base_attack_damage() * damage_inherit_multiplier * growth_multiplier
+	return 6.0 * growth_multiplier
 
 
 func _get_attack_interval() -> float:
@@ -146,7 +213,7 @@ func _get_attack_interval() -> float:
 			var stats: StatsComponent = owner_player.get_stats()
 			if stats != null:
 				base_interval = stats.get_attack_interval(base_interval)
-	return base_interval / maxf(attack_speed_inherit_multiplier, 0.01)
+	return base_interval / maxf(attack_speed_inherit_multiplier * timed_attack_speed_multiplier, 0.01)
 
 
 func _get_nearest_enemy() -> Node2D:

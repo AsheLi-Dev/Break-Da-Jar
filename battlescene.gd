@@ -59,7 +59,7 @@ const MAX_RANGED_ENEMY_ATTACK_TOKENS := 3
 const MAX_ELITE_ENEMY_ATTACK_TOKENS := 2
 
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player/Player.tscn")
-const DEFAULT_CHARACTER_ID := &"wizard"
+const DEFAULT_CHARACTER_ID := &"necromancer"
 const MELEE_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/ZombieMelee.tscn")
 const BURNING_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/BurningZombie.tscn")
 const ACID_ZOMBIE_SCENE: PackedScene = preload("res://scenes/enemies/AcidZombie.tscn")

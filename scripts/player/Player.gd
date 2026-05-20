@@ -44,9 +44,26 @@ const TALENT_CATALOG := preload("res://scripts/player/PlayerTalentCatalog.gd")
 const CHARACTER_DATABASE := preload("res://scripts/player/CharacterDatabase.gd")
 const HOLY_FLAME_LASER_SCRIPT := preload("res://systems/combat/HolyFlameLaser.gd")
 const FIRE_ESSENCE_PICKUP_SCRIPT := preload("res://systems/combat/FireEssencePickup.gd")
+const SKELETON_ARCHER_SCENE: PackedScene = preload("res://scenes/summons/SkeletonArcher.tscn")
+const NECROMANCER_SHADOW_SCRIPT := preload("res://systems/combat/NecromancerShadow.gd")
 const LIGHTNING_CHAIN_TEXTURE_PATH := "res://assets/vfx/lightning spell/lightning chain 256x256.png"
 const LIGHTNING_CHAIN_FRAME_SIZE := Vector2(256.0, 256.0)
 const LIGHTNING_CHAIN_SFX: AudioStream = preload("res://assets/sfx/dragon-studio-lightning-spell-386163.mp3")
+const SOUL_SIPHON_BEAM_TEXTURE_PATH := "res://assets/vfx/dark spell/soul_siphon_beam.png"
+const SOUL_SIPHON_BEAM_FRAME_SIZE := Vector2i(265, 81)
+const SOUL_SIPHON_BEAM_FRAME_COUNT := 7
+const SOUL_SIPHON_LIGHTNING_OVERLAY_TEXTURE_PATH := "res://assets/vfx/dark spell/soul_siphon_lightning_overlay.png"
+const SOUL_SIPHON_LIGHTNING_OVERLAY_FRAME_SIZE := Vector2i(256, 128)
+const SOUL_SIPHON_LIGHTNING_OVERLAY_FRAME_COUNT := 6
+const NECROMANCER_MAX_SKELETON_ARCHERS := 3
+const NECROMANCER_SKELETON_ARCHER_LIFETIME := 10.0
+const NECROMANCER_SLIDE_SKELETON_ARCHER_ATTACK_SPEED_MULTIPLIER := 1.2
+const NECROMANCER_SLIDE_SKELETON_ARCHER_ATTACK_SPEED_DURATION := 2.0
+const NECROMANCER_SOUL_SIPHON_SKELETON_ARCHER_ATTACK_SPEED_MULTIPLIER := 2.0
+const NECROMANCER_SOUL_SIPHON_SKELETON_ARCHER_ATTACK_SPEED_DURATION := 2.0
+const NECROMANCER_DEATH_EXPLOSION_RADIUS := 150.0
+const NECROMANCER_DEATH_EXPLOSION_DAMAGE_MULTIPLIER := 0.5
+const NECROMANCER_ROUND_MOVE_SPEED_BONUS_PER_SECOND := 0.05
 
 signal attack_hit(enemy: Node, damage_dealt: float, attack_info: Dictionary)
 signal attack_started(origin: Vector2, direction: Vector2, attack_info: Dictionary)
@@ -184,6 +201,28 @@ var talent_max_hp_per_common_item_enabled: bool = false
 var talent_item_max_hp_bonus_multiplier_enabled: bool = false
 var talent_slide_defense_bonus_enabled: bool = false
 var talent_damage_taken_lifesteal_enabled: bool = false
+var talent_necromancer_soul_siphon_damage_bonus_enabled: bool = false
+var talent_necromancer_soul_siphon_damage_per_skeleton_archer_enabled: bool = false
+var talent_necromancer_soul_siphon_bleed_chance_enabled: bool = false
+var talent_necromancer_poison_stack_damage_enabled: bool = false
+var talent_necromancer_black_shadow_pursuit_enabled: bool = false
+var talent_necromancer_round_movement_speed_per_second_enabled: bool = false
+var talent_necromancer_enemy_death_explosion_enabled: bool = false
+var talent_necromancer_kill_atk_damage_loss_enabled: bool = false
+var talent_necromancer_bleeding_move_speed_slow_enabled: bool = false
+var talent_necromancer_skeleton_archer_damage_bonus_enabled: bool = false
+var talent_necromancer_skeleton_archer_damage_growth_enabled: bool = false
+var talent_necromancer_skeleton_archer_poison_chance_enabled: bool = false
+var talent_necromancer_skeleton_archer_lifetime_and_cap_enabled: bool = false
+var talent_necromancer_soul_siphon_skeleton_archer_attack_speed_enabled: bool = false
+var talent_necromancer_skeleton_archer_attack_speed_bonus_enabled: bool = false
+var talent_necromancer_xp_per_10_kills_enabled: bool = false
+var talent_necromancer_gold_per_10_kills_enabled: bool = false
+var talent_necromancer_defense_per_10_kills_enabled: bool = false
+var talent_necromancer_atk_per_20_kills_enabled: bool = false
+var talent_necromancer_max_hp_per_10_kills_enabled: bool = false
+var talent_necromancer_slide_soul_siphon_damage_bonus_enabled: bool = false
+var talent_necromancer_slide_skeleton_archer_attack_speed_enabled: bool = false
 var talent_holy_strike_movement_stack_enabled: bool = false
 var talent_holy_strike_long_range_enabled: bool = false
 var talent_holy_strike_focused_zeal_enabled: bool = false
@@ -271,6 +310,12 @@ var applied_wizard_nearby_enemy_attack_speed: float = -1.0
 var applied_wizard_nearby_enemy_move_speed: float = -1.0
 var applied_wizard_nearby_enemy_elite_damage: float = -1.0
 var holy_strike_zombie_inscription_kills: int = 0
+var necromancer_xp_kill_counter: int = 0
+var necromancer_gold_kill_counter: int = 0
+var necromancer_defense_kill_counter: int = 0
+var necromancer_atk_kill_counter: int = 0
+var necromancer_max_hp_kill_counter: int = 0
+var necromancer_kill_atk_damage_loss_bonus: int = 0
 var altar_blessings: Dictionary = {}
 var altar_blessing_kill_gold_counter: int = 0
 var altar_blessing_kill_xp_counter: int = 0
@@ -286,6 +331,8 @@ var applied_wizard_rare_item_move_speed: int = 0
 var applied_talent_stat_values: Dictionary = {}
 var next_attack_after_slide_ready: bool = false
 var next_wizard_slide_fireball_ready: bool = false
+var next_necromancer_slide_soul_siphon_ready: bool = false
+var necromancer_slide_skeleton_archer_attack_speed_remaining: float = 0.0
 var next_attack_damage_bonus: float = 0.0
 var shop_price_multiplier: float = 1.0
 var extra_rare_shop_jars_pending: int = 0
@@ -354,6 +401,10 @@ var hurt_slow_restore_token: int = 0
 var hurt_slow_original_time_scale: float = 1.0
 var hurt_slow_active: bool = false
 var hurt_feedback_cooldown_remaining: float = 0.0
+var necromancer_skeleton_archers: Array[Node] = []
+var necromancer_black_shadow: Node2D
+var necromancer_round_movement_speed_active: bool = false
+var necromancer_round_movement_speed_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -389,6 +440,8 @@ func setup_character(character_id: StringName) -> void:
 
 func _exit_tree() -> void:
 	_force_restore_hurt_slow_motion()
+	_cleanup_necromancer_skeleton_archers(true)
+	_cleanup_necromancer_black_shadow()
 
 
 func _physics_process(delta: float) -> void:
@@ -403,6 +456,8 @@ func _physics_process(delta: float) -> void:
 	_update_wizard_fire_surge_attack_speed_bonus()
 	_update_wizard_nearby_poison_aura(delta)
 	_update_wizard_fire_essence_spawner(delta)
+	_update_necromancer_slide_skeleton_archer_attack_speed(delta)
+	_update_necromancer_round_movement_speed(delta)
 	_update_hp_regen(delta)
 	_update_facing()
 
@@ -461,6 +516,7 @@ func take_damage(amount: float) -> void:
 	holy_strike_undamaged_time = 0.0
 	hp_changed.emit(roundi(hp), roundi(max_hp))
 	damage_taken.emit(final_damage)
+	_apply_necromancer_kill_atk_damage_loss()
 	_trigger_wizard_damage_taken_fireball_natural_explosions()
 	if talent_damage_taken_lifesteal_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"damage_taken_lifesteal", &"lifesteal", 0.2, 2.0, 1)
@@ -778,6 +834,11 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 			if poison_stacks > 0:
 				final_damage *= 1.0 + 0.05 * float(poison_stacks)
 				attack_info["wizard_poison_stack_damage_bonus"] = poison_stacks
+		if talent_necromancer_poison_stack_damage_enabled:
+			var necromancer_poison_stacks := _get_enemy_poison_stacks(enemy)
+			if necromancer_poison_stacks > 0:
+				final_damage *= 1.0 + 0.05 * float(necromancer_poison_stacks)
+				attack_info["necromancer_poison_stack_damage_bonus"] = necromancer_poison_stacks
 		if talent_wizard_nearby_damage_focus_enabled:
 			if _is_enemy_nearby(enemy):
 				final_damage *= 1.5
@@ -957,6 +1018,10 @@ func notify_enemy_killed(enemy: Node) -> void:
 		_trigger_wizard_poisoned_death_fire_laser(enemy)
 	if talent_wizard_quick_kill_max_hp_enabled:
 		_try_gain_wizard_quick_kill_max_hp(enemy)
+	if talent_necromancer_kill_atk_damage_loss_enabled:
+		_apply_necromancer_kill_atk_gain()
+	if talent_necromancer_enemy_death_explosion_enabled:
+		_trigger_necromancer_enemy_death_explosion(enemy)
 	if talent_wizard_kill_move_speed_burst_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"wizard_kill_move_speed_burst", &"movement_speed_bonus", 2.0, 0.2, 1)
 	if talent_wizard_kill_atk_stack_enabled and temporary_buffs != null:
@@ -972,6 +1037,31 @@ func notify_enemy_killed(enemy: Node) -> void:
 		while holy_strike_zombie_inscription_kills >= 10:
 			holy_strike_zombie_inscription_kills -= 10
 			stats.apply_modifier(&"surrounded_enemy_count_bonus", &"add", 1.0)
+	if talent_necromancer_xp_per_10_kills_enabled:
+		necromancer_xp_kill_counter += 1
+		while necromancer_xp_kill_counter >= 10:
+			necromancer_xp_kill_counter -= 10
+			gain_experience(1)
+	if talent_necromancer_gold_per_10_kills_enabled:
+		necromancer_gold_kill_counter += 1
+		while necromancer_gold_kill_counter >= 10:
+			necromancer_gold_kill_counter -= 10
+			add_gold(1, "Bone Tithe")
+	if talent_necromancer_defense_per_10_kills_enabled and stats != null:
+		necromancer_defense_kill_counter += 1
+		while necromancer_defense_kill_counter >= 10:
+			necromancer_defense_kill_counter -= 10
+			stats.apply_modifier(&"defense", &"add", 1.0)
+	if talent_necromancer_atk_per_20_kills_enabled and stats != null:
+		necromancer_atk_kill_counter += 1
+		while necromancer_atk_kill_counter >= 20:
+			necromancer_atk_kill_counter -= 20
+			stats.apply_modifier(&"atk", &"add", 1.0)
+	if talent_necromancer_max_hp_per_10_kills_enabled and stats != null:
+		necromancer_max_hp_kill_counter += 1
+		while necromancer_max_hp_kill_counter >= 10:
+			necromancer_max_hp_kill_counter -= 10
+			stats.apply_modifier(&"max_hp", &"add", 1.0)
 	if has_altar_blessing(&"kill_gold"):
 		altar_blessing_kill_gold_counter += 1
 		while altar_blessing_kill_gold_counter >= 10:
@@ -1373,6 +1463,10 @@ func _try_cast_shockwave() -> void:
 	_play_action_animation_with_direction(&"ability", _get_action_animation_time(&"ability"), facing_direction)
 	if secondary_ability == &"wizard_fire_laser":
 		get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_cast_wizard_fire_laser)
+	elif secondary_ability == &"necromancer_soul_beam":
+		get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_cast_necromancer_soul_beam)
+	elif secondary_ability == &"necromancer_skeleton_archer":
+		get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_summon_necromancer_skeleton_archer)
 	else:
 		get_tree().create_timer(_get_shockwave_hit_time()).timeout.connect(_start_shockwave_effect)
 
@@ -1405,6 +1499,9 @@ func _maybe_apply_blessing() -> void:
 	if utility_ability == &"wizard_fire_surge":
 		_start_fire_surge()
 		return
+	if utility_ability == &"necromancer_soul_surge":
+		_start_necromancer_soul_surge()
+		return
 	if pending_blessing_is_attack:
 		_apply_attack_blessing()
 	else:
@@ -1434,6 +1531,314 @@ func _start_shockwave_effect() -> void:
 	_start_camera_shake(5.0, 0.12)
 	get_tree().create_timer(shockwave_visible_time).timeout.connect(_hide_shockwave_visual)
 	get_tree().create_timer(_get_shockwave_effect_damage_time()).timeout.connect(_perform_shockwave_attack.bind(shockwave_center))
+
+
+func _launch_necromancer_soul_orb(target_position: Vector2) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var direction := target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	var projectile := _make_player_projectile()
+	if projectile == null:
+		return
+
+	var damage := get_base_attack_damage()
+	if utility_ability == &"necromancer_soul_surge" and fire_surge_remaining > 0.0:
+		damage *= 1.25
+	projectile.global_position = global_position + direction * 28.0
+	projectile.owner_player = self
+	projectile.debug_color = Color(0.52, 0.16, 0.92)
+	projectile.setup(direction, damage, 560.0, 1.0, &"enemy")
+	projectile.collision_layer = 1 << 2
+	projectile.collision_mask = 1 << 1
+	attack_started.emit(global_position, direction, {"source": "necromancer_soul_orb", "direct": true, "allow_procs": true})
+	get_tree().current_scene.add_child(projectile)
+
+
+func _make_player_projectile() -> Projectile:
+	if projectile_scene != null:
+		return projectile_scene.instantiate() as Projectile
+	return Projectile.new()
+
+
+func _cast_necromancer_soul_beam() -> void:
+	var target_position := pending_shockwave_target_position
+	var direction := target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	_spawn_necromancer_soul_beam(global_position, direction)
+
+
+func _fire_necromancer_soul_beam(target_position: Vector2) -> void:
+	var direction := target_position - global_position
+	if direction.length_squared() <= 0.001:
+		direction = facing_direction
+	else:
+		direction = direction.normalized()
+
+	_spawn_necromancer_soul_beam(global_position, direction)
+
+
+func _spawn_necromancer_soul_beam(start_position: Vector2, direction: Vector2) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+
+	var laser := HOLY_FLAME_LASER_SCRIPT.new() as HolyFlameLaser
+	laser.length = 300.0
+	laser.width = 52.0
+	laser.animation_fps = 24.0
+	laser.beam_texture = _load_texture_compat(SOUL_SIPHON_BEAM_TEXTURE_PATH)
+	laser.beam_frame_size = SOUL_SIPHON_BEAM_FRAME_SIZE
+	laser.beam_frame_count = SOUL_SIPHON_BEAM_FRAME_COUNT
+	laser.overlay_beam_texture = _load_texture_compat(SOUL_SIPHON_LIGHTNING_OVERLAY_TEXTURE_PATH)
+	laser.overlay_beam_frame_size = SOUL_SIPHON_LIGHTNING_OVERLAY_FRAME_SIZE
+	laser.overlay_beam_frame_count = SOUL_SIPHON_LIGHTNING_OVERLAY_FRAME_COUNT
+	laser.modulate = Color(1.0, 1.0, 1.0, 0.95)
+	var damage := get_base_attack_damage() * 1.35
+	if talent_necromancer_soul_siphon_damage_bonus_enabled:
+		damage *= 1.15
+	if talent_necromancer_soul_siphon_damage_per_skeleton_archer_enabled:
+		_cleanup_necromancer_skeleton_archers(false)
+		damage *= 1.0 + 0.1 * float(necromancer_skeleton_archers.size())
+	if next_necromancer_slide_soul_siphon_ready:
+		damage *= 1.3
+		next_necromancer_slide_soul_siphon_ready = false
+	if utility_ability == &"necromancer_soul_surge" and fire_surge_remaining > 0.0:
+		damage *= 1.25
+	laser.setup(self, start_position, direction.normalized(), damage, "necromancer_soul_beam", true)
+	laser.collision_layer = 0
+	laser.collision_mask = 0
+	laser.set_collision_mask_value(enemy_collision_layer_number, true)
+	laser.set_collision_mask_value(jar_collision_layer_number, true)
+	get_tree().current_scene.add_child(laser)
+
+
+func _summon_necromancer_skeleton_archer() -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+	_cleanup_necromancer_skeleton_archers(false)
+	if necromancer_skeleton_archers.size() >= _get_necromancer_skeleton_archer_cap():
+		return
+
+	var summon_position := pending_shockwave_target_position
+	var archer := SKELETON_ARCHER_SCENE.instantiate() as Node2D
+	if archer == null:
+		return
+
+	var follow_offset := summon_position - global_position
+	if archer.has_method("setup"):
+		archer.call("setup", self, follow_offset)
+	if talent_necromancer_skeleton_archer_damage_bonus_enabled:
+		archer.damage_inherit_multiplier *= 1.15
+	if talent_necromancer_skeleton_archer_damage_growth_enabled:
+		archer.damage_growth_per_second = 0.02
+	if talent_necromancer_skeleton_archer_poison_chance_enabled:
+		archer.poison_chance = 0.2
+	if talent_necromancer_skeleton_archer_attack_speed_bonus_enabled:
+		archer.attack_speed_inherit_multiplier *= 1.15
+	if necromancer_slide_skeleton_archer_attack_speed_remaining > 0.0 and archer.has_method("apply_timed_attack_speed_multiplier"):
+		archer.call("apply_timed_attack_speed_multiplier", NECROMANCER_SLIDE_SKELETON_ARCHER_ATTACK_SPEED_MULTIPLIER, necromancer_slide_skeleton_archer_attack_speed_remaining)
+	archer.global_position = summon_position
+	get_tree().current_scene.add_child(archer)
+	necromancer_skeleton_archers.append(archer)
+	var lifetime_timer := Timer.new()
+	lifetime_timer.name = "LifetimeTimer"
+	lifetime_timer.one_shot = true
+	lifetime_timer.wait_time = _get_necromancer_skeleton_archer_lifetime()
+	archer.add_child(lifetime_timer)
+	lifetime_timer.timeout.connect(_expire_necromancer_skeleton_archer.bind(archer.get_instance_id()))
+	lifetime_timer.start()
+
+
+func _get_necromancer_skeleton_archer_cap() -> int:
+	if talent_necromancer_skeleton_archer_lifetime_and_cap_enabled:
+		return NECROMANCER_MAX_SKELETON_ARCHERS + 1
+	return NECROMANCER_MAX_SKELETON_ARCHERS
+
+
+func _get_necromancer_skeleton_archer_lifetime() -> float:
+	if talent_necromancer_skeleton_archer_lifetime_and_cap_enabled:
+		return NECROMANCER_SKELETON_ARCHER_LIFETIME * 2.0
+	return NECROMANCER_SKELETON_ARCHER_LIFETIME
+
+
+func _spawn_necromancer_black_shadow() -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+	_cleanup_necromancer_black_shadow()
+	var shadow := NECROMANCER_SHADOW_SCRIPT.new() as Node2D
+	var spawn_direction := Vector2.RIGHT.rotated(randf() * TAU)
+	var spawn_position := global_position + spawn_direction * 600.0
+	if shadow.has_method("setup"):
+		shadow.call("setup", self, spawn_position)
+	else:
+		shadow.global_position = spawn_position
+	necromancer_black_shadow = shadow
+	get_tree().current_scene.add_child(shadow)
+
+
+func _cleanup_necromancer_black_shadow() -> void:
+	if is_instance_valid(necromancer_black_shadow):
+		necromancer_black_shadow.queue_free()
+	necromancer_black_shadow = null
+
+
+func _trigger_necromancer_enemy_death_explosion(enemy: Node) -> void:
+	var enemy_2d := enemy as Node2D
+	if enemy_2d == null or get_tree() == null:
+		return
+	var origin := enemy_2d.global_position
+	var damage := get_base_attack_damage() * NECROMANCER_DEATH_EXPLOSION_DAMAGE_MULTIPLIER
+	if damage <= 0.0:
+		return
+	_spawn_necromancer_death_explosion_visual(origin)
+	if global_position.distance_to(origin) <= NECROMANCER_DEATH_EXPLOSION_RADIUS:
+		take_damage(damage)
+	for target in get_tree().get_nodes_in_group("enemy"):
+		if target == enemy:
+			continue
+		var target_2d := target as Node2D
+		if target_2d == null or not is_instance_valid(target_2d):
+			continue
+		if target.get("is_dead") == true:
+			continue
+		if target_2d.global_position.distance_to(origin) > NECROMANCER_DEATH_EXPLOSION_RADIUS:
+			continue
+		if target.has_method("take_damage"):
+			deal_player_damage_to_enemy(target, damage, {"source": "necromancer_death_explosion", "direct": false, "allow_procs": false})
+
+
+func _spawn_necromancer_death_explosion_visual(origin: Vector2) -> void:
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	if parent == null:
+		return
+	var visual := Node2D.new()
+	visual.name = "NecromancerDeathExplosion"
+	visual.global_position = origin
+	parent.add_child(visual)
+	var ring := Polygon2D.new()
+	ring.color = Color(0.08, 0.0, 0.1, 0.34)
+	ring.polygon = _circle_polygon(NECROMANCER_DEATH_EXPLOSION_RADIUS, 32)
+	visual.add_child(ring)
+	var tween := visual.create_tween()
+	tween.tween_property(ring, "color:a", 0.0, 0.24)
+	tween.finished.connect(Callable(visual, "queue_free"))
+
+
+func _apply_necromancer_kill_atk_gain() -> void:
+	if stats == null:
+		return
+	necromancer_kill_atk_damage_loss_bonus += 1
+	stats.apply_modifier(&"atk", &"add", 1.0)
+
+
+func _apply_necromancer_kill_atk_damage_loss() -> void:
+	if not talent_necromancer_kill_atk_damage_loss_enabled or stats == null:
+		return
+	var loss := mini(2, necromancer_kill_atk_damage_loss_bonus)
+	if loss <= 0:
+		return
+	necromancer_kill_atk_damage_loss_bonus -= loss
+	stats.apply_modifier(&"atk", &"add", -float(loss))
+
+
+func _cleanup_necromancer_skeleton_archers(free_valid: bool) -> void:
+	for index in range(necromancer_skeleton_archers.size() - 1, -1, -1):
+		var archer := necromancer_skeleton_archers[index]
+		if not is_instance_valid(archer):
+			necromancer_skeleton_archers.remove_at(index)
+		elif free_valid:
+			archer.queue_free()
+			necromancer_skeleton_archers.remove_at(index)
+
+
+func remove_necromancer_skeleton_archer(archer: Node) -> void:
+	var index := necromancer_skeleton_archers.find(archer)
+	if index >= 0:
+		necromancer_skeleton_archers.remove_at(index)
+
+
+func _expire_necromancer_skeleton_archer(archer_id: int) -> void:
+	var archer := instance_from_id(archer_id) as Node
+	var index := necromancer_skeleton_archers.find(archer)
+	if index >= 0:
+		necromancer_skeleton_archers.remove_at(index)
+	if is_instance_valid(archer):
+		if archer.has_method("play_death_and_free"):
+			archer.call("play_death_and_free")
+		else:
+			archer.queue_free()
+	_cleanup_necromancer_skeleton_archers(false)
+
+
+func _apply_necromancer_slide_skeleton_archer_attack_speed() -> void:
+	necromancer_slide_skeleton_archer_attack_speed_remaining = NECROMANCER_SLIDE_SKELETON_ARCHER_ATTACK_SPEED_DURATION
+	_cleanup_necromancer_skeleton_archers(false)
+	for archer in necromancer_skeleton_archers:
+		if is_instance_valid(archer) and archer.has_method("apply_timed_attack_speed_multiplier"):
+			archer.call("apply_timed_attack_speed_multiplier", NECROMANCER_SLIDE_SKELETON_ARCHER_ATTACK_SPEED_MULTIPLIER, NECROMANCER_SLIDE_SKELETON_ARCHER_ATTACK_SPEED_DURATION)
+
+
+func _update_necromancer_slide_skeleton_archer_attack_speed(delta: float) -> void:
+	if necromancer_slide_skeleton_archer_attack_speed_remaining <= 0.0:
+		return
+	necromancer_slide_skeleton_archer_attack_speed_remaining = maxf(0.0, necromancer_slide_skeleton_archer_attack_speed_remaining - delta)
+
+
+func _update_necromancer_round_movement_speed(delta: float) -> void:
+	if not talent_necromancer_round_movement_speed_per_second_enabled or not necromancer_round_movement_speed_active:
+		return
+	if temporary_buffs == null:
+		return
+	necromancer_round_movement_speed_timer += delta
+	while necromancer_round_movement_speed_timer >= 1.0:
+		necromancer_round_movement_speed_timer -= 1.0
+		temporary_buffs.add_round_stat_buff(
+			&"necromancer_round_movement_speed_per_second",
+			&"movement_speed_bonus",
+			NECROMANCER_ROUND_MOVE_SPEED_BONUS_PER_SECOND,
+			999999
+		)
+
+
+func apply_laser_allied_effects(laser: HolyFlameLaser) -> void:
+	if not talent_necromancer_soul_siphon_skeleton_archer_attack_speed_enabled:
+		return
+	if laser == null or laser.attack_source != "necromancer_soul_beam":
+		return
+	_cleanup_necromancer_skeleton_archers(false)
+	for archer in necromancer_skeleton_archers:
+		if not is_instance_valid(archer) or bool(archer.get("dying")):
+			continue
+		if not bool(laser.call("_is_position_in_beam", archer.global_position)):
+			continue
+		if archer.has_method("apply_timed_attack_speed_multiplier"):
+			archer.call(
+				"apply_timed_attack_speed_multiplier",
+				NECROMANCER_SOUL_SIPHON_SKELETON_ARCHER_ATTACK_SPEED_MULTIPLIER,
+				NECROMANCER_SOUL_SIPHON_SKELETON_ARCHER_ATTACK_SPEED_DURATION,
+				true
+			)
+
+
+func _load_texture_compat(path: String) -> Texture2D:
+	if ResourceLoader.exists(path):
+		return load(path) as Texture2D
+
+	var image := Image.new()
+	if image.load(path) != OK:
+		return null
+	return ImageTexture.create_from_image(image)
 
 
 func _cast_wizard_fire_laser() -> void:
@@ -1540,8 +1945,24 @@ func _start_fire_surge() -> void:
 	fire_surge_cooldown_pending = true
 
 
+func _start_necromancer_soul_surge() -> void:
+	fire_surge_remaining = 6.0
+	fire_surge_fire_remaining = 0.0
+	fire_surge_cooldown_pending = true
+	if temporary_buffs != null:
+		temporary_buffs.add_timed_stat_buff(&"necromancer_soul_surge_attack_speed", &"attack_speed_bonus", 0.35, fire_surge_remaining, 1)
+		temporary_buffs.add_timed_stat_buff(&"necromancer_soul_surge_move_speed", &"movement_speed_bonus", 0.2, fire_surge_remaining, 1)
+
+
 func _update_fire_surge(delta: float) -> void:
 	if fire_surge_remaining <= 0.0:
+		return
+
+	if utility_ability == &"necromancer_soul_surge":
+		fire_surge_remaining = maxf(0.0, fire_surge_remaining - delta)
+		if fire_surge_remaining <= 0.0:
+			fire_surge_cooldown_pending = false
+			blessing_cooldown_remaining = 10.0
 		return
 
 	fire_surge_remaining = maxf(0.0, fire_surge_remaining - delta)
@@ -2102,6 +2523,10 @@ func _maybe_spawn_attack_projectile() -> void:
 			wizard_fire_essence_charges -= 1
 		_launch_wizard_primary_attack_pattern(pending_attack_target_position, used_fire_essence)
 		_schedule_wizard_primary_echoes(pending_attack_target_position, used_fire_essence)
+	elif primary_ability == &"necromancer_soul_orb":
+		_launch_necromancer_soul_orb(pending_attack_target_position)
+	elif primary_ability == &"necromancer_soul_beam":
+		_fire_necromancer_soul_beam(pending_attack_target_position)
 	else:
 		_perform_melee_attack_at(pending_attack_target_position)
 
@@ -2375,6 +2800,11 @@ func emit_round_started(round_index: int = 0) -> void:
 	wizard_quick_kill_max_hp_this_round = 0
 	if talent_wizard_opening_attack_speed_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"wizard_opening_attack_speed", &"attack_speed_bonus", 0.5, 10.0, 1)
+	if talent_necromancer_black_shadow_pursuit_enabled:
+		_spawn_necromancer_black_shadow()
+	if talent_necromancer_round_movement_speed_per_second_enabled:
+		necromancer_round_movement_speed_active = true
+		necromancer_round_movement_speed_timer = 0.0
 	round_started.emit(round_index)
 
 
@@ -2384,6 +2814,9 @@ func emit_round_ended() -> void:
 	if has_altar_blessing(&"round_common_item"):
 		for _index in range(int(altar_blessings.get(&"round_common_item", 0))):
 			_grant_random_common_item()
+	_cleanup_necromancer_black_shadow()
+	necromancer_round_movement_speed_active = false
+	necromancer_round_movement_speed_timer = 0.0
 	round_ended.emit()
 	if temporary_buffs != null:
 		temporary_buffs.clear_round_buffs()
@@ -2576,6 +3009,50 @@ func _apply_talent_effect(node_id: StringName) -> void:
 			talent_slide_defense_bonus_enabled = true
 		&"damage_taken_lifesteal":
 			talent_damage_taken_lifesteal_enabled = true
+		&"necromancer_soul_siphon_damage_bonus":
+			talent_necromancer_soul_siphon_damage_bonus_enabled = true
+		&"necromancer_soul_siphon_damage_per_skeleton_archer":
+			talent_necromancer_soul_siphon_damage_per_skeleton_archer_enabled = true
+		&"necromancer_soul_siphon_bleed_chance":
+			talent_necromancer_soul_siphon_bleed_chance_enabled = true
+		&"necromancer_poison_stack_damage":
+			talent_necromancer_poison_stack_damage_enabled = true
+		&"necromancer_black_shadow_pursuit":
+			talent_necromancer_black_shadow_pursuit_enabled = true
+		&"necromancer_round_movement_speed_per_second":
+			talent_necromancer_round_movement_speed_per_second_enabled = true
+		&"necromancer_enemy_death_explosion":
+			talent_necromancer_enemy_death_explosion_enabled = true
+		&"necromancer_kill_atk_damage_loss":
+			talent_necromancer_kill_atk_damage_loss_enabled = true
+		&"necromancer_bleeding_move_speed_slow":
+			talent_necromancer_bleeding_move_speed_slow_enabled = true
+		&"necromancer_skeleton_archer_damage_bonus":
+			talent_necromancer_skeleton_archer_damage_bonus_enabled = true
+		&"necromancer_skeleton_archer_damage_growth":
+			talent_necromancer_skeleton_archer_damage_growth_enabled = true
+		&"necromancer_skeleton_archer_poison_chance":
+			talent_necromancer_skeleton_archer_poison_chance_enabled = true
+		&"necromancer_skeleton_archer_lifetime_and_cap":
+			talent_necromancer_skeleton_archer_lifetime_and_cap_enabled = true
+		&"necromancer_soul_siphon_skeleton_archer_attack_speed":
+			talent_necromancer_soul_siphon_skeleton_archer_attack_speed_enabled = true
+		&"necromancer_skeleton_archer_attack_speed_bonus":
+			talent_necromancer_skeleton_archer_attack_speed_bonus_enabled = true
+		&"necromancer_xp_per_10_kills":
+			talent_necromancer_xp_per_10_kills_enabled = true
+		&"necromancer_gold_per_10_kills":
+			talent_necromancer_gold_per_10_kills_enabled = true
+		&"necromancer_defense_per_10_kills":
+			talent_necromancer_defense_per_10_kills_enabled = true
+		&"necromancer_atk_per_20_kills":
+			talent_necromancer_atk_per_20_kills_enabled = true
+		&"necromancer_max_hp_per_10_kills":
+			talent_necromancer_max_hp_per_10_kills_enabled = true
+		&"necromancer_slide_soul_siphon_damage_bonus":
+			talent_necromancer_slide_soul_siphon_damage_bonus_enabled = true
+		&"necromancer_slide_skeleton_archer_attack_speed":
+			talent_necromancer_slide_skeleton_archer_attack_speed_enabled = true
 		&"holy_strike_movement_stack":
 			talent_holy_strike_movement_stack_enabled = true
 		&"holy_strike_long_range":
@@ -2776,6 +3253,10 @@ func _apply_slide_finished_talents() -> void:
 		temporary_buffs.add_timed_stat_buff(&"talent_slide_defense_bonus", &"defense", float(stats.defense) * 0.5, 2.0, 1)
 	if talent_next_attack_after_slide_enabled:
 		next_attack_after_slide_ready = true
+	if talent_necromancer_slide_soul_siphon_damage_bonus_enabled:
+		next_necromancer_slide_soul_siphon_ready = true
+	if talent_necromancer_slide_skeleton_archer_attack_speed_enabled:
+		_apply_necromancer_slide_skeleton_archer_attack_speed()
 	if talent_wizard_slide_fireball_blast_enabled:
 		next_wizard_slide_fireball_ready = true
 
@@ -3671,8 +4152,24 @@ func _apply_attack_status_procs(enemy: Node, attack_info: Dictionary = {}) -> vo
 		return
 	if _roll_holy_strike_proc(stats.bleed_chance, attack_info) and enemy.has_method("apply_status_effect"):
 		enemy.apply_status_effect(&"bleeding", self)
+	if _roll_holy_strike_proc(_get_necromancer_soul_siphon_bleed_chance(attack_info), attack_info) and enemy.has_method("apply_status_effect"):
+		enemy.apply_status_effect(&"bleeding", self)
 	if _roll_holy_strike_proc(stats.poison_chance, attack_info) and enemy.has_method("apply_status_effect"):
 		enemy.apply_status_effect(&"poison", self)
+
+
+func _get_necromancer_soul_siphon_bleed_chance(attack_info: Dictionary = {}) -> float:
+	if not talent_necromancer_soul_siphon_bleed_chance_enabled:
+		return 0.0
+	if String(attack_info.get("source", "")) != "necromancer_soul_beam":
+		return 0.0
+	return 0.2
+
+
+func get_bleeding_move_speed_multiplier() -> float:
+	if talent_necromancer_bleeding_move_speed_slow_enabled:
+		return 0.8
+	return 1.0
 
 
 func _clamp_to_movement_bounds() -> void:

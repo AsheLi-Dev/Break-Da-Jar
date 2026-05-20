@@ -1,0 +1,153 @@
+[gd_scene format=3 uid="uid://xn55371aneh7"]
+
+[ext_resource type="Script" path="res://scripts/editor/NecromancerTalentLayoutPreview.gd" id="1_preview"]
+
+[node name="NecromancerTalentLayout" type="Node2D" unique_id=1418129113]
+script = ExtResource("1_preview")
+
+[node name="skull_top_0" type="Marker2D" parent="." unique_id=1563650152]
+position = Vector2(178, 176)
+
+[node name="skull_top_1" type="Marker2D" parent="." unique_id=1136493687]
+position = Vector2(210, 112)
+
+[node name="skull_top_2" type="Marker2D" parent="." unique_id=501430775]
+position = Vector2(265, 70)
+
+[node name="skull_top_3" type="Marker2D" parent="." unique_id=697671548]
+position = Vector2(327, 52)
+
+[node name="skull_top_4" type="Marker2D" parent="." unique_id=438095287]
+position = Vector2(390, 52)
+
+[node name="skull_top_5" type="Marker2D" parent="." unique_id=1909932419]
+position = Vector2(452, 70)
+
+[node name="skull_top_6" type="Marker2D" parent="." unique_id=390873507]
+position = Vector2(507, 112)
+
+[node name="skull_top_7" type="Marker2D" parent="." unique_id=1608743840]
+position = Vector2(542, 176)
+
+[node name="left_temple" type="Marker2D" parent="." unique_id=2028683430]
+position = Vector2(160, 248)
+
+[node name="left_cheek_high" type="Marker2D" parent="." unique_id=1739849877]
+position = Vector2(148, 330)
+
+[node name="left_cheek_low" type="Marker2D" parent="." unique_id=2071885697]
+position = Vector2(162, 430)
+
+[node name="left_jaw" type="Marker2D" parent="." unique_id=1681519641]
+position = Vector2(204, 501)
+
+[node name="left_chin" type="Marker2D" parent="." unique_id=625498315]
+position = Vector2(255, 660)
+
+[node name="right_temple" type="Marker2D" parent="." unique_id=241743289]
+position = Vector2(558, 248)
+
+[node name="right_cheek_high" type="Marker2D" parent="." unique_id=982737700]
+position = Vector2(572, 330)
+
+[node name="right_cheek_low" type="Marker2D" parent="." unique_id=1686989114]
+position = Vector2(558, 430)
+
+[node name="right_jaw" type="Marker2D" parent="." unique_id=1883971160]
+position = Vector2(516, 501)
+
+[node name="right_chin" type="Marker2D" parent="." unique_id=632683202]
+position = Vector2(465, 660)
+
+[node name="chin_center" type="Marker2D" parent="." unique_id=496229585]
+position = Vector2(364, 709)
+
+[node name="left_eye_0" type="Marker2D" parent="." unique_id=2085601542]
+position = Vector2(245, 332)
+
+[node name="left_eye_1" type="Marker2D" parent="." unique_id=47676129]
+position = Vector2(285, 305)
+
+[node name="left_eye_2" type="Marker2D" parent="." unique_id=378075851]
+position = Vector2(333, 322)
+
+[node name="left_eye_3" type="Marker2D" parent="." unique_id=1002284409]
+position = Vector2(338, 380)
+
+[node name="left_eye_4" type="Marker2D" parent="." unique_id=159058309]
+position = Vector2(290, 410)
+
+[node name="left_eye_5" type="Marker2D" parent="." unique_id=1981918333]
+position = Vector2(238, 390)
+
+[node name="right_eye_0" type="Marker2D" parent="." unique_id=1865800376]
+position = Vector2(385, 322)
+
+[node name="right_eye_1" type="Marker2D" parent="." unique_id=1402108609]
+position = Vector2(433, 305)
+
+[node name="right_eye_2" type="Marker2D" parent="." unique_id=1301072711]
+position = Vector2(475, 332)
+
+[node name="right_eye_3" type="Marker2D" parent="." unique_id=713834526]
+position = Vector2(482, 390)
+
+[node name="right_eye_4" type="Marker2D" parent="." unique_id=268537128]
+position = Vector2(430, 410)
+
+[node name="right_eye_5" type="Marker2D" parent="." unique_id=52177096]
+position = Vector2(382, 380)
+
+[node name="nose_top" type="Marker2D" parent="." unique_id=1965467368]
+position = Vector2(360, 430)
+
+[node name="nose_bridge_high" type="Marker2D" parent="."]
+position = Vector2(360, 470)
+
+[node name="nose_left" type="Marker2D" parent="." unique_id=802544620]
+position = Vector2(330, 510)
+
+[node name="nose_bottom" type="Marker2D" parent="." unique_id=632917231]
+position = Vector2(360, 550)
+
+[node name="nose_right" type="Marker2D" parent="." unique_id=124822297]
+position = Vector2(390, 510)
+
+[node name="nose_bridge_low" type="Marker2D" parent="."]
+position = Vector2(360, 510)
+
+[node name="philtrum" type="Marker2D" parent="."]
+position = Vector2(361, 585)
+
+[node name="tooth_0" type="Marker2D" parent="." unique_id=1409794939]
+position = Vector2(247, 574)
+
+[node name="tooth_1" type="Marker2D" parent="." unique_id=603101810]
+position = Vector2(275, 594)
+
+[node name="tooth_2" type="Marker2D" parent="." unique_id=938020191]
+position = Vector2(303, 604)
+
+[node name="tooth_3" type="Marker2D" parent="." unique_id=1112185631]
+position = Vector2(331, 610)
+
+[node name="tooth_4" type="Marker2D" parent="." unique_id=2071927403]
+position = Vector2(361, 620)
+
+[node name="tooth_5" type="Marker2D" parent="." unique_id=1600354828]
+position = Vector2(389, 610)
+
+[node name="tooth_6" type="Marker2D" parent="." unique_id=1099004646]
+position = Vector2(417, 604)
+
+[node name="tooth_7" type="Marker2D" parent="." unique_id=1115138318]
+position = Vector2(445, 594)
+
+[node name="tooth_8" type="Marker2D" parent="." unique_id=2009689157]
+position = Vector2(473, 574)
+
+[node name="mouth_left" type="Marker2D" parent="." unique_id=1099968727]
+position = Vector2(222, 558)
+
+[node name="mouth_right" type="Marker2D" parent="." unique_id=1876562537]
+position = Vector2(498, 558)

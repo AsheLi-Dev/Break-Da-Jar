@@ -410,10 +410,16 @@ func _recalculate_move_speed() -> void:
 	if base_move_speed <= 0.0:
 		base_move_speed = move_speed
 
-	var temporary_multiplier := 1.0
+	var speed_up_multiplier := 1.0
+	var slow_multiplier := 1.0
 	for data in temporary_move_speed_multipliers.values():
 		if data is Dictionary:
-			temporary_multiplier = maxf(temporary_multiplier, float(data.get("multiplier", 1.0)))
+			var multiplier := float(data.get("multiplier", 1.0))
+			if multiplier >= 1.0:
+				speed_up_multiplier = maxf(speed_up_multiplier, multiplier)
+			else:
+				slow_multiplier *= maxf(multiplier, 0.01)
+	var temporary_multiplier := speed_up_multiplier * slow_multiplier
 	move_speed = base_move_speed * round_enrage_multiplier * map_move_speed_multiplier * temporary_multiplier
 
 

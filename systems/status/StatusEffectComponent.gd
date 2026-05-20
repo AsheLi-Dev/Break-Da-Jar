@@ -55,6 +55,7 @@ func apply_bleeding(source_player: Node = null) -> void:
 	bleeding_time_left = bleeding_duration
 	if source_player != null and is_instance_valid(source_player):
 		status_owner_player = source_player
+		_apply_bleeding_move_speed_slow(source_player)
 
 
 func apply_poison(source_player: Node = null) -> void:
@@ -129,3 +130,12 @@ func _get_bleeding_damage_multiplier(source: Node) -> float:
 	if stats == null:
 		return 1.0
 	return maxf(1.0 + stats.bleeding_damage_bonus, 0.0)
+
+
+func _apply_bleeding_move_speed_slow(source: Node) -> void:
+	if owner_enemy == null or not source.has_method("get_bleeding_move_speed_multiplier"):
+		return
+	var multiplier := float(source.call("get_bleeding_move_speed_multiplier"))
+	if multiplier >= 1.0:
+		return
+	owner_enemy.apply_temporary_move_speed_multiplier(&"bleeding_move_speed_slow", multiplier, bleeding_duration)

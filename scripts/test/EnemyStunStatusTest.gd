@@ -34,6 +34,12 @@ class ChainLightningProbePlayer:
 		add_child(inventory)
 		inventory.setup(self)
 
+	func _exit_tree() -> void:
+		inventory.owner_player = null
+		inventory.applied_effects.clear()
+		inventory.item_definitions_by_id.clear()
+		inventory.item_counts.clear()
+
 	func get_stats() -> StatsComponent:
 		return stats
 
@@ -71,6 +77,8 @@ func _run() -> void:
 	await _test_slide_contact_applies_slide_shackle_stun()
 	await _test_stunning_rupture_stuns_nearby_enemies()
 
+	_cleanup_audio_players()
+	await _drain_frames(8)
 	_finish()
 
 
@@ -288,6 +296,17 @@ func _assert(condition: bool, message: String) -> void:
 	else:
 		failures.append(message)
 		push_error("FAIL: %s" % message)
+
+
+func _drain_frames(count: int) -> void:
+	for _index in range(count):
+		await process_frame
+
+
+func _cleanup_audio_players() -> void:
+	for child in root.get_children():
+		if child is AudioStreamPlayer or child is AudioStreamPlayer2D:
+			child.queue_free()
 
 
 func _finish() -> void:

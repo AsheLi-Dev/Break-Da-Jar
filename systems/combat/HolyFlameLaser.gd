@@ -10,6 +10,18 @@ const FRAME_COUNT := 8
 @export var animation_fps: float = 24.0
 @export var damages_enemies: bool = true
 @export var damages_containers: bool = true
+@export var beam_texture: Texture2D
+@export var beam_frame_size: Vector2i = FRAME_SIZE
+@export var beam_frame_count: int = FRAME_COUNT
+@export var overlay_beam_texture: Texture2D
+@export var overlay_beam_frame_size: Vector2i = FRAME_SIZE
+@export var overlay_beam_frame_count: int = 0
+@export var overlay_alpha: float = 0.8
+@export var overlay_height_multiplier: float = 0.72
+@export var visual_height_multiplier: float = 3.4
+@export var visual_min_height: float = 42.0
+@export var visual_end_padding_multiplier: float = 0.4
+@export var visual_back_offset_multiplier: float = 0.08
 
 var owner_player: Node
 var damage: float = 12.0
@@ -18,6 +30,7 @@ var elapsed: float = 0.0
 var damaged_bodies: Array[Node] = []
 var damaged_containers: Array[Node] = []
 var sprite: AnimatedSprite2D
+var overlay_sprite: AnimatedSprite2D
 var attack_source: String = "player_attack"
 var allow_procs: bool = true
 var chain_remaining: int = 0
@@ -41,12 +54,24 @@ func _ready() -> void:
 	_ensure_nodes()
 
 
+func _exit_tree() -> void:
+	if sprite != null:
+		sprite.sprite_frames = null
+	if overlay_sprite != null:
+		overlay_sprite.sprite_frames = null
+	beam_texture = null
+	overlay_beam_texture = null
+	damaged_bodies.clear()
+	damaged_containers.clear()
+	owner_player = null
+
+
 func _process(delta: float) -> void:
 	elapsed += delta
-	var frame_index := mini(int(floor(elapsed * animation_fps)), FRAME_COUNT - 1)
+	var frame_index := mini(int(floor(elapsed * animation_fps)), _get_beam_frame_count() - 1)
 	if frame_index == 1 or frame_index == 2:
 		_apply_damage()
-	if frame_index >= FRAME_COUNT - 1 and elapsed >= float(FRAME_COUNT) / animation_fps:
+	if frame_index >= _get_beam_frame_count() - 1 and elapsed >= float(_get_beam_frame_count()) / animation_fps:
 		queue_free()
 
 
@@ -67,26 +92,79 @@ func _ensure_nodes() -> void:
 	sprite.centered = true
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	sprite.sprite_frames = _make_sprite_frames()
-	sprite.scale = Vector2(length / float(FRAME_SIZE.x), width / float(FRAME_SIZE.y))
+	_apply_sprite_visuals(sprite, _get_beam_frame_size(), 1.0)
 	add_child(sprite)
 	sprite.play(&"fire")
 
+	if overlay_beam_texture != null and overlay_beam_frame_count > 0:
+		overlay_sprite = AnimatedSprite2D.new()
+		overlay_sprite.name = "LaserOverlaySprite"
+		overlay_sprite.centered = true
+		overlay_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		overlay_sprite.sprite_frames = _make_sprite_frames(overlay_beam_texture, _get_overlay_beam_frame_size(), _get_overlay_beam_frame_count())
+		_apply_sprite_visuals(overlay_sprite, _get_overlay_beam_frame_size(), overlay_height_multiplier)
+		overlay_sprite.modulate = Color(1.0, 0.86, 1.0, overlay_alpha)
+		add_child(overlay_sprite)
+		overlay_sprite.play(&"fire")
 
-func _make_sprite_frames() -> SpriteFrames:
+
+func _make_sprite_frames(texture: Texture2D = null, frame_size: Vector2i = Vector2i.ZERO, frame_count: int = 0) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	var animation_name := &"fire"
 	frames.add_animation(animation_name)
 	frames.set_animation_loop(animation_name, false)
 	frames.set_animation_speed(animation_name, animation_fps)
-	for frame in range(FRAME_COUNT):
+	var source_texture := texture if texture != null else _get_beam_texture()
+	var source_frame_size := frame_size if frame_size.x > 0 and frame_size.y > 0 else _get_beam_frame_size()
+	var source_frame_count := frame_count if frame_count > 0 else _get_beam_frame_count()
+	for frame in range(source_frame_count):
 		var atlas := AtlasTexture.new()
-		atlas.atlas = LASER_TEXTURE
-		atlas.region = Rect2(frame * FRAME_SIZE.x, 0, FRAME_SIZE.x, FRAME_SIZE.y)
+		atlas.atlas = source_texture
+		atlas.region = Rect2(frame * source_frame_size.x, 0, source_frame_size.x, source_frame_size.y)
 		frames.add_frame(animation_name, atlas)
 	return frames
 
 
+func _get_beam_texture() -> Texture2D:
+	if beam_texture != null:
+		return beam_texture
+	return LASER_TEXTURE
+
+
+func _get_beam_frame_size() -> Vector2i:
+	if beam_frame_size.x > 0 and beam_frame_size.y > 0:
+		return beam_frame_size
+	return FRAME_SIZE
+
+
+func _get_beam_frame_count() -> int:
+	return maxi(beam_frame_count, 1)
+
+
+func _get_overlay_beam_frame_size() -> Vector2i:
+	if overlay_beam_frame_size.x > 0 and overlay_beam_frame_size.y > 0:
+		return overlay_beam_frame_size
+	return FRAME_SIZE
+
+
+func _get_overlay_beam_frame_count() -> int:
+	return maxi(overlay_beam_frame_count, 1)
+
+
+func _apply_sprite_visuals(target_sprite: AnimatedSprite2D, frame_size: Vector2i, height_multiplier: float) -> void:
+	var draw_height := _get_draw_height() * height_multiplier
+	var draw_width := length + draw_height * visual_end_padding_multiplier
+	target_sprite.scale = Vector2(draw_width / float(frame_size.x), draw_height / float(frame_size.y))
+	target_sprite.position.x = draw_height * ((visual_end_padding_multiplier * 0.5) - visual_back_offset_multiplier)
+
+
+func _get_draw_height() -> float:
+	return maxf(visual_min_height, width * visual_height_multiplier)
+
+
 func _apply_damage() -> void:
+	if owner_player != null and owner_player.has_method("apply_laser_allied_effects"):
+		owner_player.call("apply_laser_allied_effects", self)
 	for body in get_overlapping_bodies():
 		if damages_enemies and body.is_in_group("enemy"):
 			_damage_enemy(body)
