@@ -5,6 +5,7 @@ const BROWN := 0
 const ATTACK := 1
 const DEFENSE := 2
 const UTILITY := 3
+const WHITE := 4
 
 const COMMON := 0
 const RARE := 1
@@ -19,6 +20,7 @@ static func roll_category() -> int:
 		ATTACK,
 		DEFENSE,
 		UTILITY,
+		WHITE,
 	]
 	return categories.pick_random()
 
@@ -67,6 +69,8 @@ static func category_color(category: int) -> Color:
 			return Color(0.38, 1.0, 0.48)
 		UTILITY:
 			return Color(0.42, 0.68, 1.0)
+		WHITE:
+			return Color(1.0, 1.0, 1.0, 0.52)
 		_:
 			return Color(0.74, 0.52, 0.34)
 
@@ -79,6 +83,8 @@ static func category_label(category: int) -> String:
 			return "Green"
 		UTILITY:
 			return "Blue"
+		WHITE:
+			return "White"
 		_:
 			return "Brown"
 
@@ -94,7 +100,7 @@ static func tier_label(tier: int) -> String:
 
 
 static func price(category: int, tier: int) -> int:
-	var is_brown: bool = category == BROWN
+	var is_brown: bool = category == BROWN or category == WHITE
 	match tier:
 		RARE:
 			return 30 if is_brown else 36

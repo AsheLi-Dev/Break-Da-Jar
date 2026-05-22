@@ -116,6 +116,7 @@ enum ShopCategory {
 	ATTACK,
 	DEFENSE,
 	UTILITY,
+	WHITE,
 }
 
 enum ShopTier {
@@ -166,6 +167,7 @@ var containers: Array[BreakableContainer] = []
 var shop_containers: Array[BreakableContainer] = []
 var enemies: Array[EnemyBase] = []
 var shop_container_data: Dictionary = {}
+var hovered_shop_preview_container: BreakableContainer
 var no_spawn_container_breaks: Dictionary = {}
 var enemy_gold_rewards: Dictionary = {}
 var melee_enemy_attack_tokens: Dictionary = {}
@@ -245,6 +247,7 @@ func _process(delta: float) -> void:
 	_update_active_map_affix(delta)
 	_cleanup_enemy_list()
 	_update_round_enrage(delta)
+	_update_shop_preview_hover()
 	_update_hud()
 	_check_defeat()
 	_check_combat_clear()
@@ -773,24 +776,32 @@ func _create_shop_container(container_position: Vector2, index: int, forced_cate
 	var base_price: int = _get_shop_price(category, tier)
 	base_price = _apply_shop_tier_price_multiplier(base_price, tier)
 	var price: int = _apply_shop_price_discount(base_price)
-	var container := _create_base_container(container_position, "ShopJar%d" % index, ContainerType.URN)
+	var preview_item: ItemDefinition
+	if category == ShopCategory.WHITE:
+		var preview_rarity := _roll_item_rarity_for_tier(tier)
+		preview_item = _roll_shop_item(category, preview_rarity)
+	var shop_container_type := _get_shop_container_type_for_tier(tier)
+	var container := _create_base_container(container_position, "ShopJar%d" % index, shop_container_type)
 	container.is_shop_container = true
-	container.container_type = ContainerType.URN
-	container.static_texture = _get_container_texture(ContainerType.URN)
-	container.damaged_texture = _get_container_damaged_texture(ContainerType.URN)
-	container.hit_texture = _get_container_hit_texture(ContainerType.URN)
-	container.destroyed_texture = _get_container_destroyed_texture(ContainerType.URN)
-	container.destroy_frames = _get_container_destroy_frames(ContainerType.URN)
+	container.container_type = shop_container_type
+	container.static_texture = _get_container_texture(shop_container_type)
+	container.damaged_texture = _get_container_damaged_texture(shop_container_type)
+	container.hit_texture = _get_container_hit_texture(shop_container_type)
+	container.destroyed_texture = _get_container_destroyed_texture(shop_container_type)
+	container.destroy_frames = _get_container_destroy_frames(shop_container_type)
 	container.max_hp = SHOP_CONTAINER_MAX_HP
 	container.area_entered.connect(_on_container_area_entered.bind(container))
 	container.broken.connect(_on_shop_container_broken)
 	_add_container_sprite(container, _get_shop_category_color(category))
+	if preview_item != null:
+		_add_shop_preview_icon(container, preview_item)
 	_add_shop_label(container, category, tier, price)
 	shop_container_data[container] = {
 		"category": category,
 		"tier": tier,
 		"base_price": base_price,
 		"price": price,
+		"preview_item": preview_item,
 	}
 	return container
 
@@ -897,6 +908,23 @@ func _add_container_sprite(container: BreakableContainer, modulate_color: Color)
 	container.add_child(sprite)
 
 
+func _add_shop_preview_icon(container: BreakableContainer, item: ItemDefinition) -> void:
+	var icon := Sprite2D.new()
+	icon.name = "PreviewIcon"
+	icon.texture = item.icon
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.position = Vector2(0.0, -10.0)
+	icon.z_index = -1
+	icon.modulate = Color(1.0, 1.0, 1.0, 0.8)
+	if icon.texture != null:
+		var texture_size := icon.texture.get_size()
+		var largest_side := maxf(texture_size.x, texture_size.y)
+		if largest_side > 0.0:
+			var scale_value := 54.0 / largest_side
+			icon.scale = Vector2(scale_value, scale_value)
+	container.add_child(icon)
+
+
 func _add_container_shadow(container: BreakableContainer) -> void:
 	if container.container_type == ContainerType.TOMB:
 		return
@@ -967,6 +995,41 @@ func _get_shop_container_at_position(world_position: Vector2) -> BreakableContai
 	return null
 
 
+func _update_shop_preview_hover() -> void:
+	if phase != Phase.SHOP or game_over or _is_talent_tree_open():
+		_clear_shop_preview_hover()
+		return
+
+	var container := _get_shop_container_at_position(get_global_mouse_position())
+	if container == null:
+		_clear_shop_preview_hover()
+		return
+
+	var data: Dictionary = shop_container_data.get(container, {})
+	if int(data.get("category", ShopCategory.BROWN)) != ShopCategory.WHITE:
+		_clear_shop_preview_hover()
+		return
+
+	var item := data.get("preview_item") as ItemDefinition
+	if item == null:
+		_clear_shop_preview_hover()
+		return
+
+	if hovered_shop_preview_container == container:
+		return
+
+	hovered_shop_preview_container = container
+	_show_item_detail_card(item)
+
+
+func _clear_shop_preview_hover() -> void:
+	if hovered_shop_preview_container == null:
+		return
+
+	hovered_shop_preview_container = null
+	_hide_item_detail_card()
+
+
 func _is_position_inside_container(container: BreakableContainer, world_position: Vector2) -> bool:
 	var collision := container.get_node_or_null("CollisionShape2D") as CollisionShape2D
 	if collision == null or collision.shape == null:
@@ -1026,8 +1089,10 @@ func _on_shop_container_broken(container: BreakableContainer, _attack_info: Dict
 		player.emit_shop_container_broken(container, price)
 	var category: int = int(data.get("category", ShopCategory.BROWN))
 	var tier: int = int(data.get("tier", ShopTier.COMMON))
-	var rarity: StringName = _roll_item_rarity_for_tier(tier)
-	var item := _roll_shop_item(category, rarity)
+	var item := data.get("preview_item") as ItemDefinition
+	if item == null:
+		var rarity: StringName = _roll_item_rarity_for_tier(tier)
+		item = _roll_shop_item(category, rarity)
 	if item != null and is_instance_valid(player):
 		_spawn_shop_item_reward(item, container.global_position)
 		hud_message = "Bought %s." % item.display_name
@@ -2529,6 +2594,7 @@ func _clear_combat_containers() -> void:
 
 
 func _clear_shop_containers() -> void:
+	_clear_shop_preview_hover()
 	for container in shop_containers:
 		if is_instance_valid(container):
 			container.queue_free()
@@ -2542,6 +2608,16 @@ func _roll_shop_category() -> int:
 
 func _roll_shop_tier() -> int:
 	return SHOP_RULES.roll_tier()
+
+
+func _get_shop_container_type_for_tier(tier: int) -> int:
+	match tier:
+		ShopTier.RARE:
+			return ContainerType.BARREL
+		ShopTier.LEGENDARY:
+			return ContainerType.TOMB
+		_:
+			return ContainerType.URN
 
 
 func _roll_item_rarity_for_tier(tier: int) -> StringName:
