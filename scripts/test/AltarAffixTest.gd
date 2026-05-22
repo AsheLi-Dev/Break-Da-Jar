@@ -22,6 +22,11 @@ func _run() -> void:
 	_test_elite_affix_application()
 	_test_altar_accepts_next_round_challenge()
 	_test_altar_offer_changes_each_round()
+	_test_upgrade_altar_consumes_common_for_rare()
+	_test_gamble_altar_spends_gold()
+	_test_blessing_altar_buys_blessing()
+	_test_level_altar_buys_level()
+	_test_healing_altar_restores_half_max_hp()
 	_test_map_affix_modifiers()
 	_test_altar_blessings()
 
@@ -60,6 +65,10 @@ func _test_altar_accepts_next_round_challenge() -> void:
 	battle_scene.call("_enter_shop_phase")
 	var altar := battle_scene.get("altar_node") as Node2D
 	_assert(altar != null and is_instance_valid(altar), "Shop phase spawns an altar")
+	var offer: Dictionary = battle_scene.call("_roll_challenge_altar_offer")
+	offer["type"] = 0
+	battle_scene.set("altar_offer", offer)
+	battle_scene.set("altar_accepted", false)
 	var accepted := bool(battle_scene.call("_try_accept_altar_at_position", altar.global_position))
 	_assert(accepted, "Clicking altar accepts the offer")
 	_assert(not (battle_scene.get("pending_map_affix") as Dictionary).is_empty(), "Accepted altar stores pending map affix")
@@ -73,14 +82,105 @@ func _test_altar_offer_changes_each_round() -> void:
 
 	battle_scene.set("last_altar_map_affix_id", &"")
 	battle_scene.set("last_altar_blessing_id", &"")
-	var first_offer: Dictionary = battle_scene.call("_roll_altar_offer")
+	var first_offer: Dictionary = battle_scene.call("_roll_challenge_altar_offer")
 	var first_map_id: StringName = first_offer.get("map_affix", {}).get("id", &"")
 	var first_blessing_id: StringName = first_offer.get("blessing", {}).get("id", &"")
-	var second_offer: Dictionary = battle_scene.call("_roll_altar_offer")
+	var second_offer: Dictionary = battle_scene.call("_roll_challenge_altar_offer")
 	var second_map_id: StringName = second_offer.get("map_affix", {}).get("id", &"")
 	var second_blessing_id: StringName = second_offer.get("blessing", {}).get("id", &"")
 	_assert(first_map_id != second_map_id, "Altar map modifier does not repeat immediately")
 	_assert(first_blessing_id != second_blessing_id, "Altar blessing reward does not repeat immediately")
+
+
+func _test_upgrade_altar_consumes_common_for_rare() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	var common_item := _get_random_item(&"common")
+	_assert(common_item != null, "Test database has common items")
+	if common_item == null:
+		return
+	player.add_item(common_item)
+	var common_before := _get_inventory_rarity_count(&"common")
+	var rare_before := _get_inventory_rarity_count(&"rare")
+	battle_scene.call("_enter_shop_phase")
+	var altar := battle_scene.get("altar_node") as Node2D
+	battle_scene.set("altar_offer", {"type": 1, "gold_cost": 8})
+	battle_scene.set("altar_accepted", false)
+	battle_scene.set("gold", 8)
+	var accepted := bool(battle_scene.call("_try_accept_altar_at_position", altar.global_position))
+	_assert(accepted, "Upgrade altar accepts common item and gold")
+	_assert(int(battle_scene.get("gold")) == 0, "Upgrade altar spends gold")
+	_assert(_get_inventory_rarity_count(&"common") == common_before - 1, "Upgrade altar consumes one common item")
+	_assert(_get_inventory_rarity_count(&"rare") == rare_before + 1, "Upgrade altar grants one rare item")
+
+
+func _test_gamble_altar_spends_gold() -> void:
+	if battle_scene == null:
+		return
+
+	battle_scene.call("_enter_shop_phase")
+	var altar := battle_scene.get("altar_node") as Node2D
+	battle_scene.set("altar_offer", {"type": 2, "gold_cost": 10})
+	battle_scene.set("altar_accepted", false)
+	battle_scene.set("gold", 10)
+	var accepted := bool(battle_scene.call("_try_accept_altar_at_position", altar.global_position))
+	var remaining_gold := int(battle_scene.get("gold"))
+	_assert(accepted, "Gamble altar accepts gold")
+	_assert(remaining_gold == 0 or remaining_gold == 20, "Gamble altar either loses cost or pays double cost")
+
+
+func _test_blessing_altar_buys_blessing() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	battle_scene.call("_enter_shop_phase")
+	var altar := battle_scene.get("altar_node") as Node2D
+	battle_scene.set("altar_offer", {
+		"type": 3,
+		"gold_cost": 20,
+		"blessing": {"id": &"move_speed", "name": "Wind Blessing", "description": "Move speed +20%."},
+	})
+	battle_scene.set("altar_accepted", false)
+	battle_scene.set("gold", 20)
+	var blessing_count_before := player.get_altar_blessing_count()
+	var accepted := bool(battle_scene.call("_try_accept_altar_at_position", altar.global_position))
+	_assert(accepted, "Blessing altar accepts gold")
+	_assert(int(battle_scene.get("gold")) == 0, "Blessing altar spends gold")
+	_assert(player.get_altar_blessing_count() == blessing_count_before + 1, "Blessing altar grants a blessing immediately")
+
+
+func _test_level_altar_buys_level() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	battle_scene.call("_enter_shop_phase")
+	var altar := battle_scene.get("altar_node") as Node2D
+	battle_scene.set("altar_offer", {"type": 4, "gold_cost": 25})
+	battle_scene.set("altar_accepted", false)
+	battle_scene.set("gold", 25)
+	var level_before := player.level
+	var accepted := bool(battle_scene.call("_try_accept_altar_at_position", altar.global_position))
+	_assert(accepted, "Level altar accepts gold")
+	_assert(int(battle_scene.get("gold")) == 0, "Level altar spends gold")
+	_assert(player.level == level_before + 1, "Level altar grants one level")
+
+
+func _test_healing_altar_restores_half_max_hp() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	battle_scene.call("_enter_shop_phase")
+	var altar := battle_scene.get("altar_node") as Node2D
+	battle_scene.set("altar_offer", {"type": 5, "gold_cost": 12})
+	battle_scene.set("altar_accepted", false)
+	battle_scene.set("gold", 12)
+	player.hp = 10.0
+	player.max_hp = 100.0
+	var accepted := bool(battle_scene.call("_try_accept_altar_at_position", altar.global_position))
+	_assert(accepted, "Healing altar accepts gold")
+	_assert(int(battle_scene.get("gold")) == 0, "Healing altar spends gold")
+	_assert(is_equal_approx(player.hp, 60.0), "Healing altar restores 50% max HP")
 
 
 func _test_map_affix_modifiers() -> void:
@@ -127,6 +227,25 @@ func _test_altar_blessings() -> void:
 	battle_scene.call("_update_character_card")
 	var blessings_label := battle_scene.get("character_card_blessings_label") as Label
 	_assert(blessings_label != null and blessings_label.text.contains("Wind Blessing"), "Character card lists altar blessings")
+
+
+func _get_random_item(rarity: StringName) -> ItemDefinition:
+	var database := root.get_node_or_null("ItemDatabase")
+	if database == null or not database.has_method("get_random_item"):
+		return null
+	return database.get_random_item(&"", rarity) as ItemDefinition
+
+
+func _get_inventory_rarity_count(rarity: StringName) -> int:
+	if player == null or player.inventory == null:
+		return 0
+
+	var total := 0
+	for item_id in player.inventory.item_counts.keys():
+		var item := player.inventory.item_definitions_by_id.get(item_id) as ItemDefinition
+		if item != null and item.rarity == rarity:
+			total += int(player.inventory.item_counts.get(item_id, 0))
+	return total
 
 
 func _assert(condition: bool, message: String) -> void:

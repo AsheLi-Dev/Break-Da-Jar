@@ -48,6 +48,11 @@ const ITEM_DETAIL_TEXT_BOX_MARGIN := Vector2(28.0, 18.0)
 const CONTAINER_HITBOX_PREVIEW_ROOT := NodePath("ContainerHitboxPreviews")
 const ALTAR_CLICK_RADIUS := 64.0
 const ALTAR_POSITION := PLAY_AREA_CENTER + Vector2(0.0, -210.0)
+const UPGRADE_ALTAR_GOLD_COST := 8
+const GAMBLE_ALTAR_GOLD_COST := 10
+const BLESSING_ALTAR_GOLD_COST := 20
+const LEVEL_ALTAR_GOLD_COST := 25
+const HEALING_ALTAR_GOLD_COST := 12
 const MAP_POISON_PUDDLE_INTERVAL := 4.0
 const MAP_POISON_PUDDLE_INITIAL_COUNT := 5
 
@@ -117,6 +122,15 @@ enum ShopTier {
 	COMMON,
 	RARE,
 	LEGENDARY,
+}
+
+enum AltarType {
+	CHALLENGE,
+	UPGRADE,
+	GAMBLE,
+	BLESSING,
+	LEVEL,
+	HEALING,
 }
 
 const ELITE_AFFIXES: Array[Dictionary] = [
@@ -1247,6 +1261,37 @@ func _apply_elite_affix(enemy: EnemyBase) -> void:
 
 
 func _roll_altar_offer() -> Dictionary:
+	var altar_type: int = [
+		AltarType.CHALLENGE,
+		AltarType.UPGRADE,
+		AltarType.GAMBLE,
+		AltarType.BLESSING,
+		AltarType.LEVEL,
+		AltarType.HEALING,
+	].pick_random()
+	var offer := {
+		"type": altar_type,
+	}
+	match altar_type:
+		AltarType.CHALLENGE:
+			offer.merge(_roll_challenge_altar_offer(), true)
+		AltarType.UPGRADE:
+			offer["gold_cost"] = UPGRADE_ALTAR_GOLD_COST
+		AltarType.GAMBLE:
+			offer["gold_cost"] = GAMBLE_ALTAR_GOLD_COST
+		AltarType.BLESSING:
+			var instant_blessing: Dictionary = _pick_different_entry(ALTAR_BLESSINGS, last_altar_blessing_id)
+			last_altar_blessing_id = StringName(instant_blessing.get("id", &""))
+			offer["blessing"] = instant_blessing
+			offer["gold_cost"] = BLESSING_ALTAR_GOLD_COST
+		AltarType.LEVEL:
+			offer["gold_cost"] = LEVEL_ALTAR_GOLD_COST
+		AltarType.HEALING:
+			offer["gold_cost"] = HEALING_ALTAR_GOLD_COST
+	return offer
+
+
+func _roll_challenge_altar_offer() -> Dictionary:
 	var map_affix: Dictionary = _pick_different_entry(MAP_AFFIXES, last_altar_map_affix_id)
 	var blessing: Dictionary = _pick_different_entry(ALTAR_BLESSINGS, last_altar_blessing_id)
 	last_altar_map_affix_id = StringName(map_affix.get("id", &""))
@@ -1279,13 +1324,13 @@ func _spawn_altar_offer() -> void:
 	altar_offer = _roll_altar_offer()
 	altar_accepted = false
 	altar_node = Node2D.new()
-	altar_node.name = "ChallengeAltar"
+	altar_node.name = "ShopAltar"
 	altar_node.global_position = _get_altar_position()
 	add_child(altar_node)
 
 	var base := Polygon2D.new()
 	base.name = "AltarBase"
-	base.color = Color(0.34, 0.18, 0.48, 0.95)
+	base.color = _get_altar_base_color()
 	base.polygon = PackedVector2Array([
 		Vector2(0.0, -42.0),
 		Vector2(36.0, -12.0),
@@ -1297,7 +1342,7 @@ func _spawn_altar_offer() -> void:
 
 	var core := Polygon2D.new()
 	core.name = "AltarCore"
-	core.color = Color(0.72, 1.0, 0.28, 0.9)
+	core.color = _get_altar_core_color()
 	core.polygon = _circle_polygon(14.0, 16)
 	core.position = Vector2(0.0, -8.0)
 	altar_node.add_child(core)
@@ -1332,20 +1377,134 @@ func _try_accept_altar_at_position(world_position: Vector2) -> bool:
 	if world_position.distance_to(altar_node.global_position) > ALTAR_CLICK_RADIUS:
 		return false
 
+	var accepted := false
+	match int(altar_offer.get("type", AltarType.CHALLENGE)):
+		AltarType.CHALLENGE:
+			accepted = _accept_challenge_altar()
+		AltarType.UPGRADE:
+			accepted = _accept_upgrade_altar()
+		AltarType.GAMBLE:
+			accepted = _accept_gamble_altar()
+		AltarType.BLESSING:
+			accepted = _accept_blessing_altar()
+		AltarType.LEVEL:
+			accepted = _accept_level_altar()
+		AltarType.HEALING:
+			accepted = _accept_healing_altar()
+	if not accepted:
+		_update_hud()
+		return false
+
+	altar_accepted = true
+	var label := altar_node.get_node_or_null("AltarLabel") as Label
+	if label != null:
+		label.text = _get_altar_offer_text(true)
+	_update_hud()
+	return true
+
+
+func _accept_challenge_altar() -> bool:
 	var map_affix: Dictionary = altar_offer.get("map_affix", {})
 	var blessing: Dictionary = altar_offer.get("blessing", {})
 	if map_affix.is_empty() or blessing.is_empty():
 		return false
 
-	altar_accepted = true
 	pending_map_affix = map_affix.duplicate(true)
 	pending_altar_blessing = blessing.duplicate(true)
 	pending_altar_reward_round = current_round + 1
-	var label := altar_node.get_node_or_null("AltarLabel") as Label
-	if label != null:
-		label.text = _get_altar_offer_text(true)
 	hud_message = "Altar accepted. Next round: %s." % String(map_affix.get("name", "Challenge"))
-	_update_hud()
+	return true
+
+
+func _accept_upgrade_altar() -> bool:
+	if not is_instance_valid(player):
+		return false
+	var gold_cost: int = int(altar_offer.get("gold_cost", UPGRADE_ALTAR_GOLD_COST))
+	if gold < gold_cost:
+		_play_shop_insufficient_gold_sfx(altar_node.global_position)
+		hud_message = "Not enough gold. Need %d." % gold_cost
+		return false
+	if not player.has_method("remove_one_random_item_by_rarity"):
+		return false
+
+	var reward := _roll_shop_item(ShopCategory.BROWN, &"rare")
+	if reward == null:
+		hud_message = "The upgrade altar was empty."
+		return false
+
+	var removed_item := player.remove_one_random_item_by_rarity(&"common") as ItemDefinition
+	if removed_item == null:
+		hud_message = "Upgrade altar needs a common item."
+		return false
+
+	gold -= gold_cost
+	player.add_item(reward)
+	hud_message = "Sacrificed %s and %dg for %s." % [removed_item.display_name, gold_cost, reward.display_name]
+	return true
+
+
+func _accept_gamble_altar() -> bool:
+	var gold_cost: int = int(altar_offer.get("gold_cost", GAMBLE_ALTAR_GOLD_COST))
+	if gold < gold_cost:
+		_play_shop_insufficient_gold_sfx(altar_node.global_position)
+		hud_message = "Not enough gold. Need %d." % gold_cost
+		return false
+
+	gold -= gold_cost
+	if randf() < 0.5:
+		var reward := gold_cost * 2
+		gold += reward
+		hud_message = "Gamble won %d gold." % reward
+	else:
+		hud_message = "Gamble lost %d gold." % gold_cost
+	return true
+
+
+func _accept_blessing_altar() -> bool:
+	var blessing: Dictionary = altar_offer.get("blessing", {})
+	if blessing.is_empty():
+		return false
+	var gold_cost: int = int(altar_offer.get("gold_cost", BLESSING_ALTAR_GOLD_COST))
+	if gold < gold_cost:
+		_play_shop_insufficient_gold_sfx(altar_node.global_position)
+		hud_message = "Not enough gold. Need %d." % gold_cost
+		return false
+
+	gold -= gold_cost
+	_grant_altar_blessing(StringName(blessing.get("id", &"")))
+	hud_message = "Bought blessing: %s." % String(blessing.get("name", "Blessing"))
+	return true
+
+
+func _accept_level_altar() -> bool:
+	if not is_instance_valid(player):
+		return false
+	var gold_cost: int = int(altar_offer.get("gold_cost", LEVEL_ALTAR_GOLD_COST))
+	if gold < gold_cost:
+		_play_shop_insufficient_gold_sfx(altar_node.global_position)
+		hud_message = "Not enough gold. Need %d." % gold_cost
+		return false
+	if not player.has_method("grant_level"):
+		return false
+
+	gold -= gold_cost
+	player.grant_level()
+	hud_message = "Level altar raised you to level %d." % player.level
+	return true
+
+
+func _accept_healing_altar() -> bool:
+	if not is_instance_valid(player):
+		return false
+	var gold_cost: int = int(altar_offer.get("gold_cost", HEALING_ALTAR_GOLD_COST))
+	if gold < gold_cost:
+		_play_shop_insufficient_gold_sfx(altar_node.global_position)
+		hud_message = "Not enough gold. Need %d." % gold_cost
+		return false
+
+	gold -= gold_cost
+	player.heal(player.max_hp * 0.5)
+	hud_message = "Healing altar restored 50%% max HP."
 	return true
 
 
@@ -1463,14 +1622,76 @@ func _get_active_map_affix_value(key: StringName, default_value: float) -> float
 
 
 func _get_altar_offer_text(accepted: bool) -> String:
-	var map_affix: Dictionary = altar_offer.get("map_affix", {})
-	var blessing: Dictionary = altar_offer.get("blessing", {})
 	var prefix := "Accepted" if accepted else "Click altar"
-	return "%s\nMap: %s\nReward: %s" % [
-		prefix,
-		String(map_affix.get("description", "")),
-		String(blessing.get("description", "")),
-	]
+	match int(altar_offer.get("type", AltarType.CHALLENGE)):
+		AltarType.UPGRADE:
+			return "%s upgrade altar\nCost: random common item + %dg\nReward: random rare item" % [
+				prefix,
+				int(altar_offer.get("gold_cost", UPGRADE_ALTAR_GOLD_COST)),
+			]
+		AltarType.GAMBLE:
+			return "%s gamble altar\nCost: %dg\n50%% chance: gain %dg" % [
+				prefix,
+				int(altar_offer.get("gold_cost", GAMBLE_ALTAR_GOLD_COST)),
+				int(altar_offer.get("gold_cost", GAMBLE_ALTAR_GOLD_COST)) * 2,
+			]
+		AltarType.BLESSING:
+			var instant_blessing: Dictionary = altar_offer.get("blessing", {})
+			return "%s blessing altar\nCost: %dg\nReward: %s" % [
+				prefix,
+				int(altar_offer.get("gold_cost", BLESSING_ALTAR_GOLD_COST)),
+				String(instant_blessing.get("description", "")),
+			]
+		AltarType.LEVEL:
+			return "%s level altar\nCost: %dg\nReward: gain 1 level" % [
+				prefix,
+				int(altar_offer.get("gold_cost", LEVEL_ALTAR_GOLD_COST)),
+			]
+		AltarType.HEALING:
+			return "%s healing altar\nCost: %dg\nReward: heal 50%% max HP" % [
+				prefix,
+				int(altar_offer.get("gold_cost", HEALING_ALTAR_GOLD_COST)),
+			]
+		_:
+			var map_affix: Dictionary = altar_offer.get("map_affix", {})
+			var blessing: Dictionary = altar_offer.get("blessing", {})
+			return "%s challenge altar\nMap: %s\nReward: %s" % [
+				prefix,
+				String(map_affix.get("description", "")),
+				String(blessing.get("description", "")),
+			]
+
+
+func _get_altar_base_color() -> Color:
+	match int(altar_offer.get("type", AltarType.CHALLENGE)):
+		AltarType.UPGRADE:
+			return Color(0.18, 0.42, 0.28, 0.95)
+		AltarType.GAMBLE:
+			return Color(0.48, 0.30, 0.12, 0.95)
+		AltarType.BLESSING:
+			return Color(0.18, 0.34, 0.50, 0.95)
+		AltarType.LEVEL:
+			return Color(0.44, 0.28, 0.08, 0.95)
+		AltarType.HEALING:
+			return Color(0.46, 0.16, 0.18, 0.95)
+		_:
+			return Color(0.34, 0.18, 0.48, 0.95)
+
+
+func _get_altar_core_color() -> Color:
+	match int(altar_offer.get("type", AltarType.CHALLENGE)):
+		AltarType.UPGRADE:
+			return Color(0.40, 1.0, 0.48, 0.9)
+		AltarType.GAMBLE:
+			return Color(1.0, 0.80, 0.28, 0.9)
+		AltarType.BLESSING:
+			return Color(0.42, 0.82, 1.0, 0.9)
+		AltarType.LEVEL:
+			return Color(1.0, 0.92, 0.38, 0.9)
+		AltarType.HEALING:
+			return Color(1.0, 0.38, 0.42, 0.9)
+		_:
+			return Color(0.72, 1.0, 0.28, 0.9)
 
 
 func _get_altar_position() -> Vector2:

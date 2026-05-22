@@ -179,6 +179,8 @@ func _deal_attack_damage() -> void:
 		return
 
 	var damage := _get_attack_damage()
+	if owner_player != null and owner_player.has_method("get_necromancer_skeleton_archer_target_damage_multiplier"):
+		damage *= float(owner_player.call("get_necromancer_skeleton_archer_target_damage_multiplier", target))
 	if owner_player != null and owner_player.has_method("deal_player_damage_to_enemy"):
 		owner_player.deal_player_damage_to_enemy(target, damage, {"source": "skeleton_archer", "direct": true, "allow_procs": false})
 	elif target.has_method("take_damage"):

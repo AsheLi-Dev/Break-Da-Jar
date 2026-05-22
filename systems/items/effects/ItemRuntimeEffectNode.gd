@@ -93,6 +93,8 @@ func _process(delta: float) -> void:
 			_update_periodic_auto_fireball(delta)
 		&"periodic_chain_lightning":
 			_update_periodic_chain_lightning(delta)
+		&"periodic_crimson_aura":
+			_update_periodic_crimson_aura(delta)
 		&"periodic_blood_claw":
 			_update_periodic_blood_claw(delta)
 		&"periodic_blood_blade":
@@ -243,6 +245,27 @@ func _update_periodic_chain_lightning(delta: float) -> void:
 
 	_trigger_auto_chain_lightning(owner_2d.global_position, value + damage_scale * float(maxi(_get_item_count() - 1, 0)))
 	periodic_remaining = internal_cooldown
+
+
+func _update_periodic_crimson_aura(delta: float) -> void:
+	periodic_remaining -= delta
+	if periodic_remaining > 0.0:
+		return
+
+	periodic_remaining += maxf(internal_cooldown, 0.001)
+	var owner_2d := owner_player as Node2D
+	if owner_2d == null:
+		return
+
+	var damage: float = _get_owner_max_hp() * (value + damage_scale * float(maxi(_get_item_count() - 1, 0)))
+	if damage > 0.0:
+		for enemy in EFFECT_TARGETING.enemies_near(owner_player, owner_2d.global_position, radius):
+			if enemy.has_method("take_damage"):
+				enemy.call("take_damage", damage, owner_player, {"source": "crimson_aura", "direct": false, "allow_procs": false})
+
+	var hp_loss: float = _get_owner_current_hp() * chance
+	if hp_loss > 0.0 and owner_player.has_method("lose_hp"):
+		owner_player.call("lose_hp", hp_loss)
 
 
 func _update_periodic_blood_claw(delta: float) -> void:
@@ -470,6 +493,18 @@ func _get_base_attack_damage() -> float:
 	if owner_player != null and owner_player.has_method("get_base_attack_damage"):
 		return owner_player.get_base_attack_damage()
 	return 0.0
+
+
+func _get_owner_current_hp() -> float:
+	if owner_player == null:
+		return 0.0
+	return maxf(float(owner_player.get("hp")), 0.0)
+
+
+func _get_owner_max_hp() -> float:
+	if owner_player == null:
+		return 0.0
+	return maxf(float(owner_player.get("max_hp")), 0.0)
 
 
 func _get_nearest_enemy(origin: Vector2, search_radius: float, exclude: Array = []) -> Node2D:

@@ -10,6 +10,8 @@ class TestPlayer:
 	extends Node2D
 
 	var item_counts: Dictionary = {}
+	var hp: float = 100.0
+	var max_hp: float = 100.0
 	var retribution_casts: int = 0
 	var last_retribution_position: Vector2 = Vector2.ZERO
 	var last_damage_multiplier: float = 0.0
@@ -18,11 +20,26 @@ class TestPlayer:
 	func get_item_count(item_id: StringName) -> int:
 		return int(item_counts.get(item_id, 0))
 
+	func lose_hp(amount: float) -> float:
+		var old_hp := hp
+		hp = maxf(0.0, hp - amount)
+		return old_hp - hp
+
 	func trigger_periodic_holy_retribution(target_position: Vector2, damage_multiplier: float, area_multiplier: float) -> void:
 		retribution_casts += 1
 		last_retribution_position = target_position
 		last_damage_multiplier = damage_multiplier
 		last_area_multiplier = area_multiplier
+
+
+class TestEnemy:
+	extends Node2D
+
+	var damage_taken: float = 0.0
+
+	func take_damage(amount: float, _source: Node = null, _attack_info: Dictionary = {}) -> float:
+		damage_taken += amount
+		return amount
 
 
 func _initialize() -> void:
@@ -35,6 +52,7 @@ func _run() -> void:
 
 	_test_shared_runtime_effect_attaches_once()
 	_test_periodic_holy_retribution_targets_nearest_enemy()
+	_test_crimson_aura_damages_nearby_enemies_and_fixed_self_loss()
 
 	_finish()
 
@@ -108,6 +126,53 @@ func _test_periodic_holy_retribution_targets_nearest_enemy() -> void:
 	player.queue_free()
 	far_enemy.queue_free()
 	near_enemy.queue_free()
+
+
+func _test_crimson_aura_damages_nearby_enemies_and_fixed_self_loss() -> void:
+	var player := TestPlayer.new()
+	player.item_counts[&"crimson_aura"] = 2
+	player.max_hp = 100.0
+	player.hp = 80.0
+	var near_enemy := TestEnemy.new()
+	var edge_enemy := TestEnemy.new()
+	var far_enemy := TestEnemy.new()
+	near_enemy.add_to_group("enemy")
+	edge_enemy.add_to_group("enemy")
+	far_enemy.add_to_group("enemy")
+	near_enemy.global_position = Vector2(40.0, 0.0)
+	edge_enemy.global_position = Vector2(300.0, 0.0)
+	far_enemy.global_position = Vector2(301.0, 0.0)
+	root.add_child(player)
+	root.add_child(near_enemy)
+	root.add_child(edge_enemy)
+	root.add_child(far_enemy)
+
+	var effect := PERIODIC_EFFECT_SCRIPT.new()
+	effect.configure_instance(&"crimson_aura", 0, 0)
+	effect.stacking_rule = &"shared_runtime_scaled"
+	effect.mode = &"periodic_crimson_aura"
+	effect.value = 0.1
+	effect.radius = 300.0
+	effect.chance = 0.05
+	effect.damage_scale = 0.05
+	effect.interval = 1.0
+	effect.apply_to(player)
+
+	var runtime_nodes := _get_runtime_nodes(player)
+	_assert(runtime_nodes.size() == 1, "Crimson Aura item creates one runtime node")
+	if not runtime_nodes.is_empty():
+		var node := runtime_nodes[0]
+		node.set("periodic_remaining", 0.0)
+		node.call("_process", 0.1)
+		_assert(is_equal_approx(near_enemy.damage_taken, 15.0), "Crimson Aura second copy increases damage by 5% max HP")
+		_assert(is_equal_approx(edge_enemy.damage_taken, 15.0), "Crimson Aura hits enemies at 300px")
+		_assert(is_equal_approx(far_enemy.damage_taken, 0.0), "Crimson Aura ignores enemies outside 300px")
+		_assert(is_equal_approx(player.hp, 76.0), "Crimson Aura self HP loss stays 5% current HP")
+
+	player.queue_free()
+	near_enemy.queue_free()
+	edge_enemy.queue_free()
+	far_enemy.queue_free()
 
 
 func _get_runtime_nodes(player: Node) -> Array[Node]:

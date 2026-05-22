@@ -4,6 +4,7 @@ class_name NecromancerRuntime
 const HOLY_FLAME_LASER_SCRIPT := preload("res://systems/combat/HolyFlameLaser.gd")
 const NECROMANCER_SHADOW_SCRIPT := preload("res://systems/combat/NecromancerShadow.gd")
 const SKELETON_ARCHER_SCENE: PackedScene = preload("res://scenes/summons/SkeletonArcher.tscn")
+const HEALING_OVER_TIME_SCRIPT := preload("res://systems/combat/HealingOverTimeEffect.gd")
 
 const SOUL_SIPHON_BEAM_TEXTURE_PATH := "res://assets/vfx/dark spell/soul_siphon_beam.png"
 const SOUL_SIPHON_BEAM_FRAME_SIZE := Vector2i(265, 81)
@@ -27,6 +28,10 @@ var gold_kill_counter: int = 0
 var defense_kill_counter: int = 0
 var atk_kill_counter: int = 0
 var max_hp_kill_counter: int = 0
+var skeleton_archer_damage_kill_counter: int = 0
+var skeleton_archer_damage_kill_stacks: int = 0
+var primary_damage_kill_counter: int = 0
+var primary_damage_kill_stacks: int = 0
 var kill_atk_damage_loss_bonus: int = 0
 var next_slide_soul_siphon_ready: bool = false
 var slide_skeleton_archer_attack_speed_remaining: float = 0.0
@@ -34,6 +39,10 @@ var skeleton_archers: Array[Node] = []
 var black_shadow: Node2D
 var round_movement_speed_active: bool = false
 var round_movement_speed_timer: float = 0.0
+var hit_move_speed_buff_counter: int = 0
+var charged_primary_damage_timer: float = 0.0
+var recently_primary_damaged_enemy: Node
+var recently_skeleton_damaged_enemy: Node
 
 
 func enable_talent(effect_id: StringName) -> void:
@@ -42,6 +51,13 @@ func enable_talent(effect_id: StringName) -> void:
 
 func has_talent(effect_id: StringName) -> bool:
 	return bool(enabled_talents.get(effect_id, false))
+
+
+func apply_talent_effect(effect_id: StringName, _player) -> bool:
+	if not String(effect_id).begins_with("necromancer_"):
+		return false
+	enable_talent(effect_id)
+	return true
 
 
 func get_compat_property(property: StringName) -> Variant:
@@ -56,6 +72,14 @@ func get_compat_property(property: StringName) -> Variant:
 			return atk_kill_counter
 		&"necromancer_max_hp_kill_counter":
 			return max_hp_kill_counter
+		&"necromancer_skeleton_archer_damage_kill_counter":
+			return skeleton_archer_damage_kill_counter
+		&"necromancer_skeleton_archer_damage_kill_stacks":
+			return skeleton_archer_damage_kill_stacks
+		&"necromancer_primary_damage_kill_counter":
+			return primary_damage_kill_counter
+		&"necromancer_primary_damage_kill_stacks":
+			return primary_damage_kill_stacks
 		&"necromancer_kill_atk_damage_loss_bonus":
 			return kill_atk_damage_loss_bonus
 		&"next_necromancer_slide_soul_siphon_ready":
@@ -81,6 +105,14 @@ func set_compat_property(property: StringName, value: Variant) -> bool:
 			atk_kill_counter = int(value)
 		&"necromancer_max_hp_kill_counter":
 			max_hp_kill_counter = int(value)
+		&"necromancer_skeleton_archer_damage_kill_counter":
+			skeleton_archer_damage_kill_counter = int(value)
+		&"necromancer_skeleton_archer_damage_kill_stacks":
+			skeleton_archer_damage_kill_stacks = int(value)
+		&"necromancer_primary_damage_kill_counter":
+			primary_damage_kill_counter = int(value)
+		&"necromancer_primary_damage_kill_stacks":
+			primary_damage_kill_stacks = int(value)
 		&"necromancer_kill_atk_damage_loss_bonus":
 			kill_atk_damage_loss_bonus = int(value)
 		&"next_necromancer_slide_soul_siphon_ready":
@@ -109,6 +141,8 @@ func launch_soul_orb(player, target_position: Vector2) -> void:
 	var damage: float = player.get_base_attack_damage()
 	if player.utility_ability == &"necromancer_soul_surge" and player.fire_surge_remaining > 0.0:
 		damage *= 1.25
+	damage *= get_primary_damage_kill_multiplier()
+	damage *= consume_charged_primary_damage_multiplier()
 	projectile.global_position = player.global_position + direction * 28.0
 	projectile.owner_player = player
 	projectile.debug_color = Color(0.52, 0.16, 0.92)
@@ -124,10 +158,10 @@ func cast_soul_beam(player) -> void:
 
 
 func fire_soul_beam(player, target_position: Vector2) -> void:
-	spawn_soul_beam(player, player.global_position, _direction_to(player, target_position))
+	spawn_soul_beam(player, player.global_position, _direction_to(player, target_position), true)
 
 
-func spawn_soul_beam(player, start_position: Vector2, direction: Vector2) -> void:
+func spawn_soul_beam(player, start_position: Vector2, direction: Vector2, consume_primary_charge: bool = false) -> void:
 	if player.get_tree() == null or player.get_tree().current_scene == null:
 		return
 	var laser := HOLY_FLAME_LASER_SCRIPT.new() as HolyFlameLaser
@@ -152,6 +186,9 @@ func spawn_soul_beam(player, start_position: Vector2, direction: Vector2) -> voi
 		next_slide_soul_siphon_ready = false
 	if player.utility_ability == &"necromancer_soul_surge" and player.fire_surge_remaining > 0.0:
 		damage *= 1.25
+	damage *= get_primary_damage_kill_multiplier()
+	if consume_primary_charge:
+		damage *= consume_charged_primary_damage_multiplier()
 	laser.setup(player, start_position, direction.normalized(), damage, "necromancer_soul_beam", true)
 	laser.collision_layer = 0
 	laser.collision_mask = 0
@@ -175,6 +212,7 @@ func summon_skeleton_archer(player) -> void:
 		archer.call("setup", player, follow_offset)
 	if has_talent(&"necromancer_skeleton_archer_damage_bonus"):
 		archer.damage_inherit_multiplier *= 1.15
+	archer.damage_inherit_multiplier *= get_skeleton_archer_damage_kill_multiplier()
 	if has_talent(&"necromancer_skeleton_archer_damage_growth"):
 		archer.damage_growth_per_second = 0.02
 	if has_talent(&"necromancer_skeleton_archer_poison_chance"):
@@ -191,14 +229,19 @@ func summon_skeleton_archer(player) -> void:
 	lifetime_timer.one_shot = true
 	lifetime_timer.wait_time = get_skeleton_archer_lifetime()
 	archer.add_child(lifetime_timer)
-	lifetime_timer.timeout.connect(expire_skeleton_archer.bind(archer.get_instance_id()))
+	lifetime_timer.timeout.connect(expire_skeleton_archer.bind(archer.get_instance_id(), player))
 	lifetime_timer.start()
 
 
 func get_skeleton_archer_cap() -> int:
+	var cap := MAX_SKELETON_ARCHERS
 	if has_talent(&"necromancer_skeleton_archer_lifetime_and_cap"):
-		return MAX_SKELETON_ARCHERS + 1
-	return MAX_SKELETON_ARCHERS
+		cap += 1
+	if has_talent(&"necromancer_container_break_skeleton_archer"):
+		cap += 1
+	if has_talent(&"necromancer_kill_skeleton_archer"):
+		cap += 2
+	return cap
 
 
 func get_skeleton_archer_lifetime() -> float:
@@ -299,23 +342,33 @@ func cleanup_skeleton_archers(free_valid: bool) -> void:
 			skeleton_archers.remove_at(index)
 
 
-func remove_skeleton_archer(archer: Node) -> void:
+func remove_skeleton_archer(archer: Node, player = null) -> void:
 	var index := skeleton_archers.find(archer)
 	if index >= 0:
 		skeleton_archers.remove_at(index)
+		_apply_skeleton_archer_death_atk(player)
 
 
-func expire_skeleton_archer(archer_id: int) -> void:
+func expire_skeleton_archer(archer_id: int, player = null) -> void:
 	var archer := instance_from_id(archer_id) as Node
 	var index := skeleton_archers.find(archer)
 	if index >= 0:
 		skeleton_archers.remove_at(index)
+		_apply_skeleton_archer_death_atk(player)
 	if is_instance_valid(archer):
 		if archer.has_method("play_death_and_free"):
 			archer.call("play_death_and_free")
 		else:
 			archer.queue_free()
 	cleanup_skeleton_archers(false)
+
+
+func _apply_skeleton_archer_death_atk(player) -> void:
+	if not has_talent(&"necromancer_skeleton_archer_death_round_atk"):
+		return
+	if player == null or player.temporary_buffs == null:
+		return
+	player.temporary_buffs.add_round_stat_buff(&"necromancer_skeleton_archer_death_round_atk", &"atk", 5.0, 999999)
 
 
 func apply_slide_skeleton_archer_attack_speed() -> void:
@@ -348,6 +401,25 @@ func update_round_movement_speed(player, delta: float) -> void:
 		)
 
 
+func update_charged_primary_damage(delta: float) -> void:
+	if not has_talent(&"necromancer_charged_primary_damage"):
+		charged_primary_damage_timer = 0.0
+		return
+	charged_primary_damage_timer = minf(charged_primary_damage_timer + delta, 10.0)
+
+
+func get_dash_duration_multiplier() -> float:
+	return 1.3 if has_talent(&"necromancer_dash_duration_bonus") else 1.0
+
+
+func consume_charged_primary_damage_multiplier() -> float:
+	if not has_talent(&"necromancer_charged_primary_damage"):
+		return 1.0
+	var multiplier := 1.0 + minf(floorf(charged_primary_damage_timer) * 0.1, 1.0)
+	charged_primary_damage_timer = 0.0
+	return multiplier
+
+
 func apply_laser_allied_effects(laser: HolyFlameLaser) -> void:
 	if not has_talent(&"necromancer_soul_siphon_skeleton_archer_attack_speed"):
 		return
@@ -369,10 +441,15 @@ func apply_laser_allied_effects(laser: HolyFlameLaser) -> void:
 
 
 func handle_enemy_killed(player, enemy: Node) -> void:
+	if has_talent(&"necromancer_skeleton_archer_kill_heal") and _was_killed_by_skeleton_archer(enemy):
+		player.heal(player.max_hp * 0.1)
+	if has_talent(&"necromancer_kill_heal_over_time"):
+		_start_kill_heal_over_time(player)
 	if has_talent(&"necromancer_kill_atk_damage_loss"):
 		apply_kill_atk_gain(player)
 	if has_talent(&"necromancer_enemy_death_explosion"):
 		trigger_enemy_death_explosion(player, enemy)
+	handle_enemy_kill_skeleton_archer(player, enemy)
 	if has_talent(&"necromancer_xp_per_10_kills"):
 		xp_kill_counter += 1
 		while xp_kill_counter >= 10:
@@ -398,6 +475,135 @@ func handle_enemy_killed(player, enemy: Node) -> void:
 		while max_hp_kill_counter >= 10:
 			max_hp_kill_counter -= 10
 			player.stats.apply_modifier(&"max_hp", &"add", 1.0)
+	if has_talent(&"necromancer_skeleton_archer_damage_per_10_kills"):
+		skeleton_archer_damage_kill_counter += 1
+		while skeleton_archer_damage_kill_counter >= 10:
+			skeleton_archer_damage_kill_counter -= 10
+			_add_skeleton_archer_damage_kill_stack()
+	if has_talent(&"necromancer_primary_damage_per_10_kills"):
+		primary_damage_kill_counter += 1
+		while primary_damage_kill_counter >= 10:
+			primary_damage_kill_counter -= 10
+			primary_damage_kill_stacks += 1
+
+
+func handle_container_broken(player, container: Node, attack_info: Dictionary, chance_roll: float = -1.0) -> bool:
+	if not has_talent(&"necromancer_container_break_skeleton_archer"):
+		return false
+	if container == null or not container is Node2D:
+		return false
+	if container is BreakableContainer and container.is_shop_container:
+		return false
+	if attack_info.has("owner") and attack_info.get("owner") != player:
+		return false
+
+	var roll: float = chance_roll if chance_roll >= 0.0 else randf()
+	if roll >= 0.1:
+		return false
+
+	var previous_target: Vector2 = player.pending_shockwave_target_position
+	player.pending_shockwave_target_position = (container as Node2D).global_position
+	summon_skeleton_archer(player)
+	player.pending_shockwave_target_position = previous_target
+	return true
+
+
+func handle_enemy_kill_skeleton_archer(player, enemy: Node, chance_roll: float = -1.0) -> bool:
+	if not has_talent(&"necromancer_kill_skeleton_archer"):
+		return false
+	if enemy == null or not enemy is Node2D:
+		return false
+
+	var roll: float = chance_roll if chance_roll >= 0.0 else randf()
+	if roll >= 0.1:
+		return false
+
+	var previous_target: Vector2 = player.pending_shockwave_target_position
+	player.pending_shockwave_target_position = (enemy as Node2D).global_position
+	summon_skeleton_archer(player)
+	player.pending_shockwave_target_position = previous_target
+	return true
+
+
+func _start_kill_heal_over_time(player) -> void:
+	var effect := HEALING_OVER_TIME_SCRIPT.new() as HealingOverTimeEffect
+	effect.setup(player, player.max_hp * 0.05, 3.0)
+	if player.get_tree() != null and player.get_tree().current_scene != null:
+		player.get_tree().current_scene.add_child(effect)
+	else:
+		player.add_child(effect)
+
+
+func _was_killed_by_skeleton_archer(enemy: Node) -> bool:
+	if enemy == null:
+		return false
+	var attack_info: Variant = enemy.get("last_attack_info") if enemy is Object else null
+	if not attack_info is Dictionary:
+		return false
+	return String(attack_info.get("source", "")) == "skeleton_archer"
+
+
+func _add_skeleton_archer_damage_kill_stack() -> void:
+	var previous_multiplier := get_skeleton_archer_damage_kill_multiplier()
+	skeleton_archer_damage_kill_stacks += 1
+	var next_multiplier := get_skeleton_archer_damage_kill_multiplier()
+	var active_archer_ratio := next_multiplier / maxf(previous_multiplier, 0.001)
+	cleanup_skeleton_archers(false)
+	for archer in skeleton_archers:
+		if is_instance_valid(archer):
+			archer.damage_inherit_multiplier *= active_archer_ratio
+
+
+func get_skeleton_archer_damage_kill_multiplier() -> float:
+	return 1.0 + float(skeleton_archer_damage_kill_stacks) * 0.01
+
+
+func get_primary_damage_kill_multiplier() -> float:
+	return 1.0 + float(primary_damage_kill_stacks) * 0.01
+
+
+func handle_attack_hit(player, enemy: Node, _attack_info: Dictionary) -> void:
+	if _is_necromancer_left_click_attack(_attack_info):
+		recently_primary_damaged_enemy = enemy
+	if String(_attack_info.get("source", "")) == "skeleton_archer":
+		recently_skeleton_damaged_enemy = enemy
+	if not has_talent(&"necromancer_hit_move_speed_stack") or player.temporary_buffs == null:
+		return
+	if not bool(_attack_info.get("direct", true)):
+		return
+
+	hit_move_speed_buff_counter += 1
+	var buff_id := StringName("necromancer_hit_move_speed_%s" % hit_move_speed_buff_counter)
+	player.temporary_buffs.add_timed_stat_buff(buff_id, &"bonus_move_speed_flat", 5.0, 3.0, 1)
+
+
+func get_skeleton_archer_target_damage_multiplier(target: Node) -> float:
+	if not has_talent(&"necromancer_skeleton_archer_marked_target_damage"):
+		return 1.0
+	if target == null or not is_instance_valid(target):
+		return 1.0
+	if recently_primary_damaged_enemy == null or not is_instance_valid(recently_primary_damaged_enemy):
+		return 1.0
+	return 1.5 if target == recently_primary_damaged_enemy else 1.0
+
+
+func get_player_damage_to_skeleton_marked_target_multiplier(target: Node, attack_info: Dictionary) -> float:
+	if not has_talent(&"necromancer_primary_damage_to_skeleton_marked_target"):
+		return 1.0
+	if String(attack_info.get("source", "")) == "skeleton_archer":
+		return 1.0
+	if target == null or not is_instance_valid(target):
+		return 1.0
+	if recently_skeleton_damaged_enemy == null or not is_instance_valid(recently_skeleton_damaged_enemy):
+		return 1.0
+	return 1.3 if target == recently_skeleton_damaged_enemy else 1.0
+
+
+func _is_necromancer_left_click_attack(attack_info: Dictionary) -> bool:
+	if not bool(attack_info.get("direct", true)):
+		return false
+	var source := String(attack_info.get("source", ""))
+	return source == "necromancer_soul_beam" or source == "necromancer_soul_orb"
 
 
 func on_round_started(player) -> void:

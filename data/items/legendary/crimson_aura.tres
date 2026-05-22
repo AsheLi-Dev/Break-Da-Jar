@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" path="res://systems/items/effects/PeriodicEffect.gd" id="2_periodic"]
+[ext_resource type="Texture2D" path="res://assets/items/dark_realistic_pixel_icons/blood_price_brand.png" id="item_icon"]
+
+[sub_resource type="Resource" id="Resource_effect"]
+script = ExtResource("2_periodic")
+stacking_rule = &"shared_runtime_scaled"
+stacking_notes = "One aura tick per second. Damage starts at 10% max HP; each extra copy adds +5% max HP damage. HP loss stays 5% current HP."
+mode = &"periodic_crimson_aura"
+value = 0.1
+radius = 300.0
+chance = 0.05
+damage_scale = 0.05
+interval = 1.0
+
+[resource]
+script = ExtResource("1_def")
+id = &"crimson_aura"
+display_name = "Crimson Aura"
+description = "Each second, nearby enemies take 10% of your Max HP as damage while you lose 5% current HP. Extra copies add +5% damage."
+category = &"attack"
+rarity = &"legendary"
+tags = Array[StringName]([&"Aura", &"HP", &"AreaDamage"])
+icon = ExtResource("item_icon")
+effects = Array[Resource]([SubResource("Resource_effect")])

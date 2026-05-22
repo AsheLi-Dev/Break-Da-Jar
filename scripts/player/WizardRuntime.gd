@@ -28,6 +28,29 @@ func has_talent(effect_id: StringName) -> bool:
 	return bool(enabled_talents.get(effect_id, false))
 
 
+func apply_talent_effect(effect_id: StringName, player) -> bool:
+	if not String(effect_id).begins_with("wizard_"):
+		return false
+
+	enable_talent(effect_id)
+	match effect_id:
+		&"wizard_nearby_enemy_attack_speed":
+			player._update_wizard_nearby_enemy_attack_speed()
+		&"wizard_nearby_enemy_move_speed":
+			player._update_wizard_nearby_enemy_move_speed()
+		&"wizard_nearby_poison_aura":
+			nearby_poison_aura_timer = 5.0
+		&"wizard_nearby_enemy_elite_damage":
+			player._update_wizard_nearby_enemy_elite_damage()
+		&"wizard_fire_surge_attack_speed":
+			player._update_wizard_fire_surge_attack_speed_bonus()
+		&"wizard_fire_essence_burst":
+			fire_essence_spawn_timer = 5.0
+		&"wizard_rare_item_move_speed":
+			player._update_item_talent_bonuses()
+	return true
+
+
 func get_compat_property(property: StringName) -> Variant:
 	var property_text := String(property)
 	if property_text.begins_with("talent_wizard_") and property_text.ends_with("_enabled"):

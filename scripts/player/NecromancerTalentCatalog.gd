@@ -68,6 +68,10 @@ static func node_ids() -> Array[StringName]:
 
 static func definition(id: StringName) -> Dictionary:
 	match id:
+		&"skull_top_1":
+			return {"name": "Jar\nBones", "description": "Breaking combat jars has a 10% chance to trigger your right-click Skeleton Archer summon at the jar. Skeleton Archer cap increases by 1.", "effect": &"necromancer_container_break_skeleton_archer"}
+		&"skull_top_2":
+			return {"name": "Death\nBones", "description": "Killing an enemy has a 10% chance to trigger your right-click Skeleton Archer summon at the enemy. Skeleton Archer cap increases by 2.", "effect": &"necromancer_kill_skeleton_archer"}
 		&"tooth_0":
 			return {"name": "Bone\nPatience", "description": "Skeleton Archers gain 2% increased damage for each full second they remain alive.", "effect": &"necromancer_skeleton_archer_damage_growth"}
 		&"mouth_left":
@@ -79,7 +83,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"tooth_3":
 			return {"name": "Bone\nBow", "description": "Skeleton Archers summoned by right-click deal 15% increased damage.", "effect": &"necromancer_skeleton_archer_damage_bonus"}
 		&"tooth_5":
-			return {"name": "Quick\nRite", "description": "Gain +10% attack speed.", "stat": &"attack_speed_bonus", "value": 0.1}
+			return {"name": "Quick\nRite", "description": "Gain +15% attack speed.", "stat": &"attack_speed_bonus", "value": 0.15}
 		&"nose_bottom":
 			return {"name": "Bone\nLesson", "description": "Every 10 enemy kills grants 1 XP.", "effect": &"necromancer_xp_per_10_kills"}
 		&"nose_left":
@@ -109,19 +113,31 @@ static func definition(id: StringName) -> Dictionary:
 		&"right_eye_1":
 			return {"name": "Blood\nDebt", "description": "Enemy deaths grant +1 ATK. Taking damage removes 2 ATK gained this way.", "effect": &"necromancer_kill_atk_damage_loss"}
 		&"left_eye_2":
-			return {"name": "Hollow\nAim", "description": "Gain +10% critical chance.", "stat": &"critical_chance", "value": 0.1}
-		&"left_eye_4", &"right_eye_4":
-			return {"name": "Deadeye\nChoir", "description": "Gain +20% attack speed.", "stat": &"attack_speed_bonus", "value": 0.2}
+			return {"name": "Long\nDrift", "description": "Dash distance increases by extending dash duration by 30%.", "effect": &"necromancer_dash_duration_bonus"}
+		&"left_eye_4":
+			return {"name": "Grave\nHaste", "description": "Attacks that hit enemies grant +5 movement speed for 3 seconds. This can stack without limit.", "effect": &"necromancer_hit_move_speed_stack"}
+		&"right_eye_4":
+			return {"name": "Patient\nSiphon", "description": "Your next left-click attack gains 10% damage each second, up to 100%. Left-clicking resets this bonus.", "effect": &"necromancer_charged_primary_damage"}
 		&"left_jaw":
 			return {"name": "Bone\nLegion", "description": "Skeleton Archers last twice as long and your Skeleton Archer cap increases by 1.", "effect": &"necromancer_skeleton_archer_lifetime_and_cap"}
 		&"right_jaw":
 			return {"name": "Siphon\nCommand", "description": "Soul Siphon grants hit Skeleton Archers +100% attack speed for 2 seconds. They die when it ends.", "effect": &"necromancer_soul_siphon_skeleton_archer_attack_speed"}
-		&"left_chin", &"right_chin":
-			return {"name": "Marrow\nShell", "description": "Gain +10% maximum health.", "stat": &"max_hp", "operation": &"multiply_add", "value": 0.1}
+		&"left_chin":
+			return {"name": "Bone\nTally", "description": "Every 10 enemy kills permanently grants Skeleton Archers +1% damage.", "effect": &"necromancer_skeleton_archer_damage_per_10_kills"}
+		&"right_chin":
+			return {"name": "Siphon\nTally", "description": "Every 10 enemy kills permanently grants left-click attacks +1% damage.", "effect": &"necromancer_primary_damage_per_10_kills"}
 		&"skull_top_3", &"skull_top_4":
 			return {"name": "Crown\nof Bone", "description": "Gain +2 ATK.", "stat": &"atk", "value": 2.0}
-		&"skull_top_0", &"skull_top_7":
-			return {"name": "Dark\nReach", "description": "Gain +10% movement speed.", "stat": &"movement_speed_bonus", "value": 0.1}
+		&"skull_top_6":
+			return {"name": "Bone\nInheritance", "description": "When your Skeleton Archers die, gain +5 ATK until the round ends.", "effect": &"necromancer_skeleton_archer_death_round_atk"}
+		&"skull_top_0":
+			return {"name": "Marked\nBones", "description": "Skeleton Archers deal 50% increased damage to the enemy most recently damaged by your left-click attack.", "effect": &"necromancer_skeleton_archer_marked_target_damage"}
+		&"skull_top_7":
+			return {"name": "Bone\nMarked", "description": "You deal 30% increased damage to the enemy most recently damaged by your Skeleton Archers.", "effect": &"necromancer_primary_damage_to_skeleton_marked_target"}
+		&"left_temple":
+			return {"name": "Marrow\nFeast", "description": "When your Skeleton Archers kill an enemy, heal for 10% of your maximum health.", "effect": &"necromancer_skeleton_archer_kill_heal"}
+		&"right_temple":
+			return {"name": "Death\nBloom", "description": "When you kill an enemy, recover 5% of your maximum health over 3 seconds.", "effect": &"necromancer_kill_heal_over_time"}
 		&"tooth_8":
 			return {"name": "Choir\nSiphon", "description": "Soul Siphon deals 10% increased damage for each active Skeleton Archer.", "effect": &"necromancer_soul_siphon_damage_per_skeleton_archer"}
 		&"chin_center":

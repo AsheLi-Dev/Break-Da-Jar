@@ -9,6 +9,7 @@ const PERIODIC_AUTO_FIREBALL := &"periodic_auto_fireball"
 const PERIODIC_BLOOD_BLADE := &"periodic_blood_blade"
 const PERIODIC_BLOOD_CLAW := &"periodic_blood_claw"
 const PERIODIC_CHAIN_LIGHTNING := &"periodic_chain_lightning"
+const PERIODIC_CRIMSON_AURA := &"periodic_crimson_aura"
 const PERIODIC_DAMAGE_SHIELD := &"periodic_damage_shield"
 const PERIODIC_EXPLOSIVE_TRAP := &"periodic_explosive_trap"
 const PERIODIC_HOLY_RETRIBUTION := &"periodic_holy_retribution"
@@ -42,6 +43,7 @@ static func all_modes() -> Array[StringName]:
 		PERIODIC_BLOOD_BLADE,
 		PERIODIC_BLOOD_CLAW,
 		PERIODIC_CHAIN_LIGHTNING,
+		PERIODIC_CRIMSON_AURA,
 		PERIODIC_DAMAGE_SHIELD,
 		PERIODIC_EXPLOSIVE_TRAP,
 		PERIODIC_HOLY_RETRIBUTION,

@@ -27,9 +27,11 @@ class PoisonProbeEnemy:
 	var poison_stacks: int = 0
 	var bleeding_stacks: int = 0
 	var last_damage: float = 0.0
+	var last_attack_info: Dictionary = {}
 
 	func take_damage(amount: float, _source: Node = null, _attack_info: Dictionary = {}) -> float:
 		last_damage = amount
+		last_attack_info = _attack_info
 		return amount
 
 	func apply_status_effect(id: StringName, _source_player: Node = null) -> void:
@@ -118,11 +120,29 @@ func _test_talent_catalog() -> void:
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"left_jaw").get("effect") == &"necromancer_skeleton_archer_lifetime_and_cap", "Necromancer left jaw grants Skeleton Archer lifetime and cap")
 	_assert(player.get_talent_display_name(&"right_jaw") == "Siphon\nCommand", "Necromancer right jaw names the Soul Siphon Skeleton Archer attack speed talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_jaw").get("effect") == &"necromancer_soul_siphon_skeleton_archer_attack_speed", "Necromancer right jaw grants Skeleton Archer attack speed when hit by Soul Siphon")
+	_assert(player.get_talent_display_name(&"skull_top_1") == "Jar\nBones", "Necromancer skull top 1 names the container Skeleton Archer talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"skull_top_1").get("effect") == &"necromancer_container_break_skeleton_archer", "Necromancer skull top 1 summons Skeleton Archers from broken containers")
+	_assert(player.get_talent_display_name(&"skull_top_2") == "Death\nBones", "Necromancer skull top 2 names the kill Skeleton Archer talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"skull_top_2").get("effect") == &"necromancer_kill_skeleton_archer", "Necromancer skull top 2 summons Skeleton Archers from kills")
+	_assert(player.get_talent_display_name(&"left_chin") == "Bone\nTally", "Necromancer left chin names the Skeleton Archer kill damage talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"left_chin").get("effect") == &"necromancer_skeleton_archer_damage_per_10_kills", "Necromancer left chin grants Skeleton Archer damage every 10 kills")
+	_assert(player.get_talent_display_name(&"skull_top_0") == "Marked\nBones", "Necromancer skull top 0 names the marked Skeleton Archer damage talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"skull_top_0").get("effect") == &"necromancer_skeleton_archer_marked_target_damage", "Necromancer skull top 0 grants Skeleton Archer damage to recently left-clicked enemies")
+	_assert(player.get_talent_display_name(&"left_temple") == "Marrow\nFeast", "Necromancer left temple names the Skeleton Archer kill heal talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"left_temple").get("effect") == &"necromancer_skeleton_archer_kill_heal", "Necromancer left temple heals when Skeleton Archers kill enemies")
+	_assert(player.get_talent_display_name(&"right_temple") == "Death\nBloom", "Necromancer right temple names the kill heal-over-time talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_temple").get("effect") == &"necromancer_kill_heal_over_time", "Necromancer right temple heals over time after enemy kills")
+	_assert(player.get_talent_display_name(&"skull_top_6") == "Bone\nInheritance", "Necromancer skull top 6 names the Skeleton Archer death ATK talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"skull_top_6").get("effect") == &"necromancer_skeleton_archer_death_round_atk", "Necromancer skull top 6 grants round ATK when Skeleton Archers die")
+	_assert(player.get_talent_display_name(&"skull_top_7") == "Bone\nMarked", "Necromancer skull top 7 names the player damage to Skeleton Archer marked target talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"skull_top_7").get("effect") == &"necromancer_primary_damage_to_skeleton_marked_target", "Necromancer skull top 7 grants player damage to enemies recently damaged by Skeleton Archers")
+	_assert(player.get_talent_display_name(&"right_chin") == "Siphon\nTally", "Necromancer right chin names the left-click kill damage talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_chin").get("effect") == &"necromancer_primary_damage_per_10_kills", "Necromancer right chin grants left-click damage every 10 kills")
 	_assert(player.get_talent_display_name(&"mouth_right") == "Blood\nSiphon", "Necromancer mouth right names the Soul Siphon bleeding talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"mouth_right").get("effect") == &"necromancer_soul_siphon_bleed_chance", "Necromancer mouth right grants Soul Siphon bleeding chance")
 	_assert(player.get_talent_display_name(&"tooth_5") == "Quick\nRite", "Necromancer tooth 5 names the attack speed talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"tooth_5").get("stat") == &"attack_speed_bonus", "Necromancer tooth 5 grants attack speed")
-	_assert(is_equal_approx(float(NECROMANCER_TALENT_CATALOG.definition(&"tooth_5").get("value")), 0.1), "Necromancer tooth 5 grants 10 percent attack speed")
+	_assert(is_equal_approx(float(NECROMANCER_TALENT_CATALOG.definition(&"tooth_5").get("value")), 0.15), "Necromancer tooth 5 grants 15 percent attack speed")
 	_assert(player.get_talent_display_name(&"tooth_6") == "Slide\nSiphon", "Necromancer tooth 6 names the slide Soul Siphon talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"tooth_6").get("effect") == &"necromancer_slide_soul_siphon_damage_bonus", "Necromancer tooth 6 grants slide Soul Siphon damage")
 	_assert(player.get_talent_display_name(&"tooth_7") == "Bone\nPlating", "Necromancer tooth 7 names the kill defense talent")
@@ -143,10 +163,14 @@ func _test_talent_catalog() -> void:
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"left_eye_0").get("effect") == &"necromancer_black_shadow_pursuit", "Necromancer left eye 0 grants the chasing black shadow")
 	_assert(player.get_talent_display_name(&"left_eye_1") == "Shadow\nDrift", "Necromancer left eye 1 names the round movement speed talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"left_eye_1").get("effect") == &"necromancer_round_movement_speed_per_second", "Necromancer left eye 1 grants movement speed each second during combat rounds")
+	_assert(player.get_talent_display_name(&"left_eye_2") == "Long\nDrift", "Necromancer left eye 2 names the dash duration talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"left_eye_2").get("effect") == &"necromancer_dash_duration_bonus", "Necromancer left eye 2 grants increased dash duration")
 	_assert(player.get_talent_display_name(&"right_eye_1") == "Blood\nDebt", "Necromancer right eye 1 names the kill ATK damage loss talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_eye_1").get("effect") == &"necromancer_kill_atk_damage_loss", "Necromancer right eye 1 grants kill ATK that is lost when damaged")
 	_assert(player.get_talent_display_name(&"right_eye_2") == "Death\nBurst", "Necromancer right eye 2 names the enemy death explosion talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_eye_2").get("effect") == &"necromancer_enemy_death_explosion", "Necromancer right eye 2 grants enemy death explosions")
+	_assert(player.get_talent_display_name(&"right_eye_4") == "Patient\nSiphon", "Necromancer right eye 4 names the charged left-click damage talent")
+	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_eye_4").get("effect") == &"necromancer_charged_primary_damage", "Necromancer right eye 4 grants charged left-click damage")
 	_assert(player.get_talent_display_name(&"right_eye_5") == "Blood\nChill", "Necromancer right eye 5 names the Bleeding slow talent")
 	_assert(NECROMANCER_TALENT_CATALOG.definition(&"right_eye_5").get("effect") == &"necromancer_bleeding_move_speed_slow", "Necromancer right eye 5 slows Bleeding enemies")
 	_assert(player.get_talent_display_name(&"philtrum") == "Bone\nRite", "Necromancer philtrum uses the default Bone Rite placeholder talent")
@@ -155,7 +179,7 @@ func _test_talent_catalog() -> void:
 	player.unlocked_talents.append(&"tooth_4")
 	var base_attack_speed_bonus := player.get_stats().attack_speed_bonus
 	_assert(player.unlock_talent(&"tooth_5"), "Necromancer tooth 5 unlocks from tooth 4")
-	_assert(is_equal_approx(player.get_stats().attack_speed_bonus, base_attack_speed_bonus + 0.1), "Necromancer tooth 5 applies 10 percent attack speed")
+	_assert(is_equal_approx(player.get_stats().attack_speed_bonus, base_attack_speed_bonus + 0.15), "Necromancer tooth 5 applies 15 percent attack speed")
 	player.unspent_talent_points = 1
 	player.experience = 0
 	_assert(player.unlock_talent(&"philtrum"), "Necromancer philtrum unlocks from tooth 4")
@@ -209,7 +233,20 @@ func _test_talent_catalog() -> void:
 	player.deal_player_damage_to_enemy(poison_damage_enemy, 100.0, {"source": "necromancer_test", "direct": true, "allow_procs": false, "allow_crit": false})
 	_assert(is_equal_approx(poison_damage_enemy.last_damage, 100.0 * player.get_stats().get_damage_multiplier() * 1.2), "Necromancer left eye 3 increases damage by 5 percent per Poison stack")
 	poison_damage_enemy.free()
-	player.unlocked_talents.append(&"left_eye_2")
+	player.unspent_talent_points = 1
+	_assert(player.unlock_talent(&"left_eye_4"), "Necromancer left eye 4 unlocks from left eye 3")
+	var base_hit_move_speed := player.get_stats().bonus_move_speed_flat
+	var hit_move_speed_enemy := PoisonProbeEnemy.new()
+	player.deal_player_damage_to_enemy(hit_move_speed_enemy, 100.0, {"source": "necromancer_test", "direct": true, "allow_procs": false, "allow_crit": false})
+	player.deal_player_damage_to_enemy(hit_move_speed_enemy, 100.0, {"source": "necromancer_test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(player.get_stats().bonus_move_speed_flat, base_hit_move_speed + 10.0), "Necromancer left eye 4 grants 5 move speed per enemy hit and stacks")
+	player.temporary_buffs.call("_process", 3.1)
+	_assert(is_equal_approx(player.get_stats().bonus_move_speed_flat, base_hit_move_speed), "Necromancer left eye 4 hit move speed stacks expire after 3 seconds")
+	hit_move_speed_enemy.free()
+	player.unspent_talent_points = 1
+	var base_dash_duration := float(player.call("_get_effective_dash_duration"))
+	_assert(player.unlock_talent(&"left_eye_2"), "Necromancer left eye 2 unlocks from the eye loop")
+	_assert(is_equal_approx(float(player.call("_get_effective_dash_duration")), base_dash_duration * 1.3), "Necromancer left eye 2 extends dash duration by 30 percent")
 	player.unspent_talent_points = 1
 	var base_movement_speed_bonus := player.get_stats().movement_speed_bonus
 	_assert(player.unlock_talent(&"left_eye_1"), "Necromancer left eye 1 unlocks from the eye loop")
@@ -267,6 +304,14 @@ func _test_talent_catalog() -> void:
 	_assert(int(player.get("necromancer_kill_atk_damage_loss_bonus")) == 0, "Necromancer right eye 1 clears gained ATK after enough damage")
 	player.call("_force_restore_hurt_slow_motion")
 	player.set("hp", player.max_hp)
+	player.unlocked_talents.append(&"right_eye_3")
+	player.unspent_talent_points = 1
+	_assert(player.unlock_talent(&"right_eye_4"), "Necromancer right eye 4 unlocks from the eye loop")
+	player.call("_update_necromancer_charged_primary_damage", 5.2)
+	_assert(is_equal_approx(player.necromancer_runtime.consume_charged_primary_damage_multiplier(), 1.5), "Necromancer right eye 4 gains 10 percent left-click damage each full second")
+	_assert(is_equal_approx(player.necromancer_runtime.consume_charged_primary_damage_multiplier(), 1.0), "Necromancer right eye 4 resets after the left-click damage bonus is consumed")
+	player.call("_update_necromancer_charged_primary_damage", 15.0)
+	_assert(is_equal_approx(player.necromancer_runtime.consume_charged_primary_damage_multiplier(), 2.0), "Necromancer right eye 4 caps left-click damage bonus at 100 percent")
 	player.unspent_talent_points = 1
 	_assert(player.unlock_talent(&"right_eye_2"), "Necromancer right eye 2 unlocks from the eye loop")
 	var killed_enemy := Node2D.new()
@@ -398,6 +443,43 @@ func _test_primary_beam() -> void:
 		archer.call("_process", 2.1)
 		_assert(bool(archer.get("dying")), "Necromancer right jaw kills the hit Skeleton Archer when the Soul Siphon buff ends")
 		_assert(not player.get("necromancer_skeleton_archers").has(archer), "Necromancer right jaw removes dying Skeleton Archers from active tracking")
+	player.unspent_talent_points = 1
+	_assert(player.unlock_talent(&"right_chin"), "Necromancer right chin unlocks from tooth 6")
+	for index in range(10):
+		_notify_dummy_kill()
+	_assert(int(player.get("necromancer_primary_damage_kill_stacks")) == 1, "Necromancer right chin grants one left-click damage stack every 10 kills")
+	_assert(int(player.get("necromancer_primary_damage_kill_counter")) == 0, "Necromancer right chin resets kill counter after granting damage")
+	player.call("_spawn_necromancer_soul_beam", player.global_position, Vector2.RIGHT)
+	beam = _find_last_laser()
+	_assert(beam != null and is_equal_approx(beam.damage, player.get_base_attack_damage() * 1.35 * 1.15 * 1.01), "Necromancer right chin permanently increases left-click damage by 1 percent per stack")
+	player.unlocked_talents.append(&"skull_top_7")
+	player.unspent_talent_points = 1
+	_assert(player.unlock_talent(&"right_temple"), "Necromancer right temple unlocks from skull top 7")
+	player.necromancer_runtime.enabled_talents.erase(&"necromancer_enemy_death_explosion")
+	player.hp = player.max_hp * 0.5
+	var hp_before_kill_hot := player.hp
+	var hot_kill_enemy := PoisonProbeEnemy.new()
+	player.notify_enemy_killed(hot_kill_enemy)
+	var kill_hot := _find_healing_over_time_effect()
+	_assert(kill_hot != null, "Necromancer right temple starts a heal-over-time effect when you kill an enemy")
+	if kill_hot != null:
+		kill_hot.call("_process", 1.5)
+		_assert(is_equal_approx(player.hp, hp_before_kill_hot + player.max_hp * 0.025), "Necromancer right temple heals half of its 5 percent max HP total after 1.5 seconds")
+		kill_hot.call("_process", 1.5)
+		_assert(is_equal_approx(player.hp, hp_before_kill_hot + player.max_hp * 0.05), "Necromancer right temple heals 5 percent max HP over 3 seconds")
+	hot_kill_enemy.free()
+	_free_skeleton_archers()
+	await process_frame
+	player.necromancer_runtime.enable_talent(&"necromancer_skeleton_archer_death_round_atk")
+	player.set("pending_shockwave_target_position", player.global_position + Vector2(180.0, -40.0))
+	player.call("_summon_necromancer_skeleton_archer")
+	archer = _find_last_skeleton_archer()
+	var base_death_atk := player.get_stats().atk
+	if archer != null:
+		archer.call("play_death_and_free")
+	_assert(player.get_stats().atk == base_death_atk + 5, "Necromancer skull top 6 grants 5 ATK when a Skeleton Archer dies")
+	player.call("emit_round_ended")
+	_assert(player.get_stats().atk == base_death_atk, "Necromancer skull top 6 ATK resets when the round ends")
 	_free_lasers()
 	_free_skeleton_archers()
 	await process_frame
@@ -429,6 +511,31 @@ func _test_secondary_skeleton_archer() -> void:
 	player.set("necromancer_skeleton_archers", [])
 	if is_instance_valid(archer):
 		archer.free()
+	player.necromancer_runtime.enable_talent(&"necromancer_skeleton_archer_marked_target_damage")
+	player.set("pending_shockwave_target_position", player.global_position + Vector2(95.0, -40.0))
+	player.call("_summon_necromancer_skeleton_archer")
+	archer = _find_last_skeleton_archer()
+	var marked_enemy := PoisonProbeEnemy.new()
+	var unmarked_enemy := PoisonProbeEnemy.new()
+	scene_root.add_child(marked_enemy)
+	scene_root.add_child(unmarked_enemy)
+	player.deal_player_damage_to_enemy(marked_enemy, 10.0, {"source": "necromancer_soul_beam", "direct": true, "allow_procs": false, "allow_crit": false})
+	if archer != null:
+		archer.set("attack_target", unmarked_enemy)
+		archer.call("_deal_attack_damage")
+		archer.set("attack_target", marked_enemy)
+		archer.call("_deal_attack_damage")
+		var marked_damage := marked_enemy.last_damage
+		_assert(is_equal_approx(marked_damage, unmarked_enemy.last_damage * 1.5), "Necromancer skull top 0 makes Skeleton Archers deal 50 percent more damage to the enemy most recently damaged by left-click")
+	player.necromancer_runtime.enable_talent(&"necromancer_primary_damage_to_skeleton_marked_target")
+	player.deal_player_damage_to_enemy(marked_enemy, 100.0, {"source": "necromancer_soul_beam", "direct": true, "allow_procs": false, "allow_crit": false})
+	player.deal_player_damage_to_enemy(unmarked_enemy, 100.0, {"source": "necromancer_soul_beam", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(marked_enemy.last_damage, unmarked_enemy.last_damage * 1.3), "Necromancer skull top 7 makes you deal 30 percent more damage to enemies most recently damaged by Skeleton Archers")
+	marked_enemy.free()
+	unmarked_enemy.free()
+	player.set("necromancer_skeleton_archers", [])
+	if is_instance_valid(archer):
+		archer.free()
 	player.unlocked_talents.append(&"tooth_4")
 	player.unspent_talent_points = 1
 	_assert(player.unlock_talent(&"tooth_2"), "Necromancer tooth 2 unlocks from tooth 3")
@@ -436,6 +543,21 @@ func _test_secondary_skeleton_archer() -> void:
 	player.call("_summon_necromancer_skeleton_archer")
 	archer = _find_last_skeleton_archer()
 	_assert(archer != null and is_equal_approx(archer.attack_speed_inherit_multiplier, 0.75 * 1.15), "Necromancer tooth 2 increases Skeleton Archer attack speed by 15%")
+	player.unspent_talent_points = 1
+	_assert(player.unlock_talent(&"left_chin"), "Necromancer left chin unlocks from tooth 2")
+	var base_archer_damage_multiplier := float(archer.damage_inherit_multiplier)
+	for index in range(9):
+		_notify_dummy_kill()
+	_assert(int(player.get("necromancer_skeleton_archer_damage_kill_counter")) == 9, "Necromancer left chin tracks partial kill progress")
+	_assert(int(player.get("necromancer_skeleton_archer_damage_kill_stacks")) == 0, "Necromancer left chin waits for 10 kills before granting damage")
+	_notify_dummy_kill()
+	_assert(int(player.get("necromancer_skeleton_archer_damage_kill_counter")) == 0, "Necromancer left chin resets kill counter after granting damage")
+	_assert(int(player.get("necromancer_skeleton_archer_damage_kill_stacks")) == 1, "Necromancer left chin grants one Skeleton Archer damage stack every 10 kills")
+	_assert(archer != null and is_equal_approx(archer.damage_inherit_multiplier, base_archer_damage_multiplier * 1.01), "Necromancer left chin updates active Skeleton Archer damage")
+	player.set("pending_shockwave_target_position", player.global_position + Vector2(120.0, -40.0))
+	player.call("_summon_necromancer_skeleton_archer")
+	archer = _find_last_skeleton_archer()
+	_assert(archer != null and is_equal_approx(archer.damage_inherit_multiplier, base_archer_damage_multiplier * 1.01), "Necromancer left chin applies permanent damage to newly summoned Skeleton Archers")
 	player.unspent_talent_points = 1
 	_assert(player.unlock_talent(&"tooth_1"), "Necromancer tooth 1 unlocks from tooth 2")
 	player.call("_apply_slide_finished_talents")
@@ -482,6 +604,60 @@ func _test_secondary_skeleton_archer() -> void:
 	_assert(player.unlock_talent(&"left_jaw"), "Necromancer left jaw unlocks from mouth left")
 	_assert(int(player.call("_get_necromancer_skeleton_archer_cap")) == 4, "Necromancer left jaw increases Skeleton Archer cap by 1")
 	_assert(is_equal_approx(float(player.call("_get_necromancer_skeleton_archer_lifetime")), 20.0), "Necromancer left jaw doubles Skeleton Archer lifetime")
+	player.necromancer_runtime.enable_talent(&"necromancer_container_break_skeleton_archer")
+	_assert(int(player.call("_get_necromancer_skeleton_archer_cap")) == 5, "Necromancer skull top 1 increases Skeleton Archer cap by 1")
+	var broken_container := BreakableContainer.new()
+	broken_container.global_position = player.global_position + Vector2(210.0, -40.0)
+	scene_root.add_child(broken_container)
+	_assert(not bool(player.call("_try_trigger_necromancer_container_break_skeleton_archer", broken_container, {"source": "player_attack", "owner": player}, 0.5)), "Necromancer skull top 1 waits for its 10 percent container break roll")
+	var archer_count_before_container := _count_skeleton_archers()
+	_assert(bool(player.call("_try_trigger_necromancer_container_break_skeleton_archer", broken_container, {"source": "player_attack", "owner": player}, 0.0)), "Necromancer skull top 1 can trigger right-click summon when a container breaks")
+	_assert(_count_skeleton_archers() == archer_count_before_container + 1, "Necromancer skull top 1 summons one Skeleton Archer from a broken container")
+	var container_archer := _find_last_skeleton_archer()
+	_assert(container_archer != null and container_archer.global_position.distance_to(broken_container.global_position) < 0.1, "Necromancer skull top 1 summons the Skeleton Archer at the broken container position")
+	broken_container.free()
+	_free_skeleton_archers()
+	player.necromancer_runtime.enabled_talents.erase(&"necromancer_container_break_skeleton_archer")
+	await process_frame
+	player.necromancer_runtime.enable_talent(&"necromancer_kill_skeleton_archer")
+	_assert(int(player.call("_get_necromancer_skeleton_archer_cap")) == 6, "Necromancer skull top 2 increases Skeleton Archer cap by 2")
+	var killed_enemy := PoisonProbeEnemy.new()
+	killed_enemy.global_position = player.global_position + Vector2(235.0, 35.0)
+	scene_root.add_child(killed_enemy)
+	_assert(not bool(player.call("_try_trigger_necromancer_kill_skeleton_archer", killed_enemy, 0.5)), "Necromancer skull top 2 waits for its 10 percent kill roll")
+	var archer_count_before_kill := _count_skeleton_archers()
+	_assert(bool(player.call("_try_trigger_necromancer_kill_skeleton_archer", killed_enemy, 0.0)), "Necromancer skull top 2 can trigger right-click summon when you kill an enemy")
+	_assert(_count_skeleton_archers() == archer_count_before_kill + 1, "Necromancer skull top 2 summons one Skeleton Archer from a kill")
+	var kill_archer := _find_last_skeleton_archer()
+	_assert(kill_archer != null and kill_archer.global_position.distance_to(killed_enemy.global_position) < 0.1, "Necromancer skull top 2 summons the Skeleton Archer at the killed enemy position")
+	killed_enemy.free()
+	_free_skeleton_archers()
+	player.necromancer_runtime.enabled_talents.erase(&"necromancer_kill_skeleton_archer")
+	await process_frame
+	player.unlocked_talents.append(&"skull_top_0")
+	player.unspent_talent_points = 1
+	_assert(player.unlock_talent(&"left_temple"), "Necromancer left temple unlocks from skull top 0")
+	player.set("necromancer_xp_kill_counter", 0)
+	player.set("necromancer_gold_kill_counter", 0)
+	player.set("necromancer_defense_kill_counter", 0)
+	player.set("necromancer_atk_kill_counter", 0)
+	player.set("necromancer_max_hp_kill_counter", 0)
+	player.set("necromancer_skeleton_archer_damage_kill_counter", 0)
+	player.set("necromancer_primary_damage_kill_counter", 0)
+	player.necromancer_runtime.enabled_talents.erase(&"necromancer_enemy_death_explosion")
+	player.hp = player.max_hp * 0.5
+	var hp_before_archer_kill := player.hp
+	var archer_kill_enemy := PoisonProbeEnemy.new()
+	archer_kill_enemy.last_attack_info = {"source": "skeleton_archer", "direct": true}
+	player.notify_enemy_killed(archer_kill_enemy)
+	_assert(is_equal_approx(player.hp, hp_before_archer_kill + player.max_hp * 0.1), "Necromancer left temple heals 10 percent max HP when a Skeleton Archer kills an enemy")
+	var hp_before_non_archer_kill := player.hp
+	var non_archer_kill_enemy := PoisonProbeEnemy.new()
+	non_archer_kill_enemy.last_attack_info = {"source": "necromancer_soul_beam", "direct": true}
+	player.notify_enemy_killed(non_archer_kill_enemy)
+	_assert(is_equal_approx(player.hp, hp_before_non_archer_kill), "Necromancer left temple does not heal from non-Skeleton Archer kills")
+	archer_kill_enemy.free()
+	non_archer_kill_enemy.free()
 	_free_skeleton_archers()
 	await process_frame
 	for index in range(5):
@@ -539,6 +715,13 @@ func _find_last_skeleton_archer() -> SkeletonArcher:
 		if child is SkeletonArcher:
 			result = child
 	return result
+
+
+func _find_healing_over_time_effect() -> HealingOverTimeEffect:
+	for child in scene_root.get_children():
+		if child is HealingOverTimeEffect:
+			return child
+	return null
 
 
 func _free_skeleton_archers() -> void:
