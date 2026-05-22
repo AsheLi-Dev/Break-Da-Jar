@@ -1,11 +1,16 @@
 extends Node2D
 
 const ITEM_DATABASE_PATH := "/root/ItemDatabase"
+const BATTLE_SCENE: PackedScene = preload("res://battlescene.tscn")
 const PREVIEW_JAR_OFFSET := Vector2(180.0, 0.0)
+const DEBUG_TALENT_POINTS := 999999
+const CHARACTER_IDS: Array[StringName] = [&"paladin", &"necromancer", &"wizard"]
 
 var item_ids: Array[StringName] = []
+var character_button: OptionButton
 var option_button: OptionButton
 var status_label: Label
+var debug_canvas: CanvasLayer
 
 
 func _ready() -> void:
@@ -14,24 +19,43 @@ func _ready() -> void:
 
 
 func _create_debug_ui() -> void:
-	var parent := _get_debug_ui_parent()
+	debug_canvas = CanvasLayer.new()
+	debug_canvas.name = "ItemTestDebugLayer"
+	debug_canvas.layer = 60
+	debug_canvas.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(debug_canvas)
 
 	var panel := Panel.new()
 	panel.name = "ItemDebugUI"
 	panel.position = Vector2(24, 116)
-	panel.size = Vector2(460, 144)
-	parent.add_child(panel)
+	panel.size = Vector2(460, 234)
+	debug_canvas.add_child(panel)
+
+	character_button = OptionButton.new()
+	character_button.name = "CharacterDropdown"
+	character_button.position = Vector2(16, 16)
+	character_button.size = Vector2(250, 32)
+	panel.add_child(character_button)
+	_populate_character_dropdown()
+
+	var apply_character_button := Button.new()
+	apply_character_button.name = "ApplyCharacterButton"
+	apply_character_button.text = "Apply Character"
+	apply_character_button.position = Vector2(278, 16)
+	apply_character_button.size = Vector2(150, 32)
+	apply_character_button.pressed.connect(_apply_selected_character)
+	panel.add_child(apply_character_button)
 
 	option_button = OptionButton.new()
 	option_button.name = "ItemDropdown"
-	option_button.position = Vector2(16, 16)
+	option_button.position = Vector2(16, 62)
 	option_button.size = Vector2(428, 32)
 	panel.add_child(option_button)
 
 	var give_button := Button.new()
 	give_button.name = "GiveItemButton"
 	give_button.text = "Give Item"
-	give_button.position = Vector2(16, 58)
+	give_button.position = Vector2(16, 104)
 	give_button.size = Vector2(120, 34)
 	give_button.pressed.connect(_give_selected_item)
 	panel.add_child(give_button)
@@ -39,26 +63,42 @@ func _create_debug_ui() -> void:
 	var preview_button := Button.new()
 	preview_button.name = "PreviewDropButton"
 	preview_button.text = "Preview Drop"
-	preview_button.position = Vector2(148, 58)
+	preview_button.position = Vector2(148, 104)
 	preview_button.size = Vector2(130, 34)
 	preview_button.pressed.connect(_preview_selected_item_drop)
 	panel.add_child(preview_button)
 
+	var talent_tree_button := Button.new()
+	talent_tree_button.name = "TalentTreeButton"
+	talent_tree_button.text = "Talent Tree"
+	talent_tree_button.position = Vector2(290, 104)
+	talent_tree_button.size = Vector2(136, 34)
+	talent_tree_button.pressed.connect(_open_debug_talent_tree)
+	panel.add_child(talent_tree_button)
+
 	status_label = Label.new()
 	status_label.name = "StatusLabel"
-	status_label.position = Vector2(16, 100)
-	status_label.size = Vector2(428, 34)
+	status_label.position = Vector2(16, 150)
+	status_label.size = Vector2(428, 66)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	panel.add_child(status_label)
 
 
-func _get_debug_ui_parent() -> Node:
-	var battle_scene := get_node_or_null("BattleScene")
-	if battle_scene != null:
-		var pause_overlay := battle_scene.get("pause_overlay") as Control
-		if pause_overlay != null:
-			return pause_overlay
-	return self
+func _populate_character_dropdown() -> void:
+	character_button.clear()
+	for character_id in CHARACTER_IDS:
+		character_button.add_item(_get_character_display_name(character_id))
+
+
+func _get_character_display_name(character_id: StringName) -> String:
+	match character_id:
+		&"paladin":
+			return "Paladin"
+		&"necromancer":
+			return "Necromancer"
+		&"wizard":
+			return "Wizard"
+	return String(character_id)
 
 
 func _populate_item_dropdown() -> void:
@@ -87,6 +127,32 @@ func _populate_item_dropdown() -> void:
 
 func _compare_items_alphabetically(left: ItemDefinition, right: ItemDefinition) -> bool:
 	return left.display_name.nocasecmp_to(right.display_name) < 0
+
+
+func _apply_selected_character() -> void:
+	var character_id := _get_selected_character_id()
+	var session := get_node_or_null("/root/GameSession")
+	if session != null and session.has_method("set_selected_character"):
+		session.set_selected_character(character_id)
+
+	var old_battle_scene := get_node_or_null("BattleScene")
+	if old_battle_scene != null:
+		old_battle_scene.queue_free()
+		await get_tree().process_frame
+
+	var battle_scene := BATTLE_SCENE.instantiate()
+	battle_scene.name = "BattleScene"
+	add_child(battle_scene)
+	move_child(debug_canvas, get_child_count() - 1)
+	await get_tree().process_frame
+	status_label.text = "Character applied: %s" % _get_character_display_name(character_id)
+
+
+func _get_selected_character_id() -> StringName:
+	var selected_index: int = character_button.selected
+	if selected_index < 0 or selected_index >= CHARACTER_IDS.size():
+		return CHARACTER_IDS[0]
+	return CHARACTER_IDS[selected_index]
 
 
 func _give_selected_item() -> void:
@@ -139,6 +205,27 @@ func _preview_selected_item_drop() -> void:
 	_play_preview_jar_pop(spawn_position, battle_scene)
 	battle_scene.call("_spawn_shop_item_reward", item, spawn_position, true)
 	status_label.text = "Previewing: %s" % item.display_name
+
+
+func _open_debug_talent_tree() -> void:
+	var battle_scene := get_node_or_null("BattleScene")
+	if battle_scene == null or not battle_scene.has_method("_show_talent_tree"):
+		status_label.text = "BattleScene talent tree hook missing."
+		return
+
+	var player := get_tree().get_first_node_in_group("player") as Player
+	if player == null:
+		status_label.text = "Player not found yet."
+		return
+
+	player.unspent_talent_points = DEBUG_TALENT_POINTS
+	player.talent_points_changed.emit(player.unspent_talent_points, player.pending_talent_points)
+	get_tree().paused = true
+	var talent_tree_ui := battle_scene.get("talent_tree_ui") as CanvasLayer
+	if talent_tree_ui != null:
+		talent_tree_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+	battle_scene.call("_show_talent_tree")
+	status_label.text = "Talent tree opened with unlimited points."
 
 
 func _get_selected_item() -> ItemDefinition:

@@ -5,6 +5,7 @@ const HOLY_FLAME_LASER_SCRIPT := preload("res://systems/combat/HolyFlameLaser.gd
 const NECROMANCER_SHADOW_SCRIPT := preload("res://systems/combat/NecromancerShadow.gd")
 const SKELETON_ARCHER_SCENE: PackedScene = preload("res://scenes/summons/SkeletonArcher.tscn")
 const HEALING_OVER_TIME_SCRIPT := preload("res://systems/combat/HealingOverTimeEffect.gd")
+const DEATH_EXPLOSION_TEXTURE: Texture2D = preload("res://assets/vfx/dark spell/dark_explosion.png")
 
 const SOUL_SIPHON_BEAM_TEXTURE_PATH := "res://assets/vfx/dark spell/soul_siphon_beam.png"
 const SOUL_SIPHON_BEAM_FRAME_SIZE := Vector2i(265, 81)
@@ -12,6 +13,8 @@ const SOUL_SIPHON_BEAM_FRAME_COUNT := 7
 const SOUL_SIPHON_LIGHTNING_OVERLAY_TEXTURE_PATH := "res://assets/vfx/dark spell/soul_siphon_lightning_overlay.png"
 const SOUL_SIPHON_LIGHTNING_OVERLAY_FRAME_SIZE := Vector2i(256, 128)
 const SOUL_SIPHON_LIGHTNING_OVERLAY_FRAME_COUNT := 6
+const DEATH_EXPLOSION_FRAME_SIZE := Vector2i(144, 144)
+const DEATH_EXPLOSION_ANIMATION_FPS := 20.0
 const MAX_SKELETON_ARCHERS := 3
 const SKELETON_ARCHER_LIFETIME := 10.0
 const SLIDE_SKELETON_ARCHER_ATTACK_SPEED_MULTIPLIER := 1.2
@@ -306,13 +309,42 @@ func spawn_death_explosion_visual(player, origin: Vector2) -> void:
 	visual.name = "NecromancerDeathExplosion"
 	visual.global_position = origin
 	parent.add_child(visual)
-	var ring := Polygon2D.new()
-	ring.color = Color(0.08, 0.0, 0.1, 0.34)
-	ring.polygon = player.call("_circle_polygon", DEATH_EXPLOSION_RADIUS, 32)
-	visual.add_child(ring)
-	var tween := visual.create_tween()
-	tween.tween_property(ring, "color:a", 0.0, 0.24)
-	tween.finished.connect(Callable(visual, "queue_free"))
+
+	var sprite := AnimatedSprite2D.new()
+	sprite.name = "DarkExplosion"
+	sprite.sprite_frames = _make_death_explosion_frames()
+	sprite.z_index = 180
+	sprite.scale = Vector2.ONE * (DEATH_EXPLOSION_RADIUS * 2.0 / float(DEATH_EXPLOSION_FRAME_SIZE.x))
+	visual.add_child(sprite)
+	sprite.play(&"explode")
+	sprite.animation_finished.connect(Callable(visual, "queue_free"))
+
+
+func _make_death_explosion_frames() -> SpriteFrames:
+	var frames := SpriteFrames.new()
+	var animation_name := &"explode"
+	frames.add_animation(animation_name)
+	frames.set_animation_loop(animation_name, false)
+	frames.set_animation_speed(animation_name, DEATH_EXPLOSION_ANIMATION_FPS)
+
+	var texture := DEATH_EXPLOSION_TEXTURE
+	if texture == null:
+		return frames
+
+	var columns := maxi(int(texture.get_width() / DEATH_EXPLOSION_FRAME_SIZE.x), 1)
+	var rows := maxi(int(texture.get_height() / DEATH_EXPLOSION_FRAME_SIZE.y), 1)
+	for row in range(rows):
+		for column in range(columns):
+			var frame := AtlasTexture.new()
+			frame.atlas = texture
+			frame.region = Rect2(
+				float(column * DEATH_EXPLOSION_FRAME_SIZE.x),
+				float(row * DEATH_EXPLOSION_FRAME_SIZE.y),
+				float(DEATH_EXPLOSION_FRAME_SIZE.x),
+				float(DEATH_EXPLOSION_FRAME_SIZE.y)
+			)
+			frames.add_frame(animation_name, frame)
+	return frames
 
 
 func apply_kill_atk_gain(player) -> void:

@@ -443,7 +443,7 @@ func _scale_actor_body(actor: Node2D) -> void:
 
 func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate() as Player
-	player.setup_character(DEFAULT_CHARACTER_ID)
+	player.setup_character(_get_selected_character_id())
 	player.name = "Player"
 	player.global_position = _get_player_position()
 	player.set_collision_layer_value(1, false)
@@ -458,6 +458,13 @@ func _spawn_player() -> void:
 	player.talent_points_changed.connect(_on_player_talent_points_changed)
 	player.talent_unlocked.connect(_on_player_talent_unlocked)
 	add_child(player)
+
+
+func _get_selected_character_id() -> StringName:
+	var session := get_node_or_null("/root/GameSession")
+	if session != null and session.has_method("get_selected_character"):
+		return session.get_selected_character()
+	return DEFAULT_CHARACTER_ID
 
 
 func _create_camera() -> void:

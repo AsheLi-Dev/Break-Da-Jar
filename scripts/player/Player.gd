@@ -1883,6 +1883,8 @@ func _maybe_spawn_attack_projectile() -> void:
 		if wizard_runtime.fire_essence_charges > 0:
 			wizard_runtime.fire_essence_charges -= 1
 		_launch_wizard_primary_attack_pattern(pending_attack_target_position, used_fire_essence)
+		if wizard_runtime.has_talent(&"wizard_hovering_fireball"):
+			return
 		_schedule_wizard_primary_echoes(pending_attack_target_position, used_fire_essence)
 	elif primary_ability == &"necromancer_soul_orb":
 		_launch_necromancer_soul_orb(pending_attack_target_position)

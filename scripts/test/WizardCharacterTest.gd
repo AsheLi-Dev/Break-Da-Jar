@@ -111,6 +111,7 @@ func _run() -> void:
 	_test_slide_fire_laser_talent()
 	_test_fire_laser_damages_containers_in_beam()
 	_test_fire_laser_ignores_shop_containers()
+	_test_hovering_fireball_talent()
 	_test_opening_attack_speed_talent()
 	_test_attack_chain_lightning_chance_talent()
 	_test_chain_lightning_attack_speed_stack_talent()
@@ -1545,6 +1546,68 @@ func _test_large_map_more_containers_talent() -> void:
 	_assert(is_equal_approx(player.get_combat_container_count_multiplier(), 1.3), "Wizard right spark talent increases combat container count by 30%")
 
 
+func _test_hovering_fireball_talent() -> void:
+	player.unspent_talent_points = 1
+	var unlocked := _unlock_talent_for_test(&"spark_12")
+	_assert(unlocked, "Wizard spark hovering Fireball talent unlocks")
+
+	var target_position := player.global_position + Vector2(180.0, 40.0)
+	var enemy := DamageProbeEnemy.new()
+	enemy.add_to_group("enemy")
+	enemy.global_position = target_position + Vector2.RIGHT * 120.0
+	scene.add_child(enemy)
+
+	_clear_fireballs()
+	_clear_hovering_fireballs()
+	var laser_count := _count_nodes_with_class("HolyFlameLaser")
+	player.call("_launch_wizard_primary_attack_pattern", target_position, false)
+	await process_frame
+	var hovering_fireball := _find_node_with_class("HoveringFireball") as Node2D
+	_assert(hovering_fireball != null, "Wizard spark twelfth talent summons a hovering Fireball")
+	_assert(hovering_fireball != null and hovering_fireball.global_position.is_equal_approx(target_position), "Wizard spark twelfth talent summons at the mouse position")
+	_assert(_count_nodes_with_class("FireballProjectile") == 0, "Wizard spark twelfth talent replaces the left-click projectile Fireball")
+	_assert(_count_nodes_with_class("HolyFlameLaser") > laser_count, "Wizard spark twelfth hovering Fireball fires a Fire Laser")
+
+	for _index in range(12):
+		player.call("_launch_wizard_primary_attack_pattern", target_position, false)
+	await process_frame
+	_assert(_count_nodes_with_class("HoveringFireball") == 10, "Wizard spark twelfth talent caps hovering Fireballs at 10")
+
+	_clear_hovering_fireballs()
+	await process_frame
+	player.call("_launch_wizard_primary_attack_pattern", target_position, true)
+	await process_frame
+	var fire_essence_hovering_fireballs := _collect_hovering_fireballs()
+	_assert(fire_essence_hovering_fireballs.size() == 4, "Wizard spark twelfth talent converts Fire Essence into four hovering Fireballs")
+	_assert(_hovering_fireballs_do_not_overlap(fire_essence_hovering_fireballs), "Wizard spark twelfth Fire Essence hovering Fireballs do not overlap")
+
+	_clear_hovering_fireballs()
+	await process_frame
+	player.max_hp = 200.0
+	player.get_stats().max_hp = 200
+	player.set("talent_wizard_max_hp_primary_echo_enabled", true)
+	player.call("_launch_wizard_primary_attack_pattern", target_position, false)
+	await process_frame
+	var echo_hovering_fireballs := _collect_hovering_fireballs()
+	_assert(echo_hovering_fireballs.size() == 3, "Wizard spark twelfth talent converts Vital Echo into extra hovering Fireballs")
+	_assert(_hovering_fireballs_do_not_overlap(echo_hovering_fireballs), "Wizard spark twelfth Vital Echo hovering Fireballs do not overlap")
+
+	_clear_hovering_fireballs()
+	await process_frame
+	player.call("_launch_wizard_primary_attack_pattern", target_position, true)
+	await process_frame
+	var fire_essence_echo_hovering_fireballs := _collect_hovering_fireballs()
+	_assert(fire_essence_echo_hovering_fireballs.size() == 10, "Wizard spark twelfth Fire Essence and Vital Echo respect the 10 hovering Fireball cap")
+	_assert(_hovering_fireballs_do_not_overlap(fire_essence_echo_hovering_fireballs), "Wizard spark twelfth capped Fire Essence Echo hovering Fireballs do not overlap")
+
+	player.max_hp = 100.0
+	player.get_stats().max_hp = 100
+	player.set("talent_wizard_max_hp_primary_echo_enabled", false)
+	_clear_hovering_fireballs()
+	player.set("talent_wizard_hovering_fireball_enabled", false)
+	enemy.queue_free()
+
+
 func _count_nodes_with_class(class_name_value: String) -> int:
 	return _count_nodes_with_class_recursive(scene, class_name_value)
 
@@ -1789,6 +1852,31 @@ func _make_test_fireball(owner: Node) -> FireballProjectile:
 
 func _clear_fireballs() -> void:
 	_clear_fireballs_recursive(scene)
+
+
+func _clear_hovering_fireballs() -> void:
+	for hovering_fireball in get_nodes_in_group("wizard_hovering_fireball"):
+		var node := hovering_fireball as Node
+		if node != null:
+			node.queue_free()
+
+
+func _collect_hovering_fireballs() -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	for hovering_fireball in get_nodes_in_group("wizard_hovering_fireball"):
+		var node := hovering_fireball as Node2D
+		if node != null:
+			result.append(node)
+	return result
+
+
+func _hovering_fireballs_do_not_overlap(hovering_fireballs: Array[Node2D]) -> bool:
+	var minimum_distance := 36.0 if hovering_fireballs.size() <= 4 else 24.0
+	for first_index in range(hovering_fireballs.size()):
+		for second_index in range(first_index + 1, hovering_fireballs.size()):
+			if hovering_fireballs[first_index].global_position.distance_to(hovering_fireballs[second_index].global_position) < minimum_distance:
+				return false
+	return true
 
 
 func _clear_fireballs_recursive(node: Node) -> void:

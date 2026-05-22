@@ -4,6 +4,10 @@ const EFFECT_TARGETING := preload("res://systems/items/effects/EffectTargeting.g
 const FIREBALL_SCRIPT := preload("res://systems/combat/FireballProjectile.gd")
 const FIRE_ESSENCE_PICKUP_SCRIPT := preload("res://systems/combat/FireEssencePickup.gd")
 const HOLY_FLAME_LASER_SCRIPT := preload("res://systems/combat/HolyFlameLaser.gd")
+const HOVERING_FIREBALL_SCRIPT := preload("res://systems/combat/HoveringFireball.gd")
+const MAX_HOVERING_FIREBALLS := 10
+const FIRE_ESSENCE_HOVERING_FIREBALL_COUNT := 4
+const HOVERING_FIREBALL_SPREAD_RADIUS := 44.0
 
 var enabled_talents: Dictionary = {}
 var rebirth_used: bool = false
@@ -329,6 +333,12 @@ func launch_dash_fireball(player) -> void:
 
 
 func launch_primary_attack_pattern(player, target_position: Vector2, use_fire_essence_version: bool, emit_attack_started_event: bool = true) -> void:
+	if has_talent(&"wizard_hovering_fireball"):
+		var base_hovering_count := FIRE_ESSENCE_HOVERING_FIREBALL_COUNT if use_fire_essence_version else 1
+		var hovering_count := base_hovering_count * (1 + get_primary_echo_count(player))
+		launch_hovering_fireballs(player, target_position, hovering_count, emit_attack_started_event)
+		return
+
 	var scatter_on_explode: bool = use_fire_essence_version and has_talent(&"wizard_fire_essence_explosion_scatter")
 	var apply_slide_fireball_bonus: bool = next_slide_fireball_ready
 	if apply_slide_fireball_bonus:
@@ -342,6 +352,47 @@ func launch_primary_attack_pattern(player, target_position: Vector2, use_fire_es
 		launch_offset_fireballs(player, target_position, 1, offset_index, apply_slide_fireball_bonus)
 		offset_index += 1
 	launch_offset_fireballs(player, target_position, get_move_speed_extra_fireball_count(player), offset_index, apply_slide_fireball_bonus)
+
+
+func launch_hovering_fireballs(player, target_position: Vector2, count: int, emit_attack_started_event: bool = true) -> void:
+	if player.get_tree() == null or player.get_tree().current_scene == null:
+		return
+	var open_slots := MAX_HOVERING_FIREBALLS - _get_hovering_fireball_count(player)
+	var spawn_count := mini(maxi(count, 0), open_slots)
+	if spawn_count <= 0:
+		return
+
+	var direction := _direction_to(player, target_position, player.global_position)
+	if emit_attack_started_event:
+		player.attack_started.emit(player.global_position, direction, {"source": "wizard_hovering_fireball", "direct": true, "allow_procs": true})
+
+	for index in range(spawn_count):
+		_spawn_hovering_fireball(player, _get_hovering_fireball_spawn_position(target_position, spawn_count, index))
+
+
+func _spawn_hovering_fireball(player, spawn_position: Vector2) -> void:
+	var hovering_fireball := HOVERING_FIREBALL_SCRIPT.new() as Node2D
+	hovering_fireball.name = "HoveringFireball"
+	hovering_fireball.call("setup", player, spawn_position)
+	player.get_tree().current_scene.add_child(hovering_fireball)
+
+
+func _get_hovering_fireball_spawn_position(target_position: Vector2, count: int, index: int) -> Vector2:
+	if count <= 1:
+		return target_position
+	var angle := -PI * 0.5 + TAU * float(index) / float(count)
+	return target_position + Vector2(cos(angle), sin(angle)) * HOVERING_FIREBALL_SPREAD_RADIUS
+
+
+func _get_hovering_fireball_count(player) -> int:
+	if player.get_tree() == null:
+		return 0
+	var count := 0
+	for node in player.get_tree().get_nodes_in_group("wizard_hovering_fireball"):
+		var hovering_fireball := node as Node
+		if hovering_fireball != null and hovering_fireball.get("owner_player") == player:
+			count += 1
+	return count
 
 
 func launch_offset_fireballs(player, target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false) -> void:
@@ -420,13 +471,19 @@ func launch_radial_fireballs(player) -> void:
 		launch_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0)
 
 
-func schedule_primary_echoes(player, target_position: Vector2, use_fire_essence_version: bool) -> void:
-	if not has_talent(&"wizard_max_hp_primary_echo") or player.get_tree() == null:
-		return
+func get_primary_echo_count(player) -> int:
+	if not has_talent(&"wizard_max_hp_primary_echo"):
+		return 0
 	var max_hp_value: float = player.max_hp
 	if player.stats != null:
 		max_hp_value = float(player.stats.max_hp)
-	var echo_count := floori(max_hp_value / 100.0)
+	return maxi(floori(max_hp_value / 100.0), 0)
+
+
+func schedule_primary_echoes(player, target_position: Vector2, use_fire_essence_version: bool) -> void:
+	if not has_talent(&"wizard_max_hp_primary_echo") or player.get_tree() == null:
+		return
+	var echo_count := get_primary_echo_count(player)
 	for index in range(echo_count):
 		player.get_tree().create_timer(0.2 * float(index + 1)).timeout.connect(
 			Callable(player, "_launch_wizard_primary_echo").bind(target_position, use_fire_essence_version)

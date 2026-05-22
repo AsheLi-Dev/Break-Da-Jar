@@ -231,6 +231,8 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Storm\nBloom", "description": "Fireball explosions trigger Chain Lightning.", "effect": &"wizard_fireball_explosion_chain_lightning"}
 		&"spark_5":
 			return {"name": "Wide\nSpoils", "description": "Map size and combat container count are increased by 30%.", "effect": &"wizard_large_map_more_containers"}
+		&"spark_12":
+			return {"name": "Hovering\nSpark", "description": "Your left-click Fireball summons hovering Fireballs around the mouse position instead. Fire Essence and Vital Echo add more hovering Fireballs. They fire Fire Lasers at the nearest enemy at 50% attack speed, last 2s, and are capped at 10.", "effect": &"wizard_hovering_fireball"}
 		_:
 			return {"name": "+1\nATK", "description": "+1 ATK.", "stat": &"atk", "value": 1.0}
 
