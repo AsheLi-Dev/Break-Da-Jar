@@ -8,6 +8,13 @@ const HOVERING_FIREBALL_SCRIPT := preload("res://systems/combat/HoveringFireball
 const MAX_HOVERING_FIREBALLS := 10
 const FIRE_ESSENCE_HOVERING_FIREBALL_COUNT := 4
 const HOVERING_FIREBALL_SPREAD_RADIUS := 44.0
+const MAX_DASH_PRIMARY_FIREBALL_STACKS := 3
+const STATIONARY_PRIMARY_CHARGE_INTERVAL := 0.2
+const MAX_STATIONARY_PRIMARY_CHARGE_BONUS := 1.0
+const MAX_STATIONARY_PRIMARY_DAMAGE_CHARGE_BONUS := 0.5
+const STATIONARY_FIREBALL_EXPLOSION_INTERVAL := 2.0
+const FIRE_ESSENCE_GOLD_PER_CHARGE := 10
+const MAX_FIRE_ESSENCE_CHARGES := 4
 
 var enabled_talents: Dictionary = {}
 var rebirth_used: bool = false
@@ -15,13 +22,18 @@ var applied_nearby_enemy_attack_speed: float = -1.0
 var applied_nearby_enemy_move_speed: float = -1.0
 var applied_nearby_enemy_elite_damage: float = -1.0
 var applied_rare_item_move_speed: int = 0
+var applied_gold_move_speed_bonus: float = 0.0
 var next_slide_fireball_ready: bool = false
 var slide_fireball_radius_buff_remaining: float = 0.0
 var nearby_poison_aura_timer: float = 5.0
 var fire_essence_spawn_timer: float = 5.0
 var fire_essence_charges: int = 0
+var fire_essence_gold_progress: int = 0
 var early_round_gold_remaining: float = 0.0
 var quick_kill_max_hp_this_round: int = 0
+var dash_primary_fireball_stacks: int = 0
+var stationary_primary_fireball_charge_time: float = 0.0
+var stationary_fireball_explosion_timer: float = 0.0
 
 
 func enable_talent(effect_id: StringName) -> void:
@@ -49,9 +61,11 @@ func apply_talent_effect(effect_id: StringName, player) -> bool:
 		&"wizard_fire_surge_attack_speed":
 			player._update_wizard_fire_surge_attack_speed_bonus()
 		&"wizard_fire_essence_burst":
-			fire_essence_spawn_timer = 5.0
+			fire_essence_gold_progress = 0
 		&"wizard_rare_item_move_speed":
-			player._update_item_talent_bonuses()
+			player._update_wizard_gold_move_speed_bonus()
+		&"wizard_gold_move_speed_bonus":
+			player._update_wizard_gold_move_speed_bonus()
 	return true
 
 
@@ -70,6 +84,8 @@ func get_compat_property(property: StringName) -> Variant:
 			return applied_nearby_enemy_elite_damage
 		&"applied_wizard_rare_item_move_speed":
 			return applied_rare_item_move_speed
+		&"applied_wizard_gold_move_speed_bonus":
+			return applied_gold_move_speed_bonus
 		&"next_wizard_slide_fireball_ready":
 			return next_slide_fireball_ready
 		&"wizard_slide_fireball_radius_buff_remaining":
@@ -80,10 +96,18 @@ func get_compat_property(property: StringName) -> Variant:
 			return fire_essence_spawn_timer
 		&"wizard_fire_essence_charges":
 			return fire_essence_charges
+		&"wizard_fire_essence_gold_progress":
+			return fire_essence_gold_progress
 		&"wizard_early_round_gold_remaining":
 			return early_round_gold_remaining
 		&"wizard_quick_kill_max_hp_this_round":
 			return quick_kill_max_hp_this_round
+		&"wizard_dash_primary_fireball_stacks":
+			return dash_primary_fireball_stacks
+		&"wizard_stationary_primary_fireball_charge_time":
+			return stationary_primary_fireball_charge_time
+		&"wizard_stationary_fireball_explosion_timer":
+			return stationary_fireball_explosion_timer
 	return null
 
 
@@ -107,6 +131,8 @@ func set_compat_property(property: StringName, value: Variant) -> bool:
 			applied_nearby_enemy_elite_damage = float(value)
 		&"applied_wizard_rare_item_move_speed":
 			applied_rare_item_move_speed = int(value)
+		&"applied_wizard_gold_move_speed_bonus":
+			applied_gold_move_speed_bonus = float(value)
 		&"next_wizard_slide_fireball_ready":
 			next_slide_fireball_ready = bool(value)
 		&"wizard_slide_fireball_radius_buff_remaining":
@@ -116,11 +142,19 @@ func set_compat_property(property: StringName, value: Variant) -> bool:
 		&"wizard_fire_essence_spawn_timer":
 			fire_essence_spawn_timer = float(value)
 		&"wizard_fire_essence_charges":
-			fire_essence_charges = int(value)
+			fire_essence_charges = clampi(int(value), 0, MAX_FIRE_ESSENCE_CHARGES)
+		&"wizard_fire_essence_gold_progress":
+			fire_essence_gold_progress = clampi(int(value), 0, FIRE_ESSENCE_GOLD_PER_CHARGE - 1)
 		&"wizard_early_round_gold_remaining":
 			early_round_gold_remaining = float(value)
 		&"wizard_quick_kill_max_hp_this_round":
 			quick_kill_max_hp_this_round = int(value)
+		&"wizard_dash_primary_fireball_stacks":
+			dash_primary_fireball_stacks = clampi(int(value), 0, MAX_DASH_PRIMARY_FIREBALL_STACKS)
+		&"wizard_stationary_primary_fireball_charge_time":
+			stationary_primary_fireball_charge_time = clampf(float(value), 0.0, _get_stationary_primary_charge_cap_time())
+		&"wizard_stationary_fireball_explosion_timer":
+			stationary_fireball_explosion_timer = maxf(float(value), 0.0)
 		_:
 			return false
 	return true
@@ -133,12 +167,17 @@ func reset_state_after_rebirth() -> void:
 	nearby_poison_aura_timer = 5.0
 	fire_essence_spawn_timer = 5.0
 	fire_essence_charges = 0
+	fire_essence_gold_progress = 0
 	early_round_gold_remaining = 0.0
 	quick_kill_max_hp_this_round = 0
+	dash_primary_fireball_stacks = 0
+	stationary_primary_fireball_charge_time = 0.0
+	stationary_fireball_explosion_timer = 0.0
 	applied_nearby_enemy_attack_speed = -1.0
 	applied_nearby_enemy_move_speed = -1.0
 	applied_nearby_enemy_elite_damage = -1.0
 	applied_rare_item_move_speed = 0
+	applied_gold_move_speed_bonus = 0.0
 
 
 func _property_to_effect_id(property_text: String) -> StringName:
@@ -173,6 +212,8 @@ func spawn_fire_laser(player, start_position: Vector2, direction: Vector2, chain
 	laser.chain_remaining = chain_remaining_override if chain_remaining_override >= 0 else get_fire_laser_chain_count(player)
 	laser.damaged_bodies.clear()
 	for excluded in chain_excludes:
+		if not is_instance_valid(excluded):
+			continue
 		var excluded_node := excluded as Node
 		if excluded_node != null:
 			laser.damaged_bodies.append(excluded_node)
@@ -194,6 +235,8 @@ func spawn_extra_auto_fire_laser(player) -> void:
 
 
 func spawn_chained_fire_laser(player, source_enemy: Node, remaining_chains: int, chain_range: float, excludes: Array = [], source_chain_damage_multiplier: float = 1.0) -> void:
+	if not is_instance_valid(source_enemy):
+		return
 	var source_2d := source_enemy as Node2D
 	if source_2d == null:
 		return
@@ -213,8 +256,86 @@ func spawn_chained_fire_laser(player, source_enemy: Node, remaining_chains: int,
 	spawn_fire_laser(player, source_2d.global_position, direction, remaining_chains, excludes, true, chain_damage_multiplier)
 
 
+func spawn_fire_laser_chain_from_hit(player, source: Node, available_chains: int, chain_range: float, excludes: Array = [], source_chain_damage_multiplier: float = 1.0) -> void:
+	if available_chains <= 0:
+		return
+	if not is_instance_valid(source):
+		return
+
+	var source_2d := source as Node2D
+	if source_2d == null:
+		return
+
+	if has_talent(&"wizard_fire_laser_hovering_fireball_chain"):
+		var hovering_fireball := _nearest_hovering_fireball(player, source_2d.global_position, chain_range, excludes)
+		if hovering_fireball != null:
+			_spawn_hovering_fireball_chain_target(player, source_2d, hovering_fireball, available_chains - 1, chain_range, excludes, source_chain_damage_multiplier)
+		return
+
+	var target := EFFECT_TARGETING.nearest_enemy(player, source_2d.global_position, chain_range, excludes)
+	if target != null:
+		_spawn_enemy_chain_target(player, source_2d, target, available_chains - 1, chain_range, excludes, source_chain_damage_multiplier)
+		return
+
+	target = EFFECT_TARGETING.nearest_enemy(player, source_2d.global_position, chain_range, [source])
+	if target != null:
+		_spawn_enemy_chain_target(player, source_2d, target, available_chains - 1, chain_range, excludes, source_chain_damage_multiplier)
+		return
+
+	if has_talent(&"wizard_fire_laser_chain_heals_player") and source_2d.global_position.distance_to(player.global_position) <= chain_range:
+		var player_direction := _direction_to(player, player.global_position, source_2d.global_position)
+		spawn_fire_laser(player, source_2d.global_position, player_direction, 0, [], false)
+		player.heal(1.0)
+
+
+func _spawn_enemy_chain_target(player, source_2d: Node2D, target: Node, remaining_chains: int, chain_range: float, excludes: Array, source_chain_damage_multiplier: float) -> void:
+	if not is_instance_valid(source_2d) or not is_instance_valid(target):
+		return
+	var target_2d := target as Node2D
+	if target_2d == null:
+		return
+	var chain_damage_multiplier := maxf(source_chain_damage_multiplier, 0.0)
+	if has_talent(&"wizard_fire_laser_chain_damage"):
+		chain_damage_multiplier *= 1.2
+	var direction := _direction_to(player, target_2d.global_position, source_2d.global_position)
+	spawn_fire_laser(player, source_2d.global_position, direction, remaining_chains, excludes, true, chain_damage_multiplier)
+
+
+func _spawn_hovering_fireball_chain_target(player, source_2d: Node2D, hovering_fireball: Node2D, remaining_chains: int, _chain_range: float, excludes: Array, source_chain_damage_multiplier: float) -> void:
+	if not is_instance_valid(source_2d) or not is_instance_valid(hovering_fireball):
+		return
+	var direction := _direction_to(player, hovering_fireball.global_position, source_2d.global_position)
+	var next_excludes := excludes.duplicate()
+	next_excludes.append(hovering_fireball)
+	spawn_fire_laser(player, source_2d.global_position, direction, remaining_chains, next_excludes, true, source_chain_damage_multiplier)
+
+
+func _nearest_hovering_fireball(player, origin: Vector2, max_range: float, excludes: Array) -> Node2D:
+	if player.get_tree() == null:
+		return null
+
+	var nearest: Node2D
+	var nearest_distance_sq := max_range * max_range
+	for node in player.get_tree().get_nodes_in_group("wizard_hovering_fireball"):
+		var hovering_fireball := node as Node2D
+		if hovering_fireball == null or not is_instance_valid(hovering_fireball):
+			continue
+		if excludes.has(hovering_fireball):
+			continue
+		if hovering_fireball.get("owner_player") != player:
+			continue
+
+		var distance_sq := origin.distance_squared_to(hovering_fireball.global_position)
+		if distance_sq <= nearest_distance_sq:
+			nearest = hovering_fireball
+			nearest_distance_sq = distance_sq
+	return nearest
+
+
 func get_fire_laser_chain_count(player) -> int:
 	var chain_count := 1 if has_talent(&"wizard_fire_laser_chain") else 0
+	if has_talent(&"wizard_fire_laser_hovering_fireball_chain"):
+		chain_count += 3
 	if has_talent(&"wizard_attack_speed_laser_chain"):
 		chain_count += floori(player.call("_get_current_attacks_per_second"))
 	return maxi(chain_count, 0)
@@ -270,16 +391,16 @@ func launch_radial_fire_lasers(player) -> void:
 		spawn_fire_laser(player, player.global_position, Vector2(cos(angle), sin(angle)))
 
 
-func launch_fireball(player, target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false) -> void:
+func launch_fireball(player, target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0) -> void:
 	if player.get_tree() == null or player.get_tree().current_scene == null:
 		return
 	var direction := _direction_to(player, target_position, player.global_position)
 	if emit_attack_started_event:
 		player.attack_started.emit(player.global_position, direction, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
-	spawn_fireball(player, player.global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus)
+	spawn_fireball(player, player.global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus, damage_multiplier)
 
 
-func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false) -> void:
+func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0) -> void:
 	if player.get_tree() == null or player.get_tree().current_scene == null:
 		return
 	var fireball := FIREBALL_SCRIPT.new() as FireballProjectile
@@ -303,7 +424,7 @@ func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume
 		explosion_radius *= player.call("_get_wizard_fireball_radius_per_atk_multiplier")
 	if has_slide_fireball_bonus and not force_slide_fireball_bonus:
 		next_slide_fireball_ready = false
-	fireball.setup(player, start_position, direction, get_fireball_damage(player), explosion_radius, allow_procs)
+	fireball.setup(player, start_position, direction, get_fireball_damage(player) * maxf(damage_multiplier, 0.0), explosion_radius, allow_procs)
 	if has_talent(&"wizard_fireball_speed_bonus"):
 		fireball.speed *= 1.4
 	if has_talent(&"wizard_primary_fireball_laser_explosion"):
@@ -312,6 +433,8 @@ func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume
 		fireball.explode_callback = Callable(player, "_launch_wizard_fire_essence_explosion_scatter")
 	fireball.collision_layer = 1 << 2
 	fireball.collision_mask = 1 << 1
+	fireball.explode_on_containers = true
+	fireball.set_collision_mask_value(player.jar_collision_layer_number, true)
 	if has_talent(&"wizard_fireball_explodes_on_containers"):
 		fireball.explode_on_containers = true
 		fireball.set_collision_mask_value(player.jar_collision_layer_number, true)
@@ -332,10 +455,137 @@ func launch_dash_fireball(player) -> void:
 	launch_fireball(player, player.global_position + direction.normalized() * 200.0, false, 2.0, 0.1)
 
 
+func add_dash_primary_fireball_stack() -> void:
+	if not has_talent(&"wizard_dash_primary_fireball_stacks"):
+		return
+	dash_primary_fireball_stacks = mini(dash_primary_fireball_stacks + 1, MAX_DASH_PRIMARY_FIREBALL_STACKS)
+
+
+func consume_dash_primary_fireball_stacks() -> int:
+	var stacks := dash_primary_fireball_stacks
+	dash_primary_fireball_stacks = 0
+	return stacks
+
+
+func update_stationary_primary_fireball_charge(player, delta: float) -> void:
+	if not _has_stationary_primary_fireball_charge_talent():
+		stationary_primary_fireball_charge_time = 0.0
+		return
+
+	if _is_player_moving_for_primary_charge(player):
+		stationary_primary_fireball_charge_time = 0.0
+		return
+
+	stationary_primary_fireball_charge_time = minf(
+		stationary_primary_fireball_charge_time + delta,
+		_get_stationary_primary_charge_cap_time()
+	)
+
+
+func consume_stationary_primary_fireball_charge_multipliers() -> Dictionary:
+	var radius_multiplier := get_stationary_primary_fireball_radius_multiplier()
+	var damage_multiplier := get_stationary_primary_fireball_damage_multiplier()
+	stationary_primary_fireball_charge_time = 0.0
+	return {
+		"radius": radius_multiplier,
+		"damage": damage_multiplier,
+	}
+
+
+func get_stationary_primary_fireball_radius_multiplier() -> float:
+	if not has_talent(&"wizard_stationary_primary_fireball_radius_charge"):
+		return 1.0
+
+	var bonus_steps := floorf(stationary_primary_fireball_charge_time / STATIONARY_PRIMARY_CHARGE_INTERVAL)
+	var bonus := minf(bonus_steps * 0.1, MAX_STATIONARY_PRIMARY_CHARGE_BONUS)
+	return 1.0 + bonus
+
+
+func get_stationary_primary_fireball_damage_multiplier() -> float:
+	if not has_talent(&"wizard_stationary_primary_fireball_damage_charge"):
+		return 1.0
+
+	var bonus_steps := floorf(stationary_primary_fireball_charge_time / STATIONARY_PRIMARY_CHARGE_INTERVAL)
+	var bonus := minf(bonus_steps * 0.1, MAX_STATIONARY_PRIMARY_DAMAGE_CHARGE_BONUS)
+	return 1.0 + bonus
+
+
+func consume_stationary_primary_fireball_radius_multiplier() -> float:
+	var multiplier := get_stationary_primary_fireball_radius_multiplier()
+	stationary_primary_fireball_charge_time = 0.0
+	return multiplier
+
+
+func _get_stationary_primary_charge_cap_time() -> float:
+	return MAX_STATIONARY_PRIMARY_CHARGE_BONUS / 0.1 * STATIONARY_PRIMARY_CHARGE_INTERVAL
+
+
+func _has_stationary_primary_fireball_charge_talent() -> bool:
+	return (
+		has_talent(&"wizard_stationary_primary_fireball_radius_charge")
+		or has_talent(&"wizard_stationary_primary_fireball_damage_charge")
+	)
+
+
+func _is_player_moving_for_primary_charge(player) -> bool:
+	if int(player.state) != 0:
+		return true
+	var input_direction := player.call("_get_move_input") as Vector2
+	if input_direction.length_squared() > 0.001:
+		return true
+	return player.velocity.length_squared() > 16.0
+
+
+func update_stationary_fireball_explosion(player, delta: float) -> void:
+	if not has_talent(&"wizard_stationary_fireball_explosion"):
+		stationary_fireball_explosion_timer = 0.0
+		return
+
+	if _is_player_moving_for_primary_charge(player):
+		stationary_fireball_explosion_timer = 0.0
+		return
+
+	stationary_fireball_explosion_timer += delta
+	while stationary_fireball_explosion_timer >= STATIONARY_FIREBALL_EXPLOSION_INTERVAL:
+		stationary_fireball_explosion_timer -= STATIONARY_FIREBALL_EXPLOSION_INTERVAL
+		trigger_fireball_explosion_at_player(player)
+
+
+func trigger_fireball_explosion_at_player(player) -> void:
+	if player.get_tree() == null or player.get_tree().current_scene == null:
+		return
+
+	var fireball := FIREBALL_SCRIPT.new() as FireballProjectile
+	fireball.owner_spawn_modifiers_applied = true
+	fireball.setup(player, player.global_position, Vector2.RIGHT, get_fireball_damage(player), _get_fireball_explosion_radius(player), true)
+	fireball.collision_layer = 1 << 2
+	fireball.collision_mask = 1 << 1
+	fireball.explode_on_containers = true
+	fireball.set_collision_mask_value(player.jar_collision_layer_number, true)
+	player.get_tree().current_scene.add_child(fireball)
+	fireball.explode()
+
+
+func _get_fireball_explosion_radius(player, radius_multiplier: float = 1.0) -> float:
+	var explosion_radius := 80.0 * maxf(radius_multiplier, 0.0)
+	var additive_radius_bonus := 0.0
+	if slide_fireball_radius_buff_remaining > 0.0:
+		additive_radius_bonus += 0.3
+	explosion_radius *= 1.0 + additive_radius_bonus
+	if has_talent(&"wizard_fireball_radius_bonus"):
+		explosion_radius *= 1.3
+	if has_talent(&"wizard_fireball_radius_per_atk"):
+		explosion_radius *= player.call("_get_wizard_fireball_radius_per_atk_multiplier")
+	return explosion_radius
+
+
 func launch_primary_attack_pattern(player, target_position: Vector2, use_fire_essence_version: bool, emit_attack_started_event: bool = true) -> void:
+	var charge_multipliers := consume_stationary_primary_fireball_charge_multipliers()
+	var charged_radius_multiplier := float(charge_multipliers.get("radius", 1.0))
+	var charged_damage_multiplier := float(charge_multipliers.get("damage", 1.0))
 	if has_talent(&"wizard_hovering_fireball"):
 		var base_hovering_count := FIRE_ESSENCE_HOVERING_FIREBALL_COUNT if use_fire_essence_version else 1
-		var hovering_count := base_hovering_count * (1 + get_primary_echo_count(player))
+		var hovering_count := (base_hovering_count + consume_dash_primary_fireball_stacks()) * (1 + get_primary_echo_count(player))
 		launch_hovering_fireballs(player, target_position, hovering_count, emit_attack_started_event)
 		return
 
@@ -343,15 +593,18 @@ func launch_primary_attack_pattern(player, target_position: Vector2, use_fire_es
 	var apply_slide_fireball_bonus: bool = next_slide_fireball_ready
 	if apply_slide_fireball_bonus:
 		next_slide_fireball_ready = false
-	launch_fireball(player, target_position, true, 1.0, 1.0, true, emit_attack_started_event, scatter_on_explode, apply_slide_fireball_bonus)
+	launch_fireball(player, target_position, true, charged_radius_multiplier, 1.0, true, emit_attack_started_event, scatter_on_explode, apply_slide_fireball_bonus, charged_damage_multiplier)
 	var offset_index := 0
 	if use_fire_essence_version:
-		launch_offset_fireballs(player, target_position, 3, offset_index, apply_slide_fireball_bonus)
+		launch_offset_fireballs(player, target_position, 3, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
 		offset_index += 3
 	if has_talent(&"wizard_primary_extra_fireball"):
-		launch_offset_fireballs(player, target_position, 1, offset_index, apply_slide_fireball_bonus)
+		launch_offset_fireballs(player, target_position, 1, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
 		offset_index += 1
-	launch_offset_fireballs(player, target_position, get_move_speed_extra_fireball_count(player), offset_index, apply_slide_fireball_bonus)
+	var dash_stack_count := consume_dash_primary_fireball_stacks()
+	launch_offset_fireballs(player, target_position, dash_stack_count, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
+	offset_index += dash_stack_count
+	launch_offset_fireballs(player, target_position, get_move_speed_extra_fireball_count(player), offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
 
 
 func launch_hovering_fireballs(player, target_position: Vector2, count: int, emit_attack_started_event: bool = true) -> void:
@@ -395,7 +648,7 @@ func _get_hovering_fireball_count(player) -> int:
 	return count
 
 
-func launch_offset_fireballs(player, target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false) -> void:
+func launch_offset_fireballs(player, target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, damage_multiplier: float = 1.0) -> void:
 	if count <= 0:
 		return
 	var direction := _direction_to(player, target_position, player.global_position)
@@ -405,7 +658,7 @@ func launch_offset_fireballs(player, target_position: Vector2, count: int, start
 		var step := floori(float(offset_index) / 2.0) + 1
 		var sign_value := 1.0 if offset_index % 2 == 0 else -1.0
 		var angle := center_angle + deg_to_rad(10.0 * float(step) * sign_value)
-		launch_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, 1.0, 1.0, true, false, false, force_slide_fireball_bonus)
+		launch_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, radius_multiplier, 1.0, true, false, false, force_slide_fireball_bonus, damage_multiplier)
 
 
 func launch_fire_essence_explosion_scatter(player, origin: Vector2) -> void:
@@ -438,9 +691,18 @@ func spawn_fireball_duplicate(player, source_fireball: FireballProjectile, direc
 	duplicate.target_group = source_fireball.target_group
 	duplicate.damages_containers = source_fireball.damages_containers
 	duplicate.explode_on_containers = source_fireball.explode_on_containers
+	duplicate.homing_enabled = source_fireball.homing_enabled
+	duplicate.homing_turn_rate = source_fireball.homing_turn_rate
+	duplicate.impact_poison_chance = source_fireball.impact_poison_chance
+	duplicate.impact_stun_chance = source_fireball.impact_stun_chance
+	duplicate.impact_stun_duration = source_fireball.impact_stun_duration
+	duplicate.impact_vulnerable_stacks = source_fireball.impact_vulnerable_stacks
+	duplicate.pierce_enemies = source_fireball.pierce_enemies
+	duplicate.bounce_on_walls = source_fireball.bounce_on_walls
 	duplicate.explode_replacement_callback = source_fireball.explode_replacement_callback
 	duplicate.explode_callback = source_fireball.explode_callback
 	duplicate.setup(source_fireball.owner_player, source_fireball.global_position, direction, source_fireball.damage, source_fireball.explosion_radius, source_fireball.allow_procs)
+	duplicate.impact_damage = source_fireball.impact_damage
 	duplicate.collision_layer = source_fireball.collision_layer
 	duplicate.collision_mask = source_fireball.collision_mask
 	player.get_tree().current_scene.add_child(duplicate)
@@ -459,10 +721,12 @@ func get_legendary_extra_fireball_count(player) -> int:
 func get_move_speed_extra_fireball_count(player) -> int:
 	if not has_talent(&"wizard_move_speed_extra_fireballs"):
 		return 0
-	var move_speed_value: float = player.move_speed
-	if player.stats != null:
-		move_speed_value = player.stats.get_move_speed(player.move_speed)
-	return maxi(floori(move_speed_value / 100.0), 0)
+	var gold := 0
+	if player.has_method("_get_wizard_effective_gold_for_talents"):
+		gold = int(player.call("_get_wizard_effective_gold_for_talents"))
+	elif player.has_method("_get_current_gold"):
+		gold = int(player.call("_get_current_gold"))
+	return maxi(floori(float(gold) / 50.0), 0)
 
 
 func launch_radial_fireballs(player) -> void:
@@ -490,13 +754,30 @@ func schedule_primary_echoes(player, target_position: Vector2, use_fire_essence_
 		)
 
 
-func update_fire_essence_spawner(player, delta: float) -> void:
+func add_fire_essence_gold(amount: int) -> void:
+	if amount <= 0 or not has_talent(&"wizard_fire_essence_burst"):
+		return
+	if fire_essence_charges >= MAX_FIRE_ESSENCE_CHARGES:
+		fire_essence_gold_progress = 0
+		return
+
+	fire_essence_gold_progress += amount
+	while fire_essence_gold_progress >= FIRE_ESSENCE_GOLD_PER_CHARGE and fire_essence_charges < MAX_FIRE_ESSENCE_CHARGES:
+		fire_essence_gold_progress -= FIRE_ESSENCE_GOLD_PER_CHARGE
+		fire_essence_charges += 1
+
+	if fire_essence_charges >= MAX_FIRE_ESSENCE_CHARGES:
+		fire_essence_gold_progress = 0
+
+
+func collect_fire_essence_pickup() -> void:
 	if not has_talent(&"wizard_fire_essence_burst"):
 		return
-	fire_essence_spawn_timer -= delta
-	while fire_essence_spawn_timer <= 0.0:
-		fire_essence_spawn_timer += 5.0
-		spawn_fire_essence(player)
+	fire_essence_charges = mini(fire_essence_charges + 1, MAX_FIRE_ESSENCE_CHARGES)
+
+
+func update_fire_essence_spawner(_player, _delta: float) -> void:
+	pass
 
 
 func spawn_fire_essence(player) -> void:

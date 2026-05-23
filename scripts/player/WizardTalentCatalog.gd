@@ -114,7 +114,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"flame_left_start_4":
 			return {"name": "Close\nDrain", "description": "Damage dealt to nearby enemies heals you for 12% of the damage dealt.", "effect": &"wizard_nearby_damage_lifesteal"}
 		&"flame_center_start_0":
-			return {"name": "Swift\nFlame", "description": "Gain 20% movement speed.", "stat": &"movement_speed_bonus", "value": 0.2}
+			return {"name": "Swift\nFlame", "description": "Enemies have a 10% chance to drop 1 extra gold.", "effect": &"wizard_swift_flame_extra_gold"}
 		&"flame_center_start_1":
 			return {"name": "Burning\nStride", "description": "After killing an enemy, gain 10% movement speed for 3s, up to 30%.", "effect": &"wizard_kill_move_speed_stack"}
 		&"flame_center_start_2":
@@ -174,31 +174,31 @@ static func definition(id: StringName) -> Dictionary:
 		&"flame_left_13":
 			return {"name": "Might\nBloom", "description": "For every 10 ATK you have, your Fireball explosion radius increases by 20%.", "effect": &"wizard_fireball_radius_per_atk"}
 		&"flame_bridge_center_0":
-			return {"name": "Fire\nEssence", "description": "Every 5s, a Fire Essence appears within 400px for 5s. Pick it up within 300px to make your next left-click attack fire three extra Fireballs.", "effect": &"wizard_fire_essence_burst"}
+			return {"name": "Fire\nEssence", "description": "Picking up 10 gold grants 1 Fire Essence, up to 4 stored. Your next left-click attack consumes 1 Fire Essence to fire three extra Fireballs.", "effect": &"wizard_fire_essence_burst"}
 		&"flame_center_0":
-			return {"name": "After\nBurn", "description": "After killing an enemy, gain 200% movement speed for 0.2s.", "effect": &"wizard_kill_move_speed_burst"}
+			return {"name": "After\nBurn", "description": "Gain 1% movement speed for every 10 gold you have.", "effect": &"wizard_gold_move_speed_bonus"}
 		&"flame_center_1":
 			return {"name": "Surge\nRing", "description": "Fire Surge now fires eight Fireballs in all directions every 5s.", "effect": &"wizard_fire_surge_radial_fireballs"}
 		&"flame_center_2":
 			return {"name": "Vital\nEcho", "description": "For every 100 max HP you have, your left-click attack repeats once after 0.2s. If it consumed Fire Essence, the repeats use the four-Fireball version.", "effect": &"wizard_max_hp_primary_echo"}
 		&"flame_center_3":
-			return {"name": "Swift\nVolley", "description": "For every 100 movement speed you have, your left-click attack fires 1 extra Fireball at a 10-degree offset without changing the original Fireball angle.", "effect": &"wizard_move_speed_extra_fireballs"}
+			return {"name": "Swift\nVolley", "description": "For every 50 gold you have, your left-click attack fires 1 extra Fireball at a 10-degree offset without changing the original Fireball angle.", "effect": &"wizard_move_speed_extra_fireballs"}
 		&"flame_center_4":
-			return {"name": "Venom\nBurst", "description": "When a poisoned enemy dies, trigger a Fireball from its position.", "effect": &"wizard_poisoned_death_fireball"}
+			return {"name": "Venom\nBurst", "description": "Poisoned enemies drop 1 extra gold when they die.", "effect": &"wizard_poisoned_death_extra_gold"}
 		&"flame_center_5":
-			return {"name": "Rare\nStride", "description": "Gain 10 movement speed for each rare item you have.", "effect": &"wizard_rare_item_move_speed"}
+			return {"name": "Rare\nCredit", "description": "Each rare item you have makes you count as having 10 extra gold.", "effect": &"wizard_rare_item_move_speed"}
 		&"flame_center_6":
-			return {"name": "Essence\nSpiral", "description": "After picking up Fire Essence, your next left-click Fireball explosion releases eight Fireballs in a spinning burst.", "effect": &"wizard_fire_essence_explosion_scatter"}
+			return {"name": "Essence\nSpiral", "description": "After consuming Fire Essence, your next left-click Fireball explosion releases eight Fireballs in a spinning burst.", "effect": &"wizard_fire_essence_explosion_scatter"}
 		&"flame_center_7":
 			return {"name": "Legendary\nMarket", "description": "Your shop always has at least one legendary jar. Legendary jars cost double.", "effect": &"wizard_guaranteed_legendary_shop_jar"}
 		&"flame_center_8":
-			return {"name": "Lasting\nBloom", "description": "Fireballs have double explosion radius when they explode naturally at the end of their flight.", "effect": &"wizard_natural_fireball_radius"}
+			return {"name": "Piercing\nBloom", "description": "Your Fireballs pierce enemies indefinitely, dealing impact damage on hit without exploding. They only explode when their flight ends naturally.", "effect": &"wizard_natural_fireball_radius"}
 		&"flame_center_9":
 			return {"name": "Legendary\nEmbers", "description": "For each legendary item you have, every Fireball source fires 1 additional Fireball.", "effect": &"wizard_legendary_extra_fireballs"}
 		&"flame_center_10":
-			return {"name": "Warm\nAsh", "description": "Recover 1 HP whenever one of your Fireballs explodes naturally at the end of its flight.", "effect": &"wizard_natural_fireball_heal"}
+			return {"name": "Rebound\nAsh", "description": "Your Fireballs bounce when they hit walls, and their flight distance is doubled.", "effect": &"wizard_natural_fireball_heal"}
 		&"flame_center_11":
-			return {"name": "Pain\nBloom", "description": "When you take damage, all of your active Fireballs explode naturally.", "effect": &"wizard_damage_taken_natural_explode_fireballs"}
+			return {"name": "Kinetic\nBloom", "description": "Your movement speed bonus also applies to your Fireball travel speed.", "effect": &"wizard_damage_taken_natural_explode_fireballs"}
 		&"flame_center_12":
 			return {"name": "Wild\nSparks", "description": "All Fireballs from all sources are doubled, but every Fireball launches in a random direction.", "effect": &"wizard_random_double_fireballs"}
 		&"flame_right_0":
@@ -229,10 +229,28 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Storm\nTempo", "description": "Each enemy hit by Chain Lightning grants 2% attack speed for 3s, up to 50%.", "effect": &"wizard_chain_lightning_attack_speed_stack"}
 		&"flame_right_13":
 			return {"name": "Storm\nBloom", "description": "Fireball explosions trigger Chain Lightning.", "effect": &"wizard_fireball_explosion_chain_lightning"}
+		&"spark_4":
+			return {"name": "Elite\nSpoils", "description": "Combat container count is increased by 100%. When a container breaks, it has a 1% chance to summon 2 elite enemies.", "effect": &"wizard_double_containers_elite_break"}
 		&"spark_5":
 			return {"name": "Wide\nSpoils", "description": "Map size and combat container count are increased by 30%.", "effect": &"wizard_large_map_more_containers"}
+		&"spark_9":
+			return {"name": "Still\nCharge", "description": "Stand still to charge your left-click Fireballs, gaining 10% explosion radius every 0.2s, up to 100%. Moving or casting the left-click attack resets the charge.", "effect": &"wizard_stationary_primary_fireball_radius_charge"}
+		&"spark_10":
+			return {"name": "Still\nForce", "description": "Stand still to charge your next left-click Fireballs, gaining 10% Fireball damage every 0.2s, up to 50%. Moving or casting the left-click attack resets the charge.", "effect": &"wizard_stationary_primary_fireball_damage_charge"}
+		&"spark_11":
+			return {"name": "Still\nBurst", "description": "While standing still, trigger a Fireball explosion at your position every 2s.", "effect": &"wizard_stationary_fireball_explosion"}
 		&"spark_12":
 			return {"name": "Hovering\nSpark", "description": "Your left-click Fireball summons hovering Fireballs around the mouse position instead. Fire Essence and Vital Echo add more hovering Fireballs. They fire Fire Lasers at the nearest enemy at 50% attack speed, last 2s, and are capped at 10.", "effect": &"wizard_hovering_fireball"}
+		&"spark_13":
+			return {"name": "Dash\nVolley", "description": "After dashing, your next left-click attack fires 1 additional Fireball, stacking up to 3 times. Casting the left-click attack resets the stacks.", "effect": &"wizard_dash_primary_fireball_stacks"}
+		&"spark_14":
+			return {"name": "Relay\nSpark", "description": "Your Fire Lasers gain 3 chains and can only chain to your hovering Fireballs.", "effect": &"wizard_fire_laser_hovering_fireball_chain"}
+		&"spark_15":
+			return {"name": "Homing\nSpark", "description": "Your Fireballs automatically track the nearest target, but their explosion damage is reduced by 40%.", "effect": &"wizard_homing_fireballs"}
+		&"spark_16":
+			return {"name": "Toxic\nSpark", "description": "When your Fireballs hit enemies, they have a 30% chance to Poison and a 5% chance to Stun.", "effect": &"wizard_fireball_impact_poison_stun"}
+		&"spark_17":
+			return {"name": "Brittle\nSpark", "description": "When your Fireballs hit enemies, they apply Vulnerable. Each Vulnerable stack makes the unit take 5% increased damage, stacking additively.", "effect": &"wizard_fireball_impact_vulnerable"}
 		_:
 			return {"name": "+1\nATK", "description": "+1 ATK.", "stat": &"atk", "value": 1.0}
 

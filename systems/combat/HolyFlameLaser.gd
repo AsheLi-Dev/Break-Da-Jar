@@ -200,8 +200,11 @@ func _damage_enemy(enemy: Node) -> void:
 		owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": attack_source, "direct": true, "allow_procs": allow_procs})
 	else:
 		enemy.call("take_damage", damage)
-	if chain_remaining > 0 and owner_player != null and owner_player.has_method("spawn_chained_wizard_fire_laser"):
-		owner_player.call("spawn_chained_wizard_fire_laser", enemy, chain_remaining - 1, chain_range, damaged_bodies.duplicate(), chain_damage_multiplier)
+	if chain_remaining > 0 and owner_player != null:
+		if owner_player.has_method("spawn_wizard_fire_laser_chain_from_hit"):
+			owner_player.call("spawn_wizard_fire_laser_chain_from_hit", enemy, chain_remaining, chain_range, damaged_bodies.duplicate(), chain_damage_multiplier)
+		elif owner_player.has_method("spawn_chained_wizard_fire_laser"):
+			owner_player.call("spawn_chained_wizard_fire_laser", enemy, chain_remaining - 1, chain_range, damaged_bodies.duplicate(), chain_damage_multiplier)
 
 
 func _damage_container(container: Node) -> void:

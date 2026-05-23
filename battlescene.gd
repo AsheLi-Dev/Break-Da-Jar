@@ -31,6 +31,8 @@ const CONTAINER_COUNT := 40
 const GRID_SIZE := 16
 const CONTAINER_GRID_MIN_INDEX := 3
 const CONTAINER_GRID_MAX_INDEX := 12
+const MAX_DYNAMIC_CONTAINER_GRID_DIMENSION := 16
+const DYNAMIC_CONTAINER_GRID_DENSITY_BUFFER := 1.2
 
 const SHOP_CONTAINER_COUNT := 6
 const SHOP_CONTAINER_COLUMNS := 3
@@ -540,7 +542,8 @@ func _get_combat_container_count() -> int:
 	var multiplier := 1.0
 	if is_instance_valid(player) and player.has_method("get_combat_container_count_multiplier"):
 		multiplier = float(player.get_combat_container_count_multiplier())
-	return maxi(1, roundi(float(CONTAINER_COUNT) * _get_round_container_count_multiplier() * multiplier))
+	var count := roundi(float(CONTAINER_COUNT) * _get_round_container_count_multiplier() * multiplier)
+	return clampi(count, 1, _get_max_dynamic_container_count())
 
 
 func _get_round_container_count_multiplier() -> float:
@@ -645,12 +648,14 @@ func _roll_combat_container_placements() -> Array[Dictionary]:
 	var occupied_cells: Dictionary = {}
 	var placements: Array[Dictionary] = []
 	var grid_cell_size: Vector2 = _get_play_area_size() / float(GRID_SIZE)
-	for _index in range(_get_combat_container_count()):
+	var target_count := mini(_get_combat_container_count(), _get_max_dynamic_container_count())
+	var grid_bounds := _get_dynamic_container_grid_bounds(target_count)
+	for _index in range(target_count):
 		var container_type: int = _roll_combat_container_type()
-		var placement := _roll_container_placement(container_type, grid_cell_size, occupied_cells)
+		var placement := _roll_container_placement(container_type, grid_cell_size, occupied_cells, grid_bounds)
 		if placement.is_empty() and container_type == ContainerType.TOMB:
 			container_type = _roll_small_combat_container_type()
-			placement = _roll_container_placement(container_type, grid_cell_size, occupied_cells)
+			placement = _roll_container_placement(container_type, grid_cell_size, occupied_cells, grid_bounds)
 		if placement.is_empty():
 			break
 		placements.append({
@@ -660,7 +665,7 @@ func _roll_combat_container_placements() -> Array[Dictionary]:
 		if container_type == ContainerType.TOMB:
 			var extra_tomb_count := _get_extra_tomb_container_count()
 			for _extra_index in range(extra_tomb_count):
-				var extra_placement := _roll_container_placement(ContainerType.TOMB, grid_cell_size, occupied_cells)
+				var extra_placement := _roll_container_placement(ContainerType.TOMB, grid_cell_size, occupied_cells, grid_bounds)
 				if extra_placement.is_empty():
 					break
 				placements.append({
@@ -670,6 +675,22 @@ func _roll_combat_container_placements() -> Array[Dictionary]:
 	return placements
 
 
+func _get_max_dynamic_container_count() -> int:
+	return MAX_DYNAMIC_CONTAINER_GRID_DIMENSION * MAX_DYNAMIC_CONTAINER_GRID_DIMENSION
+
+
+func _get_dynamic_container_grid_bounds(target_count: int) -> Dictionary:
+	var base_dimension := CONTAINER_GRID_MAX_INDEX - CONTAINER_GRID_MIN_INDEX + 1
+	var desired_cells := maxf(float(target_count) * DYNAMIC_CONTAINER_GRID_DENSITY_BUFFER, float(base_dimension * base_dimension))
+	var dimension := clampi(ceili(sqrt(desired_cells)), base_dimension, MAX_DYNAMIC_CONTAINER_GRID_DIMENSION)
+	dimension = mini(dimension, GRID_SIZE)
+	var min_index := maxi(floori(float(GRID_SIZE - dimension) * 0.5), 0)
+	return {
+		"min": min_index,
+		"max": min_index + dimension - 1,
+	}
+
+
 func _get_extra_tomb_container_count() -> int:
 	var multiplier := 1.0
 	if is_instance_valid(player) and player.has_method("get_tomb_container_count_multiplier"):
@@ -677,10 +698,10 @@ func _get_extra_tomb_container_count() -> int:
 	return maxi(0, int(floorf(multiplier - 1.0)))
 
 
-func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occupied_cells: Dictionary) -> Dictionary:
+func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occupied_cells: Dictionary, grid_bounds: Dictionary) -> Dictionary:
 	var play_area_rect := _get_play_area_rect()
 	if container_type == ContainerType.TOMB:
-		var top_left_cell := _pick_free_tomb_cell(occupied_cells)
+		var top_left_cell := _pick_free_tomb_cell(occupied_cells, grid_bounds)
 		if top_left_cell == Vector2i(-1, -1):
 			return {}
 
@@ -691,7 +712,7 @@ func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occ
 			"position": play_area_rect.position + (Vector2(top_left_cell) + Vector2(1.0, 1.0)) * grid_cell_size,
 		}
 
-	var cell := _pick_free_single_cell(occupied_cells)
+	var cell := _pick_free_single_cell(occupied_cells, grid_bounds)
 	if cell == Vector2i(-1, -1):
 		return {}
 
@@ -706,10 +727,12 @@ func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occ
 	}
 
 
-func _pick_free_tomb_cell(occupied_cells: Dictionary) -> Vector2i:
+func _pick_free_tomb_cell(occupied_cells: Dictionary, grid_bounds: Dictionary) -> Vector2i:
 	var candidates: Array[Vector2i] = []
-	for row in range(CONTAINER_GRID_MIN_INDEX, CONTAINER_GRID_MAX_INDEX):
-		for column in range(CONTAINER_GRID_MIN_INDEX, CONTAINER_GRID_MAX_INDEX):
+	var min_index := int(grid_bounds.get("min", CONTAINER_GRID_MIN_INDEX))
+	var max_index := int(grid_bounds.get("max", CONTAINER_GRID_MAX_INDEX))
+	for row in range(min_index, max_index):
+		for column in range(min_index, max_index):
 			var cell := Vector2i(column, row)
 			if _is_tomb_cell_free(cell, occupied_cells):
 				candidates.append(cell)
@@ -726,10 +749,12 @@ func _is_tomb_cell_free(top_left_cell: Vector2i, occupied_cells: Dictionary) -> 
 	return true
 
 
-func _pick_free_single_cell(occupied_cells: Dictionary) -> Vector2i:
+func _pick_free_single_cell(occupied_cells: Dictionary, grid_bounds: Dictionary) -> Vector2i:
 	var candidates: Array[Vector2i] = []
-	for row in range(CONTAINER_GRID_MIN_INDEX, CONTAINER_GRID_MAX_INDEX + 1):
-		for column in range(CONTAINER_GRID_MIN_INDEX, CONTAINER_GRID_MAX_INDEX + 1):
+	var min_index := int(grid_bounds.get("min", CONTAINER_GRID_MIN_INDEX))
+	var max_index := int(grid_bounds.get("max", CONTAINER_GRID_MAX_INDEX))
+	for row in range(min_index, max_index + 1):
+		for column in range(min_index, max_index + 1):
 			var cell := Vector2i(column, row)
 			if not occupied_cells.has(cell):
 				candidates.append(cell)
@@ -1074,6 +1099,7 @@ func _mark_container_broken(container: BreakableContainer) -> void:
 func _on_container_broken(container: BreakableContainer, attack_info: Dictionary) -> void:
 	_mark_container_broken(container)
 	_try_drop_player_container_gold(container, attack_info)
+	_try_trigger_wizard_container_break_elites(container)
 	var owner: Node = attack_info.get("owner")
 	if owner != null and owner.has_method("emit_container_broken"):
 		owner.emit_container_broken(container, attack_info)
@@ -1144,6 +1170,22 @@ func _try_drop_player_container_gold(container: BreakableContainer, attack_info:
 	_spawn_reward_pickup(RewardPickup.KIND_GOLD, gold_amount, container.global_position)
 	hud_message = "Container dropped %d gold." % gold_amount
 	_update_hud()
+
+
+func _try_trigger_wizard_container_break_elites(container: BreakableContainer, chance_roll: float = -1.0) -> bool:
+	if not is_instance_valid(player) or container == null:
+		return false
+	if not player.wizard_runtime.has_talent(&"wizard_double_containers_elite_break"):
+		return false
+
+	var roll := chance_roll if chance_roll >= 0.0 else randf()
+	if roll >= 0.01:
+		return false
+
+	var count := 2
+	for index in range(count):
+		_spawn_enemy(_get_spawn_offset_position(container.global_position, index, count), _pick_elite_enemy_scene())
+	return true
 
 
 func refresh_shop_container_prices() -> void:
@@ -1285,9 +1327,50 @@ func _on_enemy_died(enemy: EnemyBase) -> void:
 	var experience_reward := _get_modified_enemy_experience_reward(enemy, base_reward)
 	_spawn_reward_pickup(RewardPickup.KIND_GOLD, gold_reward, enemy.global_position + Vector2(-10.0, 0.0))
 	_spawn_reward_pickup(RewardPickup.KIND_EXPERIENCE, experience_reward, enemy.global_position + Vector2(10.0, 0.0))
-	hud_message = "Dropped %d gold and %d EXP." % [gold_reward, experience_reward]
+	var extra_gold_count := 0
+	if _try_drop_wizard_swift_flame_extra_gold(enemy):
+		extra_gold_count += 1
+	if _try_drop_wizard_poisoned_death_extra_gold(enemy):
+		extra_gold_count += 1
+	hud_message = "Dropped %d gold and %d EXP." % [gold_reward + extra_gold_count, experience_reward]
 	_update_hud()
 	_check_combat_clear()
+
+
+func _try_drop_wizard_swift_flame_extra_gold(enemy: EnemyBase, chance_roll: float = -1.0) -> bool:
+	if not is_instance_valid(player):
+		return false
+	if not bool(player.get("talent_wizard_swift_flame_extra_gold_enabled")):
+		return false
+
+	var roll := chance_roll if chance_roll >= 0.0 else randf()
+	if roll >= 0.1:
+		return false
+
+	_spawn_reward_pickup(RewardPickup.KIND_GOLD, 1, enemy.global_position + Vector2(0.0, -14.0))
+	return true
+
+
+func _try_drop_wizard_poisoned_death_extra_gold(enemy: EnemyBase) -> bool:
+	if not is_instance_valid(player):
+		return false
+	if not bool(player.get("talent_wizard_poisoned_death_extra_gold_enabled")):
+		return false
+	if not _is_enemy_poisoned(enemy):
+		return false
+
+	_spawn_reward_pickup(RewardPickup.KIND_GOLD, 1, enemy.global_position + Vector2(14.0, -14.0))
+	return true
+
+
+func _is_enemy_poisoned(enemy: Node) -> bool:
+	if enemy == null:
+		return false
+	if enemy.has_method("has_status") and bool(enemy.call("has_status", &"poison")):
+		return true
+	if enemy.has_method("get_poison_stacks"):
+		return int(enemy.call("get_poison_stacks")) > 0
+	return false
 
 
 func _get_modified_enemy_gold_reward(enemy: EnemyBase, base_reward: int) -> int:
@@ -2235,12 +2318,18 @@ func _update_hud() -> void:
 	var experience: int = 0
 	var required_experience: int = 10
 	var unspent_talents: int = 0
+	var fire_essence_text := ""
 	if is_instance_valid(player):
 		hp = int(ceil(player.hp))
 		level = player.level
 		experience = player.experience
 		required_experience = player.get_required_exp_for_next_level()
 		unspent_talents = player.unspent_talent_points
+		if bool(player.get("talent_wizard_fire_essence_burst_enabled")):
+			fire_essence_text = "   FE: %d/4 %d/10g" % [
+				int(player.get("wizard_fire_essence_charges")),
+				int(player.get("wizard_fire_essence_gold_progress")),
+			]
 
 	var phase_label: String = "Combat" if phase == Phase.COMBAT else "Shop"
 	var objective_count: int = containers.size() if phase == Phase.COMBAT else shop_containers.size()
@@ -2261,11 +2350,12 @@ func _update_hud() -> void:
 	if is_instance_valid(player) and player.has_method("get_altar_blessing_count"):
 		blessing_count = int(player.get_altar_blessing_count())
 
-	hud_label.text = "Round: %d/%d   Phase: %s   Gold: %d   HP: %d   Lv: %d   EXP: %d/%d   Talent: %d   Map: %s   Blessings: %d   %s: %d   Zombies: %d%s" % [
+	hud_label.text = "Round: %d/%d   Phase: %s   Gold: %d%s   HP: %d   Lv: %d   EXP: %d/%d   Talent: %d   Map: %s   Blessings: %d   %s: %d   Zombies: %d%s" % [
 		current_round,
 		MAX_ROUNDS,
 		phase_label,
 		gold,
+		fire_essence_text,
 		hp,
 		level,
 		experience,

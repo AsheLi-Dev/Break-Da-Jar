@@ -12,12 +12,21 @@ const DISAPPEAR_FRAME_COUNT := 5
 @export var target_range: float = 700.0
 @export var animation_fps: float = 16.0
 @export var visual_scale: float = 1.0
+@export var jitter_radius: float = 4.0
+@export var jitter_frequency: float = 18.0
+@export var jitter_snap_interval: float = 0.07
+@export var squash_amount: float = 0.035
+@export var wobble_rotation: float = 0.035
 
 var owner_player: Node
 var age: float = 0.0
 var attack_timer: float = 0.0
 var is_disappearing: bool = false
 var sprite: AnimatedSprite2D
+var jitter_phase: float = 0.0
+var jitter_snap_timer: float = 0.0
+var jitter_target_offset: Vector2 = Vector2.ZERO
+var jitter_current_offset: Vector2 = Vector2.ZERO
 
 
 func setup(new_owner: Node, spawn_position: Vector2) -> void:
@@ -27,6 +36,9 @@ func setup(new_owner: Node, spawn_position: Vector2) -> void:
 
 func _ready() -> void:
 	add_to_group("wizard_hovering_fireball")
+	jitter_phase = randf() * TAU
+	jitter_snap_timer = randf_range(0.0, jitter_snap_interval)
+	jitter_target_offset = _random_jitter_offset()
 	_ensure_nodes()
 
 
@@ -35,6 +47,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_unstable_visual(delta)
 	if is_disappearing:
 		return
 
@@ -78,6 +91,36 @@ func _fire_at_nearest_enemy() -> void:
 	if direction.length_squared() <= 0.001:
 		direction = Vector2.RIGHT
 	owner_player.call("_spawn_wizard_fire_laser", global_position, direction.normalized())
+
+
+func _update_unstable_visual(delta: float) -> void:
+	if sprite == null:
+		return
+
+	jitter_snap_timer -= delta
+	if jitter_snap_timer <= 0.0:
+		jitter_snap_timer += jitter_snap_interval
+		jitter_target_offset = _random_jitter_offset()
+
+	var pulse_time := age * jitter_frequency + jitter_phase
+	var elastic_offset := Vector2(
+		sin(pulse_time * 1.13) + sin(pulse_time * 2.37) * 0.35,
+		cos(pulse_time * 1.41) + sin(pulse_time * 2.09) * 0.28
+	) * jitter_radius * 0.42
+	jitter_current_offset = jitter_current_offset.lerp(jitter_target_offset + elastic_offset, clampf(delta * 18.0, 0.0, 1.0))
+	sprite.position = jitter_current_offset
+
+	var stretch := sin(pulse_time * 1.7) * squash_amount + sin(pulse_time * 3.4) * squash_amount * 0.35
+	var tug := clampf(jitter_current_offset.length() / maxf(jitter_radius, 1.0), 0.0, 1.0) * squash_amount * 0.25
+	sprite.scale = Vector2(
+		visual_scale * (1.0 + stretch + tug),
+		visual_scale * (1.0 - stretch * 0.45 - tug * 0.2)
+	)
+	sprite.rotation = sin(pulse_time * 1.9) * wobble_rotation + jitter_current_offset.x * 0.003
+
+
+func _random_jitter_offset() -> Vector2:
+	return Vector2.RIGHT.rotated(randf() * TAU) * randf_range(jitter_radius * 0.25, jitter_radius)
 
 
 func _ensure_nodes() -> void:

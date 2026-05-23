@@ -13,6 +13,7 @@ var status_owner_player: Node
 var bleeding_time_left: float = 0.0
 var poison_time_left: float = 0.0
 var poison_stacks: int = 0
+var vulnerable_stacks: int = 0
 var stun_time_left: float = 0.0
 var dot_tick_timer: float = 0.0
 
@@ -49,6 +50,8 @@ func apply_status_effect(id: StringName, source_player: Node = null) -> void:
 			apply_poison(source_player)
 		&"stun":
 			apply_stun(source_player)
+		&"vulnerable":
+			apply_vulnerable(source_player)
 
 
 func apply_bleeding(source_player: Node = null) -> void:
@@ -79,8 +82,22 @@ func apply_stun_duration(duration: float, source_player: Node = null) -> void:
 		status_owner_player = source_player
 
 
+func apply_vulnerable(source_player: Node = null) -> void:
+	apply_vulnerable_stacks(1, source_player)
+
+
+func apply_vulnerable_stacks(amount: int, source_player: Node = null) -> void:
+	vulnerable_stacks = maxi(vulnerable_stacks + amount, 0)
+	if source_player != null and is_instance_valid(source_player):
+		status_owner_player = source_player
+
+
 func get_poison_stacks() -> int:
 	return poison_stacks
+
+
+func get_vulnerable_stacks() -> int:
+	return vulnerable_stacks
 
 
 func get_stun_time_left() -> float:
@@ -95,6 +112,8 @@ func has_status(id: StringName) -> bool:
 			return poison_time_left > 0.0 and poison_stacks > 0
 		&"stun":
 			return stun_time_left > 0.0
+		&"vulnerable":
+			return vulnerable_stacks > 0
 		_:
 			return false
 

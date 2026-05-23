@@ -135,9 +135,7 @@ func _apply_selected_character() -> void:
 	if session != null and session.has_method("set_selected_character"):
 		session.set_selected_character(character_id)
 
-	var old_battle_scene := get_node_or_null("BattleScene")
-	if old_battle_scene != null:
-		old_battle_scene.queue_free()
+	if _clear_battle_scenes():
 		await get_tree().process_frame
 
 	var battle_scene := BATTLE_SCENE.instantiate()
@@ -196,7 +194,7 @@ func _preview_selected_item_drop() -> void:
 		status_label.text = "Player not found yet."
 		return
 
-	var battle_scene := get_node_or_null("BattleScene")
+	var battle_scene := _get_battle_scene()
 	if battle_scene == null or not battle_scene.has_method("_spawn_shop_item_reward"):
 		status_label.text = "BattleScene preview hook missing."
 		return
@@ -208,24 +206,68 @@ func _preview_selected_item_drop() -> void:
 
 
 func _open_debug_talent_tree() -> void:
-	var battle_scene := get_node_or_null("BattleScene")
-	if battle_scene == null or not battle_scene.has_method("_show_talent_tree"):
-		status_label.text = "BattleScene talent tree hook missing."
-		return
+	var battle_scene := _get_battle_scene()
+	if battle_scene == null:
+		battle_scene = _create_battle_scene()
+		await get_tree().process_frame
+		if battle_scene == null:
+			status_label.text = "BattleScene talent tree hook missing."
+			return
 
-	var player := get_tree().get_first_node_in_group("player") as Player
+	var player := battle_scene.get("player") as Player
+	if player == null:
+		await get_tree().process_frame
+		player = battle_scene.get("player") as Player
 	if player == null:
 		status_label.text = "Player not found yet."
 		return
 
-	player.unspent_talent_points = DEBUG_TALENT_POINTS
-	player.talent_points_changed.emit(player.unspent_talent_points, player.pending_talent_points)
-	get_tree().paused = true
+	if battle_scene.get("talent_tree_ui") == null:
+		battle_scene.call("_create_talent_tree_ui")
 	var talent_tree_ui := battle_scene.get("talent_tree_ui") as CanvasLayer
 	if talent_tree_ui != null:
 		talent_tree_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+
+	player.unspent_talent_points = DEBUG_TALENT_POINTS
+	player.pending_talent_points = 0
+	player.talent_points_changed.emit(player.unspent_talent_points, player.pending_talent_points)
+	get_tree().paused = true
 	battle_scene.call("_show_talent_tree")
+	if talent_tree_ui != null and talent_tree_ui.has_method("refresh"):
+		talent_tree_ui.call("refresh")
 	status_label.text = "Talent tree opened with unlimited points."
+
+
+func _get_battle_scene() -> Node:
+	var battle_scene := get_node_or_null("BattleScene")
+	if battle_scene != null:
+		return battle_scene
+	return find_child("BattleScene", false, false)
+
+
+func _clear_battle_scenes() -> bool:
+	var removed := false
+	for child in get_children():
+		var node := child as Node
+		if node == null or node == debug_canvas:
+			continue
+		if node.scene_file_path == "res://battlescene.tscn" or String(node.name).begins_with("BattleScene"):
+			remove_child(node)
+			node.queue_free()
+			removed = true
+	return removed
+
+
+func _create_battle_scene() -> Node:
+	_clear_battle_scenes()
+	var battle_scene := BATTLE_SCENE.instantiate()
+	if battle_scene == null:
+		return null
+	battle_scene.name = "BattleScene"
+	add_child(battle_scene)
+	if debug_canvas != null:
+		move_child(debug_canvas, get_child_count() - 1)
+	return battle_scene
 
 
 func _get_selected_item() -> ItemDefinition:

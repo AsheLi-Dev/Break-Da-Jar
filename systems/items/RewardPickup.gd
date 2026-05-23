@@ -82,7 +82,7 @@ func _collect() -> void:
 		target_player.gain_experience(amount)
 		_play_pickup_sfx(XP_PICKUP_SFX, -2.0, 0.88, 1.18)
 	elif kind == KIND_GOLD:
-		target_player.add_gold(amount)
+		target_player.collect_gold_pickup(amount)
 		_play_pickup_sfx(GOLD_PICKUP_SFX, -4.0, 0.92, 1.16)
 	elif kind == KIND_HEAL:
 		target_player.heal(amount)

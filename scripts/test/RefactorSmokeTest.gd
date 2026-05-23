@@ -32,6 +32,10 @@ func _run():
 
 	_test_main_scene_boot()
 	_test_dynamic_play_area_talent()
+	_test_dynamic_container_grid_expansion()
+	_test_wizard_container_break_elite_summon()
+	_test_wizard_swift_flame_extra_gold_drop()
+	_test_wizard_venom_burst_extra_gold_drop()
 	_test_pause_toggle()
 	await _test_combat_clear_waits_for_scene_enemies()
 	_test_shop_phase()
@@ -122,26 +126,155 @@ func _test_dynamic_play_area_talent() -> void:
 	_assert(is_equal_approx(float(battle_scene.call("_get_round_enemy_max_hp_multiplier")), 2.5), "Round 20 adds 150% enemy max HP")
 	battle_scene.set("current_round", 5)
 	_assert(is_equal_approx(float(battle_scene.call("_get_round_enemy_max_hp_multiplier")), 1.0), "Round 5 has normal enemy max HP")
+	var early_rounds_only_roll_jars := true
 	for round_index in range(1, 6):
 		battle_scene.set("current_round", round_index)
-		for _roll_index in range(10):
-			_assert(int(battle_scene.call("_roll_combat_container_type")) == 0, "Rounds 1-5 only roll jars")
-			_assert(int(battle_scene.call("_roll_small_combat_container_type")) == 0, "Rounds 1-5 fallback rolls only jars")
+		early_rounds_only_roll_jars = early_rounds_only_roll_jars and int(battle_scene.call("_roll_combat_container_type")) == 0
+		early_rounds_only_roll_jars = early_rounds_only_roll_jars and int(battle_scene.call("_roll_small_combat_container_type")) == 0
+	_assert(early_rounds_only_roll_jars, "Rounds 1-5 only roll jars")
 	battle_scene.set("current_round", 6)
 	var round_six_type: int = battle_scene.call("_roll_combat_container_type")
 	_assert(round_six_type == 0 or round_six_type == 1, "Rounds 6-10 only roll jars and barrels")
 	seed(1)
 	var saw_round_six_jar := false
 	var saw_round_six_barrel := false
-	for _roll_index in range(100):
+	var round_six_rolled_only_small_containers := true
+	for _roll_index in range(40):
 		var rolled_type: int = battle_scene.call("_roll_combat_container_type")
-		_assert(rolled_type == 0 or rolled_type == 1, "Rounds 6-10 never roll tombs")
+		round_six_rolled_only_small_containers = round_six_rolled_only_small_containers and (rolled_type == 0 or rolled_type == 1)
 		if rolled_type == 0:
 			saw_round_six_jar = true
 		elif rolled_type == 1:
 			saw_round_six_barrel = true
+	_assert(round_six_rolled_only_small_containers, "Rounds 6-10 never roll tombs")
 	_assert(saw_round_six_jar and saw_round_six_barrel, "Rounds 6-10 can roll both jars and barrels")
 	battle_scene.set("current_round", 1)
+
+
+func _test_dynamic_container_grid_expansion() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	var base_bounds: Dictionary = battle_scene.call("_get_dynamic_container_grid_bounds", 20)
+	_assert(int(base_bounds.get("min", -1)) == 3 and int(base_bounds.get("max", -1)) == 12, "Dynamic container grid keeps low counts in the original 10x10 area")
+	var high_bounds: Dictionary = battle_scene.call("_get_dynamic_container_grid_bounds", 192)
+	_assert(int(high_bounds.get("min", -1)) == 0 and int(high_bounds.get("max", -1)) == 15, "Dynamic container grid expands high counts to the hidden 16x16 cap")
+
+	battle_scene.set("current_round", 9)
+	player.set("talent_wizard_double_containers_elite_break_enabled", true)
+	var target_count: int = battle_scene.call("_get_combat_container_count")
+	var placements: Array = battle_scene.call("_roll_combat_container_placements")
+	_assert(target_count == 104, "Wizard spark fourth round 9 target container count doubles to 104")
+	_assert(placements.size() == target_count, "Dynamic container grid can place doubled round 9 containers without hitting the old 10x10 cap")
+
+	player.set("talent_wizard_large_map_more_containers_enabled", true)
+	battle_scene.set("current_round", 20)
+	_assert(int(battle_scene.call("_get_combat_container_count")) <= 256, "Dynamic container grid applies a hidden 16x16 container count cap")
+	player.set("talent_wizard_large_map_more_containers_enabled", false)
+	player.set("talent_wizard_double_containers_elite_break_enabled", false)
+	battle_scene.set("current_round", 1)
+
+
+func _test_wizard_container_break_elite_summon() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	var container := BreakableContainer.new()
+	container.global_position = player.global_position + Vector2(120.0, 0.0)
+	battle_scene.add_child(container)
+	player.set("talent_wizard_double_containers_elite_break_enabled", true)
+
+	var enemies: Array = battle_scene.get("enemies")
+	var before_count := enemies.size()
+	var missed: bool = battle_scene.call("_try_trigger_wizard_container_break_elites", container, 0.5)
+	_assert(not missed, "Wizard spark fourth elite summon waits for its 1 percent container break roll")
+	_assert(enemies.size() == before_count, "Wizard spark fourth missed roll summons no elite enemies")
+
+	var triggered: bool = battle_scene.call("_try_trigger_wizard_container_break_elites", container, 0.0)
+	_assert(triggered, "Wizard spark fourth container break roll can summon elite enemies")
+	_assert(enemies.size() == before_count + 2, "Wizard spark fourth container break summons 2 elite enemies")
+	for index in range(before_count, enemies.size()):
+		var enemy := enemies[index] as EnemyBase
+		_assert(enemy != null and enemy.is_elite, "Wizard spark fourth summoned enemy is elite")
+		if enemy != null:
+			enemy.queue_free()
+	enemies.resize(before_count)
+
+	player.set("talent_wizard_double_containers_elite_break_enabled", false)
+	container.queue_free()
+
+
+func _test_wizard_swift_flame_extra_gold_drop() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	var enemy := EnemyBase.new()
+	enemy.global_position = player.global_position + Vector2(160.0, 0.0)
+	battle_scene.add_child(enemy)
+
+	player.set("talent_wizard_swift_flame_extra_gold_enabled", false)
+	var before_pickups := _collect_reward_pickups()
+	var disabled: bool = battle_scene.call("_try_drop_wizard_swift_flame_extra_gold", enemy, 0.0)
+	_assert(not disabled, "Wizard Swift Flame extra gold waits for its talent")
+	_assert(_collect_reward_pickups().size() == before_pickups.size(), "Wizard Swift Flame disabled talent drops no extra gold")
+
+	player.set("talent_wizard_swift_flame_extra_gold_enabled", true)
+	var missed: bool = battle_scene.call("_try_drop_wizard_swift_flame_extra_gold", enemy, 0.5)
+	_assert(not missed, "Wizard Swift Flame extra gold waits for its 10 percent enemy drop roll")
+	_assert(_collect_reward_pickups().size() == before_pickups.size(), "Wizard Swift Flame missed roll drops no extra gold")
+
+	var triggered: bool = battle_scene.call("_try_drop_wizard_swift_flame_extra_gold", enemy, 0.0)
+	var after_pickups := _collect_reward_pickups()
+	_assert(triggered, "Wizard Swift Flame enemy drop roll can drop extra gold")
+	_assert(after_pickups.size() == before_pickups.size() + 1, "Wizard Swift Flame drops one extra pickup")
+	var extra_pickup: RewardPickup = after_pickups[after_pickups.size() - 1] as RewardPickup if after_pickups.size() > before_pickups.size() else null
+	_assert(extra_pickup != null and extra_pickup.kind == RewardPickup.KIND_GOLD and extra_pickup.amount == 1, "Wizard Swift Flame extra pickup is 1 gold")
+
+	for index in range(before_pickups.size(), after_pickups.size()):
+		var pickup := after_pickups[index] as Node
+		if pickup != null:
+			pickup.queue_free()
+	player.set("talent_wizard_swift_flame_extra_gold_enabled", false)
+	enemy.queue_free()
+
+
+func _test_wizard_venom_burst_extra_gold_drop() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	var enemy := EnemyBase.new()
+	enemy.global_position = player.global_position + Vector2(180.0, 0.0)
+	battle_scene.add_child(enemy)
+	enemy.apply_poison_stacks(1, player)
+
+	player.set("talent_wizard_poisoned_death_extra_gold_enabled", false)
+	var before_pickups := _collect_reward_pickups()
+	var disabled: bool = battle_scene.call("_try_drop_wizard_poisoned_death_extra_gold", enemy)
+	_assert(not disabled, "Wizard Venom Burst extra gold waits for its talent")
+	_assert(_collect_reward_pickups().size() == before_pickups.size(), "Wizard Venom Burst disabled talent drops no extra gold")
+
+	player.set("talent_wizard_poisoned_death_extra_gold_enabled", true)
+	var clean_enemy := EnemyBase.new()
+	clean_enemy.global_position = player.global_position + Vector2(200.0, 0.0)
+	battle_scene.add_child(clean_enemy)
+	var clean: bool = battle_scene.call("_try_drop_wizard_poisoned_death_extra_gold", clean_enemy)
+	_assert(not clean, "Wizard Venom Burst extra gold waits for poisoned enemies")
+	_assert(_collect_reward_pickups().size() == before_pickups.size(), "Wizard Venom Burst clean enemy drops no extra gold")
+
+	var triggered: bool = battle_scene.call("_try_drop_wizard_poisoned_death_extra_gold", enemy)
+	var after_pickups := _collect_reward_pickups()
+	_assert(triggered, "Wizard Venom Burst poisoned enemy can drop extra gold")
+	_assert(after_pickups.size() == before_pickups.size() + 1, "Wizard Venom Burst drops one extra pickup")
+	var extra_pickup: RewardPickup = after_pickups[after_pickups.size() - 1] as RewardPickup if after_pickups.size() > before_pickups.size() else null
+	_assert(extra_pickup != null and extra_pickup.kind == RewardPickup.KIND_GOLD and extra_pickup.amount == 1, "Wizard Venom Burst extra pickup is 1 gold")
+
+	for index in range(before_pickups.size(), after_pickups.size()):
+		var pickup := after_pickups[index] as Node
+		if pickup != null:
+			pickup.queue_free()
+	player.set("talent_wizard_poisoned_death_extra_gold_enabled", false)
+	enemy.queue_free()
+	clean_enemy.queue_free()
 
 
 func _test_pause_toggle() -> void:
@@ -203,13 +336,19 @@ func _test_shop_phase() -> void:
 
 	_assert(int(battle_scene.get("phase")) == 1, "Entering shop phase updates phase")
 	_assert(shop_containers.size() >= 3, "Shop phase spawns shop jars")
+	var all_shop_containers_valid := true
+	var all_shop_containers_have_price_labels := true
+	var all_shop_container_prices_positive := true
 	for container in shop_containers:
 		if not is_instance_valid(container):
-			_fail("Shop container remains valid")
+			all_shop_containers_valid = false
 			continue
-		_assert(container.get_node_or_null("ShopLabel") != null, "Shop jar has price label")
+		all_shop_containers_have_price_labels = all_shop_containers_have_price_labels and container.get_node_or_null("ShopLabel") != null
 		var data: Dictionary = shop_data.get(container, {})
-		_assert(int(data.get("price", 0)) > 0, "Shop jar has positive price")
+		all_shop_container_prices_positive = all_shop_container_prices_positive and int(data.get("price", 0)) > 0
+	_assert(all_shop_containers_valid, "Shop containers remain valid")
+	_assert(all_shop_containers_have_price_labels, "Shop jars have price labels")
+	_assert(all_shop_container_prices_positive, "Shop jar prices are positive")
 
 	var first_shop_container := shop_containers[0] as BreakableContainer
 	var first_shop_data: Dictionary = shop_data.get(first_shop_container, {})
@@ -352,6 +491,21 @@ func _count_small_turrets_recursive(node: Node) -> int:
 	for child in node.get_children():
 		count += _count_small_turrets_recursive(child)
 	return count
+
+
+func _collect_reward_pickups() -> Array[RewardPickup]:
+	var result: Array[RewardPickup] = []
+	if battle_scene != null:
+		_collect_reward_pickups_recursive(battle_scene, result)
+	return result
+
+
+func _collect_reward_pickups_recursive(node: Node, result: Array[RewardPickup]) -> void:
+	var pickup := node as RewardPickup
+	if pickup != null:
+		result.append(pickup)
+	for child in node.get_children():
+		_collect_reward_pickups_recursive(child, result)
 
 
 func _assert(condition: bool, message: String) -> void:

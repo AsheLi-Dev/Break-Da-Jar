@@ -348,8 +348,11 @@ func _physics_process(delta: float) -> void:
 	_update_wizard_nearby_enemy_move_speed()
 	_update_wizard_nearby_enemy_elite_damage()
 	_update_wizard_fire_surge_attack_speed_bonus()
+	_update_wizard_gold_move_speed_bonus()
 	_update_wizard_nearby_poison_aura(delta)
 	_update_wizard_fire_essence_spawner(delta)
+	_update_wizard_stationary_primary_fireball_charge(delta)
+	_update_wizard_stationary_fireball_explosion(delta)
 	_update_necromancer_slide_skeleton_archer_attack_speed(delta)
 	_update_necromancer_round_movement_speed(delta)
 	_update_necromancer_charged_primary_damage(delta)
@@ -412,7 +415,6 @@ func take_damage(amount: float) -> void:
 	hp_changed.emit(roundi(hp), roundi(max_hp))
 	damage_taken.emit(final_damage)
 	_apply_necromancer_kill_atk_damage_loss()
-	_trigger_wizard_damage_taken_fireball_natural_explosions()
 	if talent_damage_taken_lifesteal_enabled and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"damage_taken_lifesteal", &"lifesteal", 0.2, 2.0, 1)
 	_play_hurt_impact_feedback()
@@ -465,8 +467,7 @@ func get_base_attack_damage() -> float:
 
 
 func collect_fire_essence() -> void:
-	if wizard_runtime.has_talent(&"wizard_fire_essence_burst"):
-		wizard_runtime.fire_essence_charges += 1
+	wizard_runtime.collect_fire_essence_pickup()
 
 
 func apply_fireball_projectile_talent_modifiers(fireball: FireballProjectile) -> void:
@@ -474,6 +475,21 @@ func apply_fireball_projectile_talent_modifiers(fireball: FireballProjectile) ->
 		return
 
 	fireball.owner_spawn_modifiers_applied = true
+	if wizard_runtime.has_talent(&"wizard_homing_fireballs"):
+		fireball.homing_enabled = true
+		fireball.damage *= 0.6
+	if wizard_runtime.has_talent(&"wizard_fireball_impact_poison_stun"):
+		fireball.impact_poison_chance = 0.3
+		fireball.impact_stun_chance = 0.05
+	if wizard_runtime.has_talent(&"wizard_fireball_impact_vulnerable"):
+		fireball.impact_vulnerable_stacks = 1
+	if wizard_runtime.has_talent(&"wizard_natural_fireball_radius"):
+		fireball.pierce_enemies = true
+	if wizard_runtime.has_talent(&"wizard_natural_fireball_heal"):
+		fireball.bounce_on_walls = true
+		fireball.lifetime *= 2.0
+	if wizard_runtime.has_talent(&"wizard_damage_taken_natural_explode_fireballs") and stats != null:
+		fireball.speed *= maxf(1.0 + stats.movement_speed_bonus, 0.1)
 	var total_fireballs := 1 + _get_wizard_legendary_extra_fireball_count()
 	if wizard_runtime.has_talent(&"wizard_random_double_fireballs"):
 		total_fireballs *= 2
@@ -490,30 +506,10 @@ func apply_fireball_projectile_talent_modifiers(fireball: FireballProjectile) ->
 		_spawn_fireball_duplicate(fireball, duplicate_direction)
 
 
-func get_fireball_natural_explosion_radius_multiplier() -> float:
-	return 2.0 if wizard_runtime.has_talent(&"wizard_natural_fireball_radius") else 1.0
-
-
-func on_fireball_natural_explosion(_fireball: FireballProjectile) -> void:
-	if wizard_runtime.has_talent(&"wizard_natural_fireball_heal"):
-		heal(1.0)
-
-
 func on_fireball_exploded(fireball: FireballProjectile) -> void:
 	if not wizard_runtime.has_talent(&"wizard_fireball_explosion_chain_lightning") or fireball == null:
 		return
 	_trigger_holy_strike_chain_lightning(fireball.global_position)
-
-
-func _trigger_wizard_damage_taken_fireball_natural_explosions() -> void:
-	if not wizard_runtime.has_talent(&"wizard_damage_taken_natural_explode_fireballs") or get_tree() == null:
-		return
-
-	for node in get_tree().get_nodes_in_group("fireball_projectile"):
-		var fireball := node as FireballProjectile
-		if fireball == null or fireball.owner_player != self or fireball.exploded:
-			continue
-		fireball.explode(true)
 
 
 func grant_timed_invincibility(duration: float) -> void:
@@ -919,15 +915,11 @@ func notify_enemy_killed(enemy: Node) -> void:
 		add_gold(1)
 	if wizard_runtime.has_talent(&"wizard_poisoned_kill_gold") and _is_enemy_poisoned(enemy):
 		add_gold(1)
-	if wizard_runtime.has_talent(&"wizard_poisoned_death_fireball") and _is_enemy_poisoned(enemy):
-		_trigger_wizard_poisoned_death_fireball(enemy)
 	if wizard_runtime.has_talent(&"wizard_poisoned_death_fire_laser") and _is_enemy_poisoned(enemy):
 		_trigger_wizard_poisoned_death_fire_laser(enemy)
 	if wizard_runtime.has_talent(&"wizard_quick_kill_max_hp"):
 		_try_gain_wizard_quick_kill_max_hp(enemy)
 	necromancer_runtime.handle_enemy_killed(self, enemy)
-	if wizard_runtime.has_talent(&"wizard_kill_move_speed_burst") and temporary_buffs != null:
-		temporary_buffs.add_timed_stat_buff(&"wizard_kill_move_speed_burst", &"movement_speed_bonus", 2.0, 0.2, 1)
 	if wizard_runtime.has_talent(&"wizard_kill_atk_stack") and temporary_buffs != null:
 		temporary_buffs.add_timed_stat_buff(&"wizard_kill_atk_stack", &"atk", 2.0, 5.0, 5)
 	if wizard_runtime.has_talent(&"wizard_kill_move_speed_stack") and temporary_buffs != null:
@@ -954,17 +946,35 @@ func notify_enemy_killed(enemy: Node) -> void:
 	enemy_killed.emit(enemy)
 
 
-func add_gold(amount: int, reason: String = "") -> void:
+func add_gold(amount: int, reason: String = "") -> bool:
 	if amount <= 0 or get_tree().current_scene == null:
-		return
+		return false
 	if get_tree().current_scene.has_method("add_player_gold"):
 		get_tree().current_scene.add_player_gold(amount, reason)
+		return true
+	return false
+
+
+func collect_gold_pickup(amount: int) -> void:
+	if amount <= 0 or get_tree().current_scene == null:
+		return
+	if not get_tree().current_scene.has_method("add_player_gold"):
+		return
+	wizard_runtime.add_fire_essence_gold(amount)
+	add_gold(amount, "Gold Pickup")
 
 
 func _get_current_gold() -> int:
 	if get_tree().current_scene == null:
 		return 0
 	return int(get_tree().current_scene.get("gold"))
+
+
+func _get_wizard_effective_gold_for_talents() -> int:
+	var effective_gold := maxi(_get_current_gold(), 0)
+	if wizard_runtime.has_talent(&"wizard_rare_item_move_speed"):
+		effective_gold += _get_item_count_by_rarity(&"rare") * 10
+	return effective_gold
 
 
 func get_enemy_spawn_count_multiplier() -> float:
@@ -988,7 +998,12 @@ func get_map_size_multiplier() -> float:
 
 
 func get_combat_container_count_multiplier() -> float:
-	return 1.3 if wizard_runtime.has_talent(&"wizard_large_map_more_containers") else 1.0
+	var multiplier := 1.0
+	if wizard_runtime.has_talent(&"wizard_large_map_more_containers"):
+		multiplier *= 1.3
+	if wizard_runtime.has_talent(&"wizard_double_containers_elite_break"):
+		multiplier *= 2.0
+	return multiplier
 
 
 func get_enemy_gold_reward_multiplier(enemy: Node) -> float:
@@ -1066,8 +1081,8 @@ func _remove_talent_stat_effect(node_id: StringName) -> void:
 
 
 func _reset_wizard_talent_state_after_rebirth() -> void:
-	if stats != null and wizard_runtime.applied_rare_item_move_speed != 0:
-		stats.apply_modifier(&"bonus_move_speed_flat", &"add", -float(wizard_runtime.applied_rare_item_move_speed))
+	if stats != null and not is_zero_approx(wizard_runtime.applied_gold_move_speed_bonus):
+		stats.apply_modifier(&"movement_speed_bonus", &"add", -wizard_runtime.applied_gold_move_speed_bonus)
 	wizard_runtime.reset_state_after_rebirth()
 	_clear_wizard_dynamic_talent_bonuses()
 
@@ -1162,6 +1177,7 @@ func _try_start_dash() -> void:
 	slide_window_remaining = effective_dash_duration + slide_cancel_window
 	velocity = dash_direction * dash_speed
 	dash_started.emit(dash_direction)
+	wizard_runtime.add_dash_primary_fireball_stack()
 	if wizard_runtime.has_talent(&"wizard_dash_fireball"):
 		_launch_wizard_dash_fireball()
 	_spawn_dash_smear()
@@ -1467,6 +1483,10 @@ func spawn_chained_wizard_fire_laser(source_enemy: Node, remaining_chains: int, 
 	wizard_runtime.spawn_chained_fire_laser(self, source_enemy, remaining_chains, chain_range, excludes, source_chain_damage_multiplier)
 
 
+func spawn_wizard_fire_laser_chain_from_hit(source: Node, available_chains: int, chain_range: float, excludes: Array = [], source_chain_damage_multiplier: float = 1.0) -> void:
+	wizard_runtime.spawn_fire_laser_chain_from_hit(self, source, available_chains, chain_range, excludes, source_chain_damage_multiplier)
+
+
 func _get_wizard_fire_laser_chain_count() -> int:
 	return wizard_runtime.get_fire_laser_chain_count(self)
 
@@ -1496,12 +1516,12 @@ func _launch_wizard_radial_fire_lasers() -> void:
 	wizard_runtime.launch_radial_fire_lasers(self)
 
 
-func _launch_wizard_fireball(target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false) -> void:
-	wizard_runtime.launch_fireball(self, target_position, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, emit_attack_started_event, scatter_on_explode, force_slide_fireball_bonus)
+func _launch_wizard_fireball(target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0) -> void:
+	wizard_runtime.launch_fireball(self, target_position, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, emit_attack_started_event, scatter_on_explode, force_slide_fireball_bonus, damage_multiplier)
 
 
-func _spawn_wizard_fireball(start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false) -> void:
-	wizard_runtime.spawn_fireball(self, start_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus)
+func _spawn_wizard_fireball(start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0) -> void:
+	wizard_runtime.spawn_fireball(self, start_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus, damage_multiplier)
 
 
 func _get_wizard_fireball_damage() -> float:
@@ -1525,8 +1545,8 @@ func _launch_wizard_fire_essence_burst(target_position: Vector2) -> void:
 	wizard_runtime.launch_primary_attack_pattern(self, target_position, true)
 
 
-func _launch_wizard_offset_fireballs(target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false) -> void:
-	wizard_runtime.launch_offset_fireballs(self, target_position, count, start_index, force_slide_fireball_bonus)
+func _launch_wizard_offset_fireballs(target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, damage_multiplier: float = 1.0) -> void:
+	wizard_runtime.launch_offset_fireballs(self, target_position, count, start_index, force_slide_fireball_bonus, radius_multiplier, damage_multiplier)
 
 
 func _launch_wizard_fire_essence_explosion_scatter(origin: Vector2) -> void:
@@ -2503,12 +2523,21 @@ func _update_item_talent_bonuses() -> void:
 		applied_item_max_hp_bonus = wanted_max_hp
 		stats.apply_modifier(&"max_hp", &"add", float(max_hp_delta))
 
-	var rare_item_count := _get_item_count_by_rarity(&"rare")
-	var wanted_rare_move_speed := rare_item_count * 10 if wizard_runtime.has_talent(&"wizard_rare_item_move_speed") else 0
-	var rare_move_speed_delta: int = wanted_rare_move_speed - wizard_runtime.applied_rare_item_move_speed
-	if rare_move_speed_delta != 0:
-		wizard_runtime.applied_rare_item_move_speed = wanted_rare_move_speed
-		stats.apply_modifier(&"bonus_move_speed_flat", &"add", float(rare_move_speed_delta))
+	_update_wizard_gold_move_speed_bonus()
+
+
+func _update_wizard_gold_move_speed_bonus() -> void:
+	if stats == null:
+		return
+
+	var wanted_bonus: float = 0.0
+	if wizard_runtime.has_talent(&"wizard_gold_move_speed_bonus"):
+		wanted_bonus = float(floori(float(_get_wizard_effective_gold_for_talents()) / 10.0)) * 0.01
+
+	var delta: float = wanted_bonus - wizard_runtime.applied_gold_move_speed_bonus
+	if not is_zero_approx(delta):
+		wizard_runtime.applied_gold_move_speed_bonus = wanted_bonus
+		stats.apply_modifier(&"movement_speed_bonus", &"add", delta)
 
 
 func _get_total_item_count() -> int:
@@ -2615,6 +2644,14 @@ func _update_wizard_nearby_poison_aura(delta: float) -> void:
 
 func _update_wizard_fire_essence_spawner(delta: float) -> void:
 	wizard_runtime.update_fire_essence_spawner(self, delta)
+
+
+func _update_wizard_stationary_primary_fireball_charge(delta: float) -> void:
+	wizard_runtime.update_stationary_primary_fireball_charge(self, delta)
+
+
+func _update_wizard_stationary_fireball_explosion(delta: float) -> void:
+	wizard_runtime.update_stationary_fireball_explosion(self, delta)
 
 
 func _spawn_wizard_fire_essence() -> void:
@@ -2763,19 +2800,6 @@ func _get_enemy_poison_stacks(enemy: Node) -> int:
 
 func _is_enemy_poisoned(enemy: Node) -> bool:
 	return _enemy_has_status(enemy, &"poison") or _get_enemy_poison_stacks(enemy) > 0
-
-
-func _trigger_wizard_poisoned_death_fireball(enemy: Node) -> void:
-	if get_tree() == null or get_tree().current_scene == null:
-		return
-
-	var enemy_2d := enemy as Node2D
-	var origin := enemy_2d.global_position if enemy_2d != null else global_position
-	var target := EFFECT_TARGETING.nearest_enemy(self, origin, 700.0, [enemy])
-	if target != null:
-		_launch_talent_fireball(origin, target.global_position)
-	else:
-		_launch_talent_fireball(origin, origin + facing_direction)
 
 
 func _trigger_wizard_poisoned_death_fire_laser(enemy: Node) -> void:

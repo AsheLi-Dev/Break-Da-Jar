@@ -1,5 +1,8 @@
 param(
-    [string]$GodotPath = ""
+    [string]$GodotPath = "",
+    [ValidateSet("Full", "Quick")]
+    [string]$Suite = "Full",
+    [switch]$DetailedOutput
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +17,18 @@ $TestScripts = @(
     @{ Script = "res://scripts/test/PeriodicEffectTest.gd"; PassText = "PeriodicEffectTest: PASS" },
     @{ Script = "res://scripts/test/EnemyStunStatusTest.gd"; PassText = "EnemyStunStatusTest: PASS" },
     @{ Script = "res://scripts/test/AltarAffixTest.gd"; PassText = "AltarAffixTest: PASS" },
+    @{ Script = "res://scripts/test/ItemTestBattlePauseTest.gd"; PassText = "ItemTestBattlePauseTest: PASS" },
     @{ Script = "res://scripts/test/RefactorSmokeTest.gd"; PassText = "RefactorSmokeTest: PASS" }
 )
+
+if ($Suite -eq "Quick") {
+    $QuickScripts = @(
+        "res://scripts/test/AllScenesLoadTest.gd",
+        "res://scripts/test/TalentCatalogContractTest.gd",
+        "res://scripts/test/RefactorSmokeTest.gd"
+    )
+    $TestScripts = @($TestScripts | Where-Object { $QuickScripts -contains $_.Script })
+}
 
 function Join-ProcessArguments {
     param([string[]]$Arguments)
@@ -123,6 +136,12 @@ if ($ResolvedGodotPath -eq "") {
 
 Write-Host "Using Godot: $ResolvedGodotPath"
 Write-Host "Project: $ProjectRoot"
+Write-Host "Suite: $Suite"
+if ($DetailedOutput) {
+    Write-Host "Output: Detailed"
+} else {
+    Write-Host "Output: Compact"
+}
 
 function Write-ProcessOutput {
     param($Result)
@@ -201,16 +220,22 @@ foreach ($test in $TestScripts) {
     $ErrorActionPreference = $PreviousErrorActionPreference
 
     $OutputText = $GodotOutputLines -join [Environment]::NewLine
-    if ($OutputText -ne "") {
+    if ($DetailedOutput -and $OutputText -ne "") {
         Write-Host $OutputText
     }
     $CombinedOutput += "===== $($test.Script) =====" + [Environment]::NewLine + $OutputText + [Environment]::NewLine
 
     if ($GodotExitCode -ne 0) {
+        if (-not $DetailedOutput -and $OutputText -ne "") {
+            Write-Host $OutputText
+        }
         Set-Content -LiteralPath $LogPath -Value $CombinedOutput -NoNewline
         exit $GodotExitCode
     }
     if ($OutputText -match "SCRIPT ERROR|Parse Error|: FAIL") {
+        if (-not $DetailedOutput -and $OutputText -ne "") {
+            Write-Host $OutputText
+        }
         Set-Content -LiteralPath $LogPath -Value $CombinedOutput -NoNewline
         exit 1
     }
@@ -227,10 +252,21 @@ foreach ($test in $TestScripts) {
 
     if ($OutputText -notmatch [regex]::Escape($test.PassText)) {
         Write-Host "$($test.Script) did not report PASS." -ForegroundColor Red
+        if (-not $DetailedOutput -and $OutputText -ne "") {
+            Write-Host $OutputText
+        }
         Set-Content -LiteralPath $LogPath -Value $CombinedOutput -NoNewline
         exit 1
+    }
+
+    $PassLine = ($OutputText -split "`r?`n" | Where-Object { $_ -match [regex]::Escape($test.PassText) } | Select-Object -Last 1)
+    if ($null -ne $PassLine -and $PassLine -ne "") {
+        Write-Host $PassLine
+    } else {
+        Write-Host "$($test.Script): PASS"
     }
 }
 
 Set-Content -LiteralPath $LogPath -Value $CombinedOutput -NoNewline
+Write-Host "Full log: $LogPath"
 exit 0

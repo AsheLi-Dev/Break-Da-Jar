@@ -128,8 +128,17 @@ func apply_poison_stacks(amount: int, source_player: Node = null) -> void:
 		status_effects.apply_poison_stacks(amount, source_player)
 
 
+func apply_vulnerable_stacks(amount: int, source_player: Node = null) -> void:
+	if status_effects != null:
+		status_effects.apply_vulnerable_stacks(amount, source_player)
+
+
 func get_poison_stacks() -> int:
 	return status_effects.get_poison_stacks() if status_effects != null else 0
+
+
+func get_vulnerable_stacks() -> int:
+	return status_effects.get_vulnerable_stacks() if status_effects != null else 0
 
 
 func get_stun_time_left() -> float:
@@ -370,6 +379,7 @@ func _apply_incoming_damage_modifiers(amount: float) -> float:
 		return 0.0
 
 	var multiplier := incoming_damage_multiplier
+	multiplier *= 1.0 + 0.05 * float(get_vulnerable_stacks())
 	if elite_affix_id == &"distant_hide":
 		multiplier *= _get_distant_hide_damage_multiplier()
 	return amount * maxf(multiplier, 0.0)
