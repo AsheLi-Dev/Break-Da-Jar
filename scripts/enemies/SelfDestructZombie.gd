@@ -78,13 +78,7 @@ func _explode() -> void:
 	if explosion_warning != null:
 		explosion_warning.visible = false
 
-	for player in get_tree().get_nodes_in_group("player"):
-		var player_2d := player as Node2D
-		if player_2d == null or player_2d.global_position.distance_to(global_position) > explosion_radius:
-			continue
-		if player.has_method("take_damage"):
-			player.take_damage(explosion_damage)
-
+	damage_players_in_radius(explosion_radius, explosion_damage)
 	die()
 
 

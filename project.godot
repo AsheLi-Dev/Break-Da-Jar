@@ -10,15 +10,15 @@ config_version=5
 
 [application]
 
-config/name="Dino Zombie and Jar"
+config/name="Dead Vessel"
 run/main_scene="res://scenes/StartMenu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
-GameSession="*res://systems/GameSession.gd"
 ItemDatabase="*res://systems/items/ItemDatabase.gd"
+GameSession="*res://systems/GameSession.gd"
 
 [display]
 

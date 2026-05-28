@@ -3,6 +3,7 @@ class_name Player
 
 const FRAME_SIZE := Vector2i(128, 128)
 const FRAMES_PER_DIRECTION := 15
+const NECROMANCER_ATTACK_FRAMES_PER_DIRECTION := 14
 const DIRECTION_COUNT := 8
 const ATTACK_PROJECTILE_FRAME := 7
 const BLESSING_ACTIVE_FRAME := 9
@@ -29,6 +30,7 @@ const HOLY_SLASH_FPS := 24.0
 const IDLE_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/idle.png")
 const LEVEL_UP_EFFECT_TEXTURE: Texture2D = preload("res://assets/vfx/Level Up Effect/Level Up Effect Spritesheet.png")
 const PUMMEL_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/pummel.png")
+const REWARD_PICKUP_SCRIPT := preload("res://systems/items/RewardPickup.gd")
 const ROLLING_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/rolling.png")
 const SLIDE_END_TEXTURE: Texture2D = preload("res://assets/heroes/paladin/slideend.png")
 const SLIDE_SFX_PATH := "res://assets/sfx/slide.mp3"
@@ -111,8 +113,9 @@ var hp: float
 @export var blessing_effect_fps: float = 12.0
 
 # Dash is a short reposition. Slide is the invincible enemy-pass-through followup.
-@export var dash_speed: float = 560.0
-@export var dash_duration: float = 0.2
+@export var dash_move_speed_multiplier: float = 1.5
+@export var dash_speed_bonus: float = 100.0
+@export var dash_duration: float = 0.18
 @export var dash_cooldown: float = 0.75
 @export var dash_smear_count: int = 5
 @export var dash_smear_lifetime: float = 0.14
@@ -123,8 +126,9 @@ var hp: float
 @export var dash_forward_smear_distance: float = 14.0
 @export var dash_forward_smear_lifetime: float = 0.08
 @export var dash_forward_smear_alpha: float = 0.18
-@export var slide_speed: float = 480.0
-@export var slide_duration: float = 0.5
+@export var slide_move_speed_multiplier: float = 2.0
+@export var slide_speed_bonus: float = 200.0
+@export var slide_duration: float = 0.6
 @export var slide_cancel_window: float = 0.3
 @export var slide_contact_stun_radius: float = 38.0
 @export var slide_sfx_volume_db: float = -4.0
@@ -475,9 +479,8 @@ func apply_fireball_projectile_talent_modifiers(fireball: FireballProjectile) ->
 		return
 
 	fireball.owner_spawn_modifiers_applied = true
-	if wizard_runtime.has_talent(&"wizard_homing_fireballs"):
-		fireball.homing_enabled = true
-		fireball.damage *= 0.6
+	if wizard_runtime.has_talent(&"wizard_fireball_explosion_gold"):
+		fireball.damage = 0.0
 	if wizard_runtime.has_talent(&"wizard_fireball_impact_poison_stun"):
 		fireball.impact_poison_chance = 0.3
 		fireball.impact_stun_chance = 0.05
@@ -507,9 +510,33 @@ func apply_fireball_projectile_talent_modifiers(fireball: FireballProjectile) ->
 
 
 func on_fireball_exploded(fireball: FireballProjectile) -> void:
-	if not wizard_runtime.has_talent(&"wizard_fireball_explosion_chain_lightning") or fireball == null:
+	if fireball == null:
 		return
-	_trigger_holy_strike_chain_lightning(fireball.global_position)
+	_try_spawn_wizard_fireball_explosion_gold(fireball)
+	if wizard_runtime.has_talent(&"wizard_fireball_explosion_chain_lightning"):
+		_trigger_holy_strike_chain_lightning(fireball.global_position)
+
+
+func _try_spawn_wizard_fireball_explosion_gold(fireball: FireballProjectile, chance_roll: float = -1.0) -> bool:
+	if not wizard_runtime.has_talent(&"wizard_fireball_explosion_gold") or fireball == null:
+		return false
+	var roll := chance_roll if chance_roll >= 0.0 else randf()
+	if roll >= 0.1:
+		return false
+	_spawn_wizard_fireball_gold_pickup(fireball.global_position)
+	return true
+
+
+func _spawn_wizard_fireball_gold_pickup(spawn_position: Vector2) -> void:
+	if get_tree() == null or get_tree().current_scene == null:
+		return
+	var scene := get_tree().current_scene
+	if scene.has_method("_spawn_reward_pickup"):
+		scene.call("_spawn_reward_pickup", RewardPickup.KIND_GOLD, 1, spawn_position)
+		return
+	var pickup := REWARD_PICKUP_SCRIPT.new() as RewardPickup
+	pickup.setup(RewardPickup.KIND_GOLD, 1, spawn_position, self)
+	scene.add_child(pickup)
 
 
 func grant_timed_invincibility(duration: float) -> void:
@@ -598,6 +625,8 @@ func can_unlock_talent(node_id: StringName) -> bool:
 
 	if not get_talent_node_ids().has(node_id):
 		return false
+	if _has_unlocked_incompatible_talent(node_id):
+		return false
 	if _is_talent_start_node(node_id):
 		return true
 	for connection in get_talent_connections():
@@ -608,6 +637,19 @@ func can_unlock_talent(node_id: StringName) -> bool:
 		if connection[1] == node_id and unlocked_talents.has(connection[0]):
 			return true
 
+	return false
+
+
+func _has_unlocked_incompatible_talent(node_id: StringName) -> bool:
+	if not talent_catalog.has_method("incompatible_nodes"):
+		return false
+	for pair in talent_catalog.incompatible_nodes():
+		if not (pair is Array and pair.size() == 2):
+			continue
+		if pair[0] == node_id and unlocked_talents.has(pair[1]):
+			return true
+		if pair[1] == node_id and unlocked_talents.has(pair[0]):
+			return true
 	return false
 
 
@@ -741,13 +783,19 @@ func deal_player_damage_to_enemy(enemy: Node, raw_damage: float, attack_info: Di
 				attack_info["wizard_poison_stack_damage_bonus"] = poison_stacks
 		final_damage *= necromancer_runtime.get_poison_stack_damage_multiplier(self, enemy, attack_info)
 		final_damage *= necromancer_runtime.get_player_damage_to_skeleton_marked_target_multiplier(enemy, attack_info)
-		if wizard_runtime.has_talent(&"wizard_nearby_damage_focus"):
+		if talent_holy_strike_more_weaker_enemies_enabled and _is_enemy_nearby(enemy):
+			final_damage *= 1.2
+			attack_info["thin_horde_nearby_damage"] = true
+		if wizard_runtime.has_talent(&"wizard_nearby_damage_focus") and _is_enemy_nearby(enemy):
+			final_damage *= 1.2
+			attack_info["wizard_nearby_damage_focus"] = "nearby"
+		if wizard_runtime.has_talent(&"wizard_spark_nearby_damage_focus"):
 			if _is_enemy_nearby(enemy):
 				final_damage *= 1.5
-				attack_info["wizard_nearby_damage_focus"] = "nearby"
+				attack_info["wizard_spark_nearby_damage_focus"] = "nearby"
 			else:
 				final_damage *= 0.5
-				attack_info["wizard_nearby_damage_focus"] = "distant"
+				attack_info["wizard_spark_nearby_damage_focus"] = "distant"
 		if _is_holy_strike_attack(attack_info) and talent_holy_strike_elite_smite_enabled:
 			if _is_elite_enemy(enemy):
 				final_damage *= 1.5
@@ -980,13 +1028,13 @@ func _get_wizard_effective_gold_for_talents() -> int:
 func get_enemy_spawn_count_multiplier() -> float:
 	if wizard_runtime.has_talent(&"wizard_more_weaker_enemies"):
 		return 2.0
-	return 1.5 if talent_holy_strike_more_weaker_enemies_enabled else 1.0
+	return 1.0
 
 
 func get_enemy_max_hp_multiplier() -> float:
 	if wizard_runtime.has_talent(&"wizard_more_weaker_enemies"):
 		return 0.7
-	return 0.8 if talent_holy_strike_more_weaker_enemies_enabled else 1.0
+	return 1.0
 
 
 func get_tomb_container_count_multiplier() -> float:
@@ -1142,9 +1190,7 @@ func _update_normal_movement(delta: float) -> void:
 		return
 
 	var input_direction: Vector2 = _get_move_input()
-	var target_speed: float = move_speed * slow_multiplier
-	if stats != null:
-		target_speed = stats.get_move_speed(move_speed) * slow_multiplier
+	var target_speed: float = _get_effective_move_speed() * slow_multiplier
 	if _is_attack_movement_slowed():
 		target_speed *= attack_move_speed_multiplier
 
@@ -1155,6 +1201,20 @@ func _update_normal_movement(delta: float) -> void:
 
 	move_and_slide()
 	_clamp_to_movement_bounds()
+
+
+func _get_effective_move_speed() -> float:
+	if stats != null:
+		return stats.get_move_speed(move_speed)
+	return move_speed
+
+
+func _get_dash_speed() -> float:
+	return _get_effective_move_speed() * dash_move_speed_multiplier + dash_speed_bonus
+
+
+func _get_slide_speed() -> float:
+	return _get_effective_move_speed() * slide_move_speed_multiplier + slide_speed_bonus
 
 
 func _try_start_dash() -> void:
@@ -1175,7 +1235,7 @@ func _try_start_dash() -> void:
 	dash_time_remaining = effective_dash_duration
 	dash_cooldown_remaining = dash_cooldown
 	slide_window_remaining = effective_dash_duration + slide_cancel_window
-	velocity = dash_direction * dash_speed
+	velocity = dash_direction * _get_dash_speed()
 	dash_started.emit(dash_direction)
 	wizard_runtime.add_dash_primary_fireball_stack()
 	if wizard_runtime.has_talent(&"wizard_dash_fireball"):
@@ -1186,7 +1246,7 @@ func _try_start_dash() -> void:
 
 func _update_dash(delta: float) -> void:
 	dash_time_remaining -= delta
-	velocity = dash_direction * dash_speed
+	velocity = dash_direction * _get_dash_speed()
 	move_and_slide()
 	_clamp_to_movement_bounds()
 
@@ -1211,7 +1271,7 @@ func _try_start_slide() -> void:
 	slide_stunned_targets.clear()
 	invincible_remaining = maxf(invincible_remaining, invincible_time)
 	is_invincible = true
-	velocity = dash_direction * slide_speed
+	velocity = dash_direction * _get_slide_speed()
 	_play_slide_sfx()
 
 	# Slide-through-enemies: temporarily stop colliding with enemy bodies.
@@ -1222,7 +1282,7 @@ func _try_start_slide() -> void:
 func _update_slide(delta: float) -> void:
 	slide_time_remaining -= delta
 	var progress: float = _get_slide_progress()
-	var current_slide_speed: float = lerpf(slide_speed, move_speed, progress)
+	var current_slide_speed: float = lerpf(_get_slide_speed(), _get_effective_move_speed(), progress)
 	velocity = dash_direction * current_slide_speed
 	move_and_slide()
 	_clamp_to_movement_bounds()
@@ -1604,6 +1664,8 @@ func _perform_scaled_shockwave_attack(shockwave_center: Vector2, attack_damage: 
 		var body_2d: Node2D = body as Node2D
 		if body_2d == null or body_2d.global_position.distance_to(shockwave_center) > active_radius:
 			continue
+		if _is_world_between(shockwave_center, body_2d.global_position):
+			continue
 
 		if body.has_method("take_damage"):
 			deal_player_damage_to_enemy(body, attack_damage, {"source": "shockwave", "direct": true, "allow_procs": true})
@@ -1620,6 +1682,8 @@ func _perform_scaled_shockwave_attack(shockwave_center: Vector2, attack_damage: 
 	for container in get_tree().get_nodes_in_group("container"):
 		var container_2d := container as Node2D
 		if container_2d == null or container_2d.global_position.distance_to(shockwave_center) > active_radius:
+			continue
+		if _is_world_between(shockwave_center, container_2d.global_position):
 			continue
 		if container is BreakableContainer and container.is_shop_container:
 			continue
@@ -2040,23 +2104,22 @@ func _perform_melee_attack_at(target_position: Vector2) -> void:
 	var attack_info := {"source": "player_attack", "direct": true, "allow_procs": true}
 	attack_started.emit(global_position, direction, attack_info)
 
-	var enemies_hit: int = 0
-	var last_enemy_hit_position := global_position
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		var enemy_2d := enemy as Node2D
 		if enemy_2d == null or not _is_target_in_melee_hitbox(enemy_2d.global_position, direction):
 			continue
+		if _is_world_between(global_position, enemy_2d.global_position):
+			continue
 		if enemy.has_method("take_damage"):
 			deal_player_damage_to_enemy(enemy, projectile_damage, attack_info.duplicate())
-			enemies_hit += 1
-			last_enemy_hit_position = enemy_2d.global_position
 
-	if talent_holy_strike_chain_lightning_pack_enabled and enemies_hit >= 5:
-		_trigger_holy_strike_chain_lightning(last_enemy_hit_position)
+	_trigger_holy_strike_chain_storm()
 
 	for container in get_tree().get_nodes_in_group("container"):
 		var container_2d := container as Node2D
 		if container_2d == null or not _is_target_in_melee_hitbox(container_2d.global_position, direction):
+			continue
+		if _is_world_between(global_position, container_2d.global_position):
 			continue
 		if container is BreakableContainer and container.is_shop_container:
 			continue
@@ -2094,6 +2157,18 @@ func _is_target_in_melee_arc(target_position: Vector2, direction: Vector2, radiu
 	if offset.length_squared() <= 0.001:
 		return true
 	return direction.dot(offset.normalized()) >= cos(angle * 0.5)
+
+
+func _is_world_between(from_position: Vector2, to_position: Vector2) -> bool:
+	if get_world_2d() == null or from_position.distance_squared_to(to_position) <= 1.0:
+		return false
+
+	var query := PhysicsRayQueryParameters2D.create(from_position, to_position)
+	query.exclude = [self]
+	query.collision_mask = 1 << (world_collision_layer_number - 1)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	return not get_world_2d().direct_space_state.intersect_ray(query).is_empty()
 
 
 func _is_point_in_polygon(point: Vector2, polygon: PackedVector2Array) -> bool:
@@ -2143,7 +2218,13 @@ func _sync_holy_strike_preview() -> void:
 	if melee_effect_damage_preview != null:
 		var holy_strike_radius := _get_holy_strike_radius()
 		melee_effect_damage_preview.position = Vector2(holy_strike_radius * 0.5, 0.0)
-		melee_effect_damage_preview.scale = Vector2.ONE * (holy_strike_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
+		melee_effect_damage_preview.scale = _get_holy_slash_effect_scale(holy_strike_radius)
+
+
+func _get_holy_slash_effect_scale(holy_strike_radius: float) -> Vector2:
+	var base_scale := holy_strike_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x)
+	var angle_scale := clampf(_get_holy_strike_angle() / PI, 0.1, 1.0)
+	return Vector2(base_scale, base_scale * angle_scale)
 
 
 func emit_container_broken(container: Node, attack_info: Dictionary = {}) -> void:
@@ -2263,7 +2344,7 @@ func _play_holy_slash_effect(direction: Vector2) -> void:
 	_sync_holy_strike_preview()
 	var holy_strike_radius := _get_holy_strike_radius()
 	var effect_position := direction * (holy_strike_radius * 0.5)
-	var effect_scale := Vector2.ONE * (holy_strike_radius * 2.0 / float(HOLY_SLASH_FRAME_SIZE.x))
+	var effect_scale := _get_holy_slash_effect_scale(holy_strike_radius)
 	if melee_effect_damage_preview != null:
 		var local_offset := Vector2.ZERO
 		if melee_attack_root != null:
@@ -2914,6 +2995,21 @@ func _is_holy_strike_attack(attack_info: Dictionary) -> bool:
 	return StringName(attack_info.get("source", &"")) == &"player_attack"
 
 
+func _trigger_holy_strike_chain_storm() -> void:
+	var chain_count := _get_holy_strike_chain_storm_count()
+	for _index in range(chain_count):
+		_trigger_holy_strike_chain_lightning(global_position)
+
+
+func _get_holy_strike_chain_storm_count() -> int:
+	if not talent_holy_strike_chain_lightning_pack_enabled:
+		return 0
+	var nearby_enemy_count := EFFECT_TARGETING.enemies_surrounding(self, global_position).size()
+	if stats != null:
+		nearby_enemy_count += maxi(stats.surrounded_enemy_count_bonus, 0)
+	return nearby_enemy_count / 5
+
+
 func _launch_holy_strike_fireball_burst(origin: Vector2) -> void:
 	for index in range(8):
 		var angle := TAU * float(index) / 8.0
@@ -3461,10 +3557,16 @@ func _get_animation_bases() -> Array[StringName]:
 
 func _get_animation_length(animation_base: StringName) -> float:
 	var length: float = 0.0
-	for frame in range(FRAMES_PER_DIRECTION):
+	for frame in range(_get_animation_length_frame_count(animation_base)):
 		length += _get_frame_duration(animation_base, frame)
 
 	return maxf(length, 0.001)
+
+
+func _get_animation_length_frame_count(animation_base: StringName) -> int:
+	if animation_base == &"slide_hold":
+		return FRAMES_PER_DIRECTION
+	return _get_animation_frame_count(animation_base)
 
 
 func _get_frame_duration(animation_base: StringName, frame: int) -> float:
@@ -3523,6 +3625,8 @@ func _get_animation_loop_mode(animation_base: StringName) -> Animation.LoopMode:
 func _get_animation_frame_count(animation_base: StringName) -> int:
 	if animation_base == &"slide_hold":
 		return 1
+	if animation_base == &"attack" and _is_necromancer_character():
+		return NECROMANCER_ATTACK_FRAMES_PER_DIRECTION
 	return FRAMES_PER_DIRECTION
 
 
@@ -3530,3 +3634,7 @@ func _get_animation_frame_column(animation_base: StringName, frame: int) -> int:
 	if animation_base == &"slide_hold":
 		return FRAMES_PER_DIRECTION - 1
 	return frame
+
+
+func _is_necromancer_character() -> bool:
+	return character_definition != null and character_definition.id == &"necromancer"

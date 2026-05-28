@@ -120,8 +120,7 @@ func _try_contact_damage() -> void:
 		return
 	if not _is_target_inside_contact_damage_shape():
 		return
-	if target.has_method("take_damage"):
-		target.call("take_damage", contact_damage)
+	if try_damage_player_target(target, contact_damage):
 		contact_damage_remaining = contact_damage_interval
 
 

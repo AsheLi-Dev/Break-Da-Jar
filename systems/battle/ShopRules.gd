@@ -101,13 +101,17 @@ static func tier_label(tier: int) -> String:
 
 static func price(category: int, tier: int) -> int:
 	var is_brown: bool = category == BROWN or category == WHITE
+	var base_price: int
 	match tier:
 		RARE:
-			return 30 if is_brown else 36
+			base_price = 100
 		LEGENDARY:
-			return 75 if is_brown else 90
+			base_price = 300
 		_:
-			return 12 if is_brown else 15
+			base_price = 30
+	if not is_brown or category == WHITE:
+		base_price = int(round(float(base_price) * 1.2))
+	return base_price
 
 
 static func discounted_price(category: int, tier: int, multiplier: float) -> int:

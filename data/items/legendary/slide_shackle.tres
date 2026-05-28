@@ -1,24 +1,23 @@
-[gd_resource type="Resource" script_class="ItemDefinition" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="ItemDefinition" format=3 uid="uid://j0ms12nfsbe8"]
 
-[ext_resource type="Script" path="res://systems/items/ItemDefinition.gd" id="1_def"]
-[ext_resource type="Script" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
-[ext_resource type="Texture2D" path="res://assets/items/dark_realistic_pixel_icons/slide_shackle.png" id="item_icon"]
+[ext_resource type="Script" uid="uid://bsirsunaol1fv" path="res://systems/items/ItemDefinition.gd" id="1_def"]
+[ext_resource type="Script" uid="uid://ds6r8tcc0hkb3" path="res://systems/items/effects/EventEffect.gd" id="2_event"]
+[ext_resource type="Texture2D" uid="uid://dp5vs1h2xvff4" path="res://assets/items/dark_realistic_pixel_icons/slide_shackle.png" id="item_icon"]
 
 [sub_resource type="Resource" id="Resource_effect"]
 script = ExtResource("2_event")
-stacking_rule = &"first_copy_then_increment"
-stacking_notes = "First copy makes Slide stun contacted enemies for 0.5s; each extra copy adds 0.2s."
 effect_type = &"first_copy_stat_bonus"
 stat_name = &"slide_contact_stun_duration"
 value = 0.5
 damage_scale = 0.2
+stacking_rule = &"first_copy_then_increment"
+stacking_notes = "First copy makes Slide stun contacted enemies for 0.5s; each extra copy adds 0.2s."
 
 [resource]
 script = ExtResource("1_def")
 id = &"slide_shackle"
 display_name = "Slide Shackle"
 description = "Your Slide stuns contacted enemies for 0.5s. Additional copies add 0.2s."
-category = &"utility"
 rarity = &"legendary"
 icon = ExtResource("item_icon")
 effects = Array[Resource]([SubResource("Resource_effect")])

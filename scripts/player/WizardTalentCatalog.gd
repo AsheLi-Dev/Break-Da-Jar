@@ -146,7 +146,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"flame_bottom_8":
 			return {"name": "Laser\nChain", "description": "Your Fire Lasers chain 1 additional time to a nearby enemy.", "effect": &"wizard_fire_laser_chain"}
 		&"flame_left_0":
-			return {"name": "Close\nBurn", "description": "Deal 50% more damage to nearby enemies and 50% less damage to enemies that are not nearby.", "effect": &"wizard_nearby_damage_focus"}
+			return {"name": "Close\nBurn", "description": "Deal 20% increased damage to nearby enemies.", "effect": &"wizard_nearby_damage_focus"}
 		&"flame_left_1":
 			return {"name": "Surge\nBlast", "description": "During Fire Surge, your left-click Fireballs have 50% increased explosion radius and 90% reduced travel distance.", "effect": &"wizard_fire_surge_left_click_blast"}
 		&"flame_left_2":
@@ -233,6 +233,14 @@ static func definition(id: StringName) -> Dictionary:
 			return {"name": "Elite\nSpoils", "description": "Combat container count is increased by 100%. When a container breaks, it has a 1% chance to summon 2 elite enemies.", "effect": &"wizard_double_containers_elite_break"}
 		&"spark_5":
 			return {"name": "Wide\nSpoils", "description": "Map size and combat container count are increased by 30%.", "effect": &"wizard_large_map_more_containers"}
+		&"spark_6":
+			return {"name": "Surge\nBloom", "description": "Fireballs fired by Fire Surge have 90% reduced range and 30% increased explosion radius.", "effect": &"wizard_fire_surge_short_fireballs"}
+		&"spark_7":
+			return {"name": "Close\nSpark", "description": "Deal 50% increased damage to nearby enemies and 50% reduced damage to enemies that are not nearby.", "effect": &"wizard_spark_nearby_damage_focus"}
+		&"spark_8":
+			return {"name": "Focused\nRay", "description": "Your Fire Lasers have 80% reduced range and deal 500% increased damage.", "effect": &"wizard_short_laser_massive_damage"}
+		&"spark_1":
+			return {"name": "Critical\nVolley", "description": "Your left-click critical hits no longer deal extra damage. When your left-click attack crits, fire 1 additional Fireball for every 50% critical damage bonus you have.", "effect": &"wizard_primary_crit_extra_fireballs"}
 		&"spark_9":
 			return {"name": "Still\nCharge", "description": "Stand still to charge your left-click Fireballs, gaining 10% explosion radius every 0.2s, up to 100%. Moving or casting the left-click attack resets the charge.", "effect": &"wizard_stationary_primary_fireball_radius_charge"}
 		&"spark_10":
@@ -246,7 +254,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"spark_14":
 			return {"name": "Relay\nSpark", "description": "Your Fire Lasers gain 3 chains and can only chain to your hovering Fireballs.", "effect": &"wizard_fire_laser_hovering_fireball_chain"}
 		&"spark_15":
-			return {"name": "Homing\nSpark", "description": "Your Fireballs automatically track the nearest target, but their explosion damage is reduced by 40%.", "effect": &"wizard_homing_fireballs"}
+			return {"name": "Gold\nSpark", "description": "Your Fireball explosions no longer deal damage, but have a 10% chance to spawn 1 gold.", "effect": &"wizard_fireball_explosion_gold"}
 		&"spark_16":
 			return {"name": "Toxic\nSpark", "description": "When your Fireballs hit enemies, they have a 30% chance to Poison and a 5% chance to Stun.", "effect": &"wizard_fireball_impact_poison_stun"}
 		&"spark_17":
@@ -293,6 +301,13 @@ static func connections() -> Array:
 	_add_path(result, [&"spark_12", &"spark_13", &"spark_14"])
 	_add_path(result, [&"spark_15", &"spark_16", &"spark_17"])
 	return result
+
+
+static func incompatible_nodes() -> Array:
+	return [
+		[&"spark_15", &"flame_bottom_6"],
+		[&"spark_0", &"spark_2"],
+	]
 
 
 static func start_nodes() -> Array[StringName]:

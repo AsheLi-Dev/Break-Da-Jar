@@ -265,15 +265,7 @@ func _set_hold_squash(squash_scale: Vector2) -> void:
 
 
 func _damage_players_in_radius(radius: float, attack_damage: float) -> void:
-	if is_stunned():
-		return
-
-	for node in get_tree().get_nodes_in_group("player"):
-		var player := node as Node2D
-		if player == null or not player.has_method("take_damage"):
-			continue
-		if player.global_position.distance_to(global_position) <= radius:
-			player.call("take_damage", attack_damage)
+	damage_players_in_radius(radius, attack_damage)
 
 
 func _on_stun_applied() -> void:

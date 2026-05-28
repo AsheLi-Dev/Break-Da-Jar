@@ -4,8 +4,14 @@ class_name EnemyBase
 const SFX_PLAYER := preload("res://systems/audio/SfxPlayer.gd")
 const ELITE_AFFIX_ACID_PROJECTILE_SCRIPT := preload("res://systems/combat/AcidProjectile.gd")
 const ELITE_AFFIX_POISON_PUDDLE_SCRIPT := preload("res://systems/combat/PoisonPuddle.gd")
+const ENEMY_ATTACK_RESOLVER := preload("res://systems/combat/EnemyAttackResolver.gd")
 const UNDEAD_DEATH_SFX_A: AudioStream = preload("res://assets/sfx/undead_death_bone_break_a.mp3")
 const UNDEAD_DEATH_SFX_B: AudioStream = preload("res://assets/sfx/undead_death_bone_break_b.mp3")
+const OBSTACLE_AVOID_TIME := 0.28
+const OBSTACLE_AVOID_TARGET_WEIGHT := 0.45
+const OBSTACLE_AVOID_TANGENT_WEIGHT := 0.75
+const DEATH_SFX_VOLUME_DB := -2.0
+const FINAL_ENEMY_DEATH_SFX_VOLUME_DB := DEATH_SFX_VOLUME_DB + 20.0 * log(1.3) / log(10.0)
 
 signal died(enemy: EnemyBase)
 
@@ -44,6 +50,8 @@ var map_move_speed_multiplier: float = 1.0
 var elite_affix_data: Dictionary = {}
 var elite_affix_timers: Dictionary = {}
 var temporary_move_speed_multipliers: Dictionary = {}
+var obstacle_avoid_direction: Vector2 = Vector2.ZERO
+var obstacle_avoid_remaining: float = 0.0
 
 
 func _ready() -> void:
@@ -186,8 +194,10 @@ func move_toward_position(world_position: Vector2, speed: float, delta: float) -
 		stop_moving()
 		return
 
-	velocity = offset.normalized() * speed
+	var target_direction := offset.normalized()
+	velocity = _get_obstacle_aware_move_direction(target_direction, delta) * speed
 	move_and_slide()
+	_update_obstacle_avoidance(target_direction)
 
 
 func set_round_enrage_multiplier(multiplier: float) -> void:
@@ -242,6 +252,18 @@ func release_attack_token() -> void:
 		coordinator.call("release_enemy_attack_token", self)
 
 
+func try_damage_player_target(target_node: Node, attack_damage: float, hit_targets: Variant = null) -> bool:
+	return ENEMY_ATTACK_RESOLVER.try_damage_player(self, target_node, attack_damage, hit_targets)
+
+
+func damage_overlapping_players(area: Area2D, attack_damage: float, hit_targets: Variant = null) -> int:
+	return ENEMY_ATTACK_RESOLVER.damage_overlapping_players(self, area, attack_damage, hit_targets)
+
+
+func damage_players_in_radius(radius: float, attack_damage: float) -> int:
+	return ENEMY_ATTACK_RESOLVER.damage_players_in_radius(self, radius, attack_damage)
+
+
 func _on_stun_applied() -> void:
 	knockback_velocity = Vector2.ZERO
 	stop_moving()
@@ -264,6 +286,40 @@ func _chase_target(delta: float) -> void:
 	# Base movement is direct pursuit. Subclasses can override behavior.
 	face_position(target.global_position)
 	move_toward_position(target.global_position, move_speed, delta)
+
+
+func _get_obstacle_aware_move_direction(target_direction: Vector2, delta: float) -> Vector2:
+	if obstacle_avoid_remaining <= 0.0 or obstacle_avoid_direction.length_squared() <= 0.001:
+		return target_direction
+
+	obstacle_avoid_remaining = maxf(0.0, obstacle_avoid_remaining - delta)
+	var blended := target_direction * OBSTACLE_AVOID_TARGET_WEIGHT + obstacle_avoid_direction * OBSTACLE_AVOID_TANGENT_WEIGHT
+	if blended.length_squared() <= 0.001:
+		return target_direction
+	return blended.normalized()
+
+
+func _update_obstacle_avoidance(target_direction: Vector2) -> void:
+	for index in range(get_slide_collision_count()):
+		var collision := get_slide_collision(index)
+		if collision == null or not _is_obstacle_collider(collision.get_collider()):
+			continue
+		var normal := collision.get_normal()
+		if normal.length_squared() <= 0.001:
+			continue
+		var tangent := Vector2(-normal.y, normal.x).normalized()
+		if tangent.dot(target_direction) < (-tangent).dot(target_direction):
+			tangent = -tangent
+		obstacle_avoid_direction = tangent
+		obstacle_avoid_remaining = OBSTACLE_AVOID_TIME
+		return
+
+
+func _is_obstacle_collider(collider: Object) -> bool:
+	var node := collider as Node
+	if node == null:
+		return false
+	return node.is_in_group("obstacle") or node.is_in_group("walls") or node is StaticBody2D
 
 
 func _find_target() -> void:
@@ -572,8 +628,13 @@ func _play_death_sfx() -> void:
 	var parent := get_tree().current_scene
 	if parent == null:
 		parent = get_parent()
+	if parent != null and parent.has_method("should_play_final_enemy_death_sfx") and bool(parent.call("should_play_final_enemy_death_sfx", self)):
+		SFX_PLAYER.play_2d(parent, UNDEAD_DEATH_SFX_A, global_position, FINAL_ENEMY_DEATH_SFX_VOLUME_DB, 0.88, 1.1)
+		SFX_PLAYER.play_2d(parent, UNDEAD_DEATH_SFX_B, global_position, FINAL_ENEMY_DEATH_SFX_VOLUME_DB, 0.88, 1.1)
+		return
+
 	var stream := UNDEAD_DEATH_SFX_A if randf() < 0.5 else UNDEAD_DEATH_SFX_B
-	SFX_PLAYER.play_2d(parent, stream, global_position, -2.0, 0.88, 1.1)
+	SFX_PLAYER.play_2d(parent, stream, global_position, DEATH_SFX_VOLUME_DB, 0.88, 1.1)
 
 
 func _notify_player_kill_once() -> void:

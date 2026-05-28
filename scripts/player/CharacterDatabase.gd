@@ -76,7 +76,7 @@ static func _necromancer() -> RefCounted:
 		&"death": "res://assets/heroes/necromancer/die.png",
 	}
 	definition.active_frames = {
-		&"primary": 2,
+		&"primary": 6,
 		&"secondary": 7,
 		&"utility": 9,
 	}

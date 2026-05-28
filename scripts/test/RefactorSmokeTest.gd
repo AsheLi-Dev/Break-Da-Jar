@@ -33,6 +33,8 @@ func _run():
 	_test_main_scene_boot()
 	_test_dynamic_play_area_talent()
 	_test_dynamic_container_grid_expansion()
+	_test_holy_strike_chain_storm_count()
+	_test_thin_horde_nearby_damage()
 	_test_wizard_container_break_elite_summon()
 	_test_wizard_swift_flame_extra_gold_drop()
 	_test_wizard_venom_burst_extra_gold_drop()
@@ -99,11 +101,16 @@ func _test_container_hitboxes(containers: Array) -> void:
 func _test_dynamic_play_area_talent() -> void:
 	if battle_scene == null or player == null:
 		return
+	battle_scene.set("current_round", 1)
+	battle_scene.call("_refresh_play_area_from_player", true)
+	var initial_rect: Rect2 = battle_scene.call("_get_play_area_rect")
+	_assert(initial_rect.size.is_equal_approx(Vector2(1600, 1600)), "BattleScene starts at the round 10 play area size")
+
 	player.set("talent_wizard_large_map_more_containers_enabled", true)
 	battle_scene.call("_refresh_play_area_from_player", true)
 	var expanded_rect: Rect2 = battle_scene.call("_get_play_area_rect")
-	_assert(expanded_rect.size.is_equal_approx(Vector2(1664, 1664)), "Wizard map size talent expands BattleScene play area by 30%")
-	_assert(expanded_rect.get_center().is_equal_approx(Vector2(1248, 702)), "Wizard map size talent scales BattleScene play area center by 30%")
+	_assert(expanded_rect.size.is_equal_approx(Vector2(2080, 2080)), "Wizard map size talent expands fixed BattleScene play area by 30%")
+	_assert(expanded_rect.get_center().is_equal_approx(Vector2(1560, 877.5)), "Wizard map size talent scales fixed BattleScene play area center by 30%")
 	_assert(int(battle_scene.call("_get_combat_container_count")) == 26, "Wizard map size talent increases scaled combat container count by 30%")
 	_assert(player.movement_bounds.size.is_equal_approx(expanded_rect.size), "Wizard map size talent updates player movement bounds")
 	player.set("talent_wizard_large_map_more_containers_enabled", false)
@@ -112,8 +119,8 @@ func _test_dynamic_play_area_talent() -> void:
 	battle_scene.set("current_round", 10)
 	battle_scene.call("_refresh_play_area_from_player", true)
 	var round_ten_rect: Rect2 = battle_scene.call("_get_play_area_rect")
-	_assert(round_ten_rect.size.is_equal_approx(Vector2(1472, 1472)), "Round 10 expands BattleScene play area by 15%")
-	_assert(player.movement_bounds.size.is_equal_approx(round_ten_rect.size), "Round 10 updates player movement bounds")
+	_assert(round_ten_rect.size.is_equal_approx(initial_rect.size), "Round 10 keeps the fixed BattleScene play area size")
+	_assert(player.movement_bounds.size.is_equal_approx(round_ten_rect.size), "Round 10 keeps player movement bounds at the fixed size")
 
 	battle_scene.set("current_round", 6)
 	battle_scene.call("_refresh_play_area_from_player", true)
@@ -173,6 +180,61 @@ func _test_dynamic_container_grid_expansion() -> void:
 	player.set("talent_wizard_large_map_more_containers_enabled", false)
 	player.set("talent_wizard_double_containers_elite_break_enabled", false)
 	battle_scene.set("current_round", 1)
+
+
+func _test_holy_strike_chain_storm_count() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	player.set("talent_holy_strike_chain_lightning_pack_enabled", true)
+	var nearby_enemies: Array[Node2D] = []
+	for index in range(10):
+		var enemy := Node2D.new()
+		enemy.add_to_group("enemy")
+		enemy.global_position = player.global_position + Vector2.RIGHT.rotated(TAU * float(index) / 10.0) * 80.0
+		battle_scene.add_child(enemy)
+		nearby_enemies.append(enemy)
+	_assert(int(player.call("_get_holy_strike_chain_storm_count")) == 2, "Chain Storm releases one Chain Lightning per 5 nearby enemies")
+
+	for index in range(6):
+		nearby_enemies[index].remove_from_group("enemy")
+		nearby_enemies[index].queue_free()
+	for index in range(6, nearby_enemies.size()):
+		nearby_enemies[index].remove_from_group("enemy")
+	_assert(int(player.call("_get_holy_strike_chain_storm_count")) == 0, "Chain Storm waits for 5 nearby enemies")
+	player.set("talent_holy_strike_chain_lightning_pack_enabled", false)
+	for enemy in nearby_enemies:
+		if is_instance_valid(enemy):
+			enemy.queue_free()
+
+
+func _test_thin_horde_nearby_damage() -> void:
+	if battle_scene == null or player == null:
+		return
+
+	player.set("talent_holy_strike_more_weaker_enemies_enabled", true)
+	_assert(is_equal_approx(player.get_enemy_spawn_count_multiplier(), 1.0), "Thin Horde no longer increases enemy spawn count")
+	_assert(is_equal_approx(player.get_enemy_max_hp_multiplier(), 1.0), "Thin Horde no longer reduces enemy max HP")
+
+	var nearby_enemy := EnemyBase.new()
+	nearby_enemy.max_hp = 1000.0
+	nearby_enemy.hp = 1000.0
+	nearby_enemy.global_position = player.global_position + Vector2.RIGHT * 80.0
+	battle_scene.add_child(nearby_enemy)
+	player.deal_player_damage_to_enemy(nearby_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(nearby_enemy.hp, 880.0), "Thin Horde makes nearby enemies take 20 percent more damage")
+
+	var distant_enemy := EnemyBase.new()
+	distant_enemy.max_hp = 1000.0
+	distant_enemy.hp = 1000.0
+	distant_enemy.global_position = player.global_position + Vector2.RIGHT * 999.0
+	battle_scene.add_child(distant_enemy)
+	player.deal_player_damage_to_enemy(distant_enemy, 100.0, {"source": "test", "direct": true, "allow_procs": false, "allow_crit": false})
+	_assert(is_equal_approx(distant_enemy.hp, 900.0), "Thin Horde does not increase damage to distant enemies")
+
+	player.set("talent_holy_strike_more_weaker_enemies_enabled", false)
+	nearby_enemy.queue_free()
+	distant_enemy.queue_free()
 
 
 func _test_wizard_container_break_elite_summon() -> void:
@@ -327,6 +389,20 @@ func _test_shop_phase() -> void:
 	if battle_scene == null:
 		return
 
+	var original_round := int(battle_scene.get("current_round"))
+	_assert(int(battle_scene.call("_get_shop_price", 0, 0)) == 30, "Common brown shop jar base price is 30")
+	_assert(int(battle_scene.call("_get_shop_price", 0, 1)) == 100, "Rare brown shop jar base price is 100")
+	_assert(int(battle_scene.call("_get_shop_price", 0, 2)) == 300, "Legendary brown shop jar base price is 300")
+	_assert(int(battle_scene.call("_get_shop_price", 1, 0)) == 36, "Colored common shop jar costs 20 percent more")
+	_assert(int(battle_scene.call("_get_shop_price", 4, 2)) == 360, "White legendary shop jar costs 20 percent more")
+	battle_scene.set("current_round", 5)
+	_assert(int(battle_scene.call("_apply_shop_round_price_multiplier", 100)) == 140, "Shop jars cost 40 percent more after round 5")
+	battle_scene.set("current_round", 10)
+	_assert(int(battle_scene.call("_apply_shop_round_price_multiplier", 100)) == 200, "Shop jars cost 100 percent more after round 10")
+	battle_scene.set("current_round", 15)
+	_assert(int(battle_scene.call("_apply_shop_round_price_multiplier", 100)) == 250, "Shop jars cost 150 percent more after round 15")
+	battle_scene.set("current_round", original_round)
+
 	if int(battle_scene.get("phase")) != 1:
 		battle_scene.call("_enter_shop_phase")
 	var shop_containers_value: Variant = battle_scene.get("shop_containers")
@@ -386,7 +462,8 @@ func _test_shop_phase() -> void:
 			continue
 		saw_legendary = true
 		var category := int(data.get("category", 0))
-		var expected_price := int(battle_scene.call("_get_shop_price", category, 2)) * 2
+		var expected_base_price := int(battle_scene.call("_apply_shop_round_price_multiplier", int(battle_scene.call("_get_shop_price", category, 2))))
+		var expected_price := expected_base_price * 2
 		_assert(int(data.get("price", 0)) == expected_price, "Wizard legendary shop talent doubles legendary jar price")
 		break
 	_assert(saw_legendary, "Wizard legendary shop talent guarantees a legendary jar")

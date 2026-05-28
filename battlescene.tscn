@@ -1,9 +1,17 @@
 [gd_scene format=3 uid="uid://dsdqrxayvpadb"]
 
-[ext_resource type="Script" path="res://battlescene.gd" id="1_pxal7"]
+[ext_resource type="Script" uid="uid://32f4te2elhkb" path="res://battlescene.gd" id="1_pxal7"]
 [ext_resource type="Texture2D" uid="uid://c0m1b0ds8jviv" path="res://assets/containers/Urn G/urn-G-main-static-00.png" id="2_urn"]
 [ext_resource type="Texture2D" uid="uid://cro876snpsjw6" path="res://assets/containers/Barrel B/barrel-B-main-static-00.png" id="3_barrel"]
 [ext_resource type="Texture2D" uid="uid://b8wvjveql7663" path="res://assets/containers/Tomb A/tomb-A-main-static-00.png" id="4_tomb"]
+[ext_resource type="Texture2D" uid="uid://c8dubbo0mv54e" path="res://assets/obstacles/trees/treee_01.png" id="5_tree"]
+[ext_resource type="Texture2D" uid="uid://cbln8exk1mr40" path="res://assets/obstacles/rocks/rockaa_06.png" id="6_rock"]
+[ext_resource type="Texture2D" uid="uid://dvg2q6j541fcc" path="res://assets/obstacles/3-medium-magic-pillars.png" id="7_pillar"]
+[ext_resource type="Texture2D" uid="uid://b2nt12d8ap5a" path="res://assets/obstacles/trees/treee_02.png" id="8_tree2"]
+[ext_resource type="Texture2D" uid="uid://c1hxeh3x04hgj" path="res://assets/obstacles/trees/treee_03.png" id="9_tree3"]
+[ext_resource type="Texture2D" uid="uid://bxg4w4wm8h4cd" path="res://assets/obstacles/trees/treee_05.png" id="10_tree5"]
+[ext_resource type="Texture2D" uid="uid://cf6fswpktjvr0" path="res://assets/obstacles/rocks/rockaa_07.png" id="11_rock7"]
+[ext_resource type="Texture2D" uid="uid://d1ofneyolgev4" path="res://assets/obstacles/rocks/rockaa_08.png" id="12_rock8"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_urn"]
 radius = 28.0
@@ -13,6 +21,36 @@ radius = 32.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_tomb"]
 radius = 64.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_tree01_obstacle"]
+radius = 34.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_tree02_obstacle"]
+radius = 34.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_tree03_obstacle"]
+radius = 34.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_tree05_obstacle"]
+radius = 34.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_rock06_obstacle"]
+radius = 30.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_rock07_obstacle"]
+radius = 30.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_rock08_obstacle"]
+radius = 30.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_pillar1_obstacle"]
+radius = 36.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_pillar2_obstacle"]
+radius = 36.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_pillar3_obstacle"]
+radius = 36.0
 
 [node name="Battlescene" type="Node2D" unique_id=1986396668]
 script = ExtResource("1_pxal7")
@@ -54,3 +92,238 @@ texture = ExtResource("4_tomb")
 position = Vector2(5.285, 5.925)
 scale = Vector2(0.85, 1.345)
 shape = SubResource("CircleShape2D_tomb")
+
+[node name="ObstacleHitboxPreviews" type="Node2D" parent="." unique_id=76615242]
+position = Vector2(960, 760)
+
+[node name="Tree01" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=1307433142]
+position = Vector2(-480, -120)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree01" unique_id=344466944]
+position = Vector2(0, -22)
+scale = Vector2(1.25, 1.25)
+texture = ExtResource("5_tree")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree01" unique_id=1976996758]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 75.67)
+scale = Vector2(1.05, 0.26)
+texture = ExtResource("5_tree")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Tree01" unique_id=1026407978]
+position = Vector2(0, 3.32)
+scale = Vector2(0.595, 1.52)
+shape = SubResource("CircleShape2D_tree01_obstacle")
+
+[node name="Tree02" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=2097056009]
+position = Vector2(-240, -120)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree02" unique_id=193297728]
+position = Vector2(0, -22)
+scale = Vector2(1.25, 1.25)
+texture = ExtResource("8_tree2")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree02" unique_id=155742452]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 72.675)
+scale = Vector2(1, 0.25)
+texture = ExtResource("8_tree2")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Tree02" unique_id=1750219137]
+position = Vector2(0, 6.16)
+scale = Vector2(0.545, 1.335)
+shape = SubResource("CircleShape2D_tree02_obstacle")
+
+[node name="Tree03" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=1335596118]
+position = Vector2(0, -120)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree03" unique_id=562279690]
+position = Vector2(0, -22)
+scale = Vector2(1.25, 1.25)
+texture = ExtResource("9_tree3")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree03" unique_id=843033892]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 61.21)
+scale = Vector2(0.96, 0.24)
+texture = ExtResource("9_tree3")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Tree03" unique_id=2000090761]
+position = Vector2(0, 6.16)
+scale = Vector2(0.475, 1.125)
+shape = SubResource("CircleShape2D_tree03_obstacle")
+
+[node name="Tree05" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=1263497033]
+position = Vector2(240, -120)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree05" unique_id=1344729257]
+position = Vector2(0, -22)
+scale = Vector2(1.25, 1.25)
+texture = ExtResource("10_tree5")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Tree05" unique_id=1919820287]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 64.725)
+scale = Vector2(1, 0.24)
+texture = ExtResource("10_tree5")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Tree05" unique_id=1081978994]
+position = Vector2(0, 2.535)
+scale = Vector2(0.56, 1.275)
+shape = SubResource("CircleShape2D_tree05_obstacle")
+
+[node name="Rock06" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=1913725760]
+position = Vector2(-480, 90)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Rock06" unique_id=933599551]
+position = Vector2(0, -8)
+scale = Vector2(1.3, 1.3)
+texture = ExtResource("6_rock")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Rock06" unique_id=1285495505]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 34.53)
+scale = Vector2(1.22, 0.24)
+texture = ExtResource("6_rock")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Rock06" unique_id=797003845]
+scale = Vector2(2.16, 0.815)
+shape = SubResource("CircleShape2D_rock06_obstacle")
+
+[node name="Rock07" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=2139363914]
+position = Vector2(-240, 90)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Rock07" unique_id=1973348491]
+position = Vector2(0, -8)
+scale = Vector2(1.3, 1.3)
+texture = ExtResource("11_rock7")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Rock07" unique_id=2017012031]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 25.02)
+scale = Vector2(1.12, 0.24)
+texture = ExtResource("11_rock7")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Rock07" unique_id=513436196]
+position = Vector2(0, -13.68)
+scale = Vector2(1.63, 0.91)
+shape = SubResource("CircleShape2D_rock07_obstacle")
+
+[node name="Rock08" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=1643664495]
+position = Vector2(0, 90)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Rock08" unique_id=1675385099]
+position = Vector2(0, -8)
+scale = Vector2(1.3, 1.3)
+texture = ExtResource("12_rock8")
+
+[node name="Shadow" type="Sprite2D" parent="ObstacleHitboxPreviews/Rock08" unique_id=299605038]
+modulate = Color(0, 0, 0, 0.3)
+z_index = -1
+position = Vector2(0, 20.415)
+scale = Vector2(1.04, 0.22)
+texture = ExtResource("12_rock8")
+flip_v = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Rock08" unique_id=274374250]
+position = Vector2(0, -9.245)
+scale = Vector2(1.385, 0.71)
+shape = SubResource("CircleShape2D_rock08_obstacle")
+
+[node name="Pillar1" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=2060861055]
+position = Vector2(240, 90)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Pillar1" unique_id=294796451]
+position = Vector2(0, -18)
+scale = Vector2(1.35, 1.35)
+texture = ExtResource("7_pillar")
+region_enabled = true
+region_rect = Rect2(0, 0, 103, 165)
+
+[node name="Shadow" type="Polygon2D" parent="ObstacleHitboxPreviews/Pillar1" unique_id=118749723]
+z_index = -1
+position = Vector2(0, 87)
+scale = Vector2(25.585, 10.965)
+color = Color(0, 0, 0, 0.32)
+polygon = PackedVector2Array(1, 0, 0.92388, 0.382683, 0.707107, 0.707107, 0.382683, 0.92388, 0, 1, -0.382683, 0.92388, -0.707107, 0.707107, -0.92388, 0.382683, -1, 0, -0.92388, -0.382683, -0.707107, -0.707107, -0.382683, -0.92388, 0, -1, 0.382683, -0.92388, 0.707107, -0.707107, 0.92388, -0.382683)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Pillar1" unique_id=1214201124]
+position = Vector2(0, 22.43)
+scale = Vector2(0.465, 1.74)
+shape = SubResource("CircleShape2D_pillar1_obstacle")
+
+[node name="Pillar2" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=1858168857]
+position = Vector2(480, 90)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Pillar2" unique_id=194492327]
+position = Vector2(0, -18)
+scale = Vector2(1.35, 1.35)
+texture = ExtResource("7_pillar")
+region_enabled = true
+region_rect = Rect2(103, 0, 103, 165)
+
+[node name="Shadow" type="Polygon2D" parent="ObstacleHitboxPreviews/Pillar2" unique_id=1656671686]
+z_index = -1
+position = Vector2(-6, 82)
+scale = Vector2(36, 12)
+color = Color(0, 0, 0, 0.32)
+polygon = PackedVector2Array(1, 0, 0.92388, 0.382683, 0.707107, 0.707107, 0.382683, 0.92388, 0, 1, -0.382683, 0.92388, -0.707107, 0.707107, -0.92388, 0.382683, -1, 0, -0.92388, -0.382683, -0.707107, -0.707107, -0.382683, -0.92388, 0, -1, 0.382683, -0.92388, 0.707107, -0.707107, 0.92388, -0.382683)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Pillar2" unique_id=344312523]
+position = Vector2(-6.275, 14.8)
+scale = Vector2(0.81, 1.67)
+shape = SubResource("CircleShape2D_pillar2_obstacle")
+
+[node name="Pillar3" type="StaticBody2D" parent="ObstacleHitboxPreviews" unique_id=427309173]
+position = Vector2(720, 90)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Sprite2D" type="Sprite2D" parent="ObstacleHitboxPreviews/Pillar3" unique_id=1547327882]
+position = Vector2(0, -18)
+scale = Vector2(1.35, 1.35)
+texture = ExtResource("7_pillar")
+region_enabled = true
+region_rect = Rect2(206, 0, 103, 165)
+
+[node name="Shadow" type="Polygon2D" parent="ObstacleHitboxPreviews/Pillar3" unique_id=1654095766]
+z_index = -1
+position = Vector2(6, 78)
+scale = Vector2(38, 11)
+color = Color(0, 0, 0, 0.32)
+polygon = PackedVector2Array(1, 0, 0.92388, 0.382683, 0.707107, 0.707107, 0.382683, 0.92388, 0, 1, -0.382683, 0.92388, -0.707107, 0.707107, -0.92388, 0.382683, -1, 0, -0.92388, -0.382683, -0.707107, -0.707107, -0.382683, -0.92388, 0, -1, 0.382683, -0.92388, 0.707107, -0.707107, 0.92388, -0.382683)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ObstacleHitboxPreviews/Pillar3" unique_id=985482754]
+position = Vector2(5.57, 16)
+scale = Vector2(0.875, 1.515)
+shape = SubResource("CircleShape2D_pillar3_obstacle")

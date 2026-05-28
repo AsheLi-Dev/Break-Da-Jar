@@ -218,19 +218,11 @@ func _on_attack_body_entered(body: Node) -> void:
 
 
 func _damage_overlapping_players() -> void:
-	for body in attack_area.get_overlapping_bodies():
-		_try_damage_player(body)
+	damage_overlapping_players(attack_area, damage, hit_targets)
 
 
 func _try_damage_player(body: Node) -> void:
-	if is_stunned():
-		return
-	if hit_targets.has(body):
-		return
-
-	if body.is_in_group("player") and body.has_method("take_damage"):
-		hit_targets.append(body)
-		body.call("take_damage", damage)
+	try_damage_player_target(body, damage, hit_targets)
 
 
 func _on_stun_applied() -> void:

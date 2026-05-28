@@ -186,15 +186,7 @@ func _find_mutation_target() -> ZombieMelee:
 
 
 func _damage_players_in_radius(radius: float, attack_damage: float) -> void:
-	if is_stunned():
-		return
-
-	for player in get_tree().get_nodes_in_group("player"):
-		var player_2d := player as Node2D
-		if player_2d == null or player_2d.global_position.distance_to(global_position) > radius:
-			continue
-		if player.has_method("take_damage"):
-			player.take_damage(attack_damage)
+	damage_players_in_radius(radius, attack_damage)
 
 
 func _spawn_slam_vfx() -> void:

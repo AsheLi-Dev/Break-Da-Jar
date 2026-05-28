@@ -92,7 +92,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"talent_1_6":
 			return {
 				"name": "Thin\nHorde",
-				"description": "Enemy count is increased by 50%, but enemies have 20% less max HP.",
+				"description": "Nearby enemies take 20% increased damage.",
 				"effect": &"holy_strike_more_weaker_enemies",
 			}
 		&"talent_1_5":
@@ -104,7 +104,7 @@ static func definition(id: StringName) -> Dictionary:
 		&"talent_2_5":
 			return {
 				"name": "Chain\nStorm",
-				"description": "If Holy Strike hits 5 or more enemies at once, trigger chain lightning.",
+				"description": "When you attack, release one extra Chain Lightning for every 5 nearby enemies.",
 				"effect": &"holy_strike_chain_lightning_pack",
 			}
 		&"talent_2_4":
@@ -321,6 +321,17 @@ static func grid_position(id: StringName) -> Vector2i:
 	return Vector2i.ZERO
 
 
+static func position(id: StringName) -> Vector2:
+	var coord := grid_position(id)
+	var spacing := Vector2(62.0, 82.0)
+	var center_x := 360.0
+	var bottom_y := 716.0
+	return Vector2(
+		center_x + (float(coord.x) - 3.0) * spacing.x,
+		bottom_y - float(coord.y) * spacing.y
+	)
+
+
 static func display_name(id: StringName) -> String:
 	return String(definition(id).get("name", "+1 ATK"))
 
@@ -336,9 +347,29 @@ static func connections() -> Array:
 		for neighbor in neighbor_coords(coord):
 			if is_coord_valid(neighbor):
 				var to_id: StringName = node_id(neighbor)
+				if _is_blocked_connection(from_id, to_id):
+					continue
 				if String(from_id) < String(to_id):
 					result.append([from_id, to_id])
 	return result
+
+
+static func _is_blocked_connection(from_id: StringName, to_id: StringName) -> bool:
+	var blocked_connections: Array[Array] = [
+		[&"talent_0_7", &"talent_1_7"],
+		[&"talent_2_7", &"talent_3_7"],
+		[&"talent_4_7", &"talent_5_7"],
+		[&"talent_-1_4", &"talent_-1_5"],
+		[&"talent_-1_6", &"talent_-1_7"],
+		[&"talent_-2_7", &"talent_-1_7"],
+		[&"talent_7_4", &"talent_7_5"],
+		[&"talent_6_7", &"talent_7_7"],
+		[&"talent_7_6", &"talent_7_7"],
+	]
+	for connection in blocked_connections:
+		if (connection[0] == from_id and connection[1] == to_id) or (connection[0] == to_id and connection[1] == from_id):
+			return true
+	return false
 
 
 static func neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
@@ -351,7 +382,10 @@ static func neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
 	if coord.y >= 4 and (coord.x == -1 or coord.x == 7):
 		neighbors.append(coord + Vector2i(0, -1))
 		neighbors.append(coord + Vector2i(0, 1))
-	if coord.y == 0 or coord.y == 4 or coord.y == 7:
+	if coord.y >= 4 and (coord.x == -2 or coord.x == 8):
+		neighbors.append(coord + Vector2i(0, -1))
+		neighbors.append(coord + Vector2i(0, 1))
+	if coord.y == 0 or coord.y == 4 or coord.y == 7 or coord.y == 8:
 		neighbors.append(coord + Vector2i(-1, 0))
 		neighbors.append(coord + Vector2i(1, 0))
 	match coord:
@@ -362,8 +396,12 @@ static func neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
 			neighbors.append(Vector2i(0, 4))
 		Vector2i(0, 4):
 			neighbors.append(Vector2i(0, 5))
+		Vector2i(-1, 6):
+			neighbors.append(Vector2i(-2, 6))
 		Vector2i(0, 7):
 			neighbors.append(Vector2i(0, 6))
+		Vector2i(1, 7):
+			neighbors.append(Vector2i(1, 8))
 		Vector2i(0, 6):
 			neighbors.append(Vector2i(0, 7))
 			neighbors.append(Vector2i(1, 6))
@@ -380,6 +418,8 @@ static func neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
 			neighbors.append(Vector2i(2, 5))
 		Vector2i(2, 7):
 			neighbors.append(Vector2i(2, 6))
+		Vector2i(3, 7):
+			neighbors.append(Vector2i(3, 8))
 		Vector2i(2, 6):
 			neighbors.append(Vector2i(2, 7))
 			neighbors.append(Vector2i(3, 6))
@@ -396,6 +436,8 @@ static func neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
 			neighbors.append(Vector2i(4, 5))
 		Vector2i(4, 7):
 			neighbors.append(Vector2i(4, 6))
+		Vector2i(5, 7):
+			neighbors.append(Vector2i(5, 8))
 		Vector2i(4, 6):
 			neighbors.append(Vector2i(4, 7))
 			neighbors.append(Vector2i(5, 6))
@@ -417,6 +459,8 @@ static func neighbor_coords(coord: Vector2i) -> Array[Vector2i]:
 			neighbors.append(Vector2i(7, 6))
 		Vector2i(7, 6):
 			neighbors.append(Vector2i(6, 6))
+		Vector2i(7, 5):
+			neighbors.append(Vector2i(8, 5))
 	return neighbors
 
 
@@ -431,6 +475,11 @@ static func coords() -> Array[Vector2i]:
 			var coord := Vector2i(x, y)
 			if not result.has(coord):
 				result.append(coord)
+	for y in range(4, 9):
+		for x in range(-2, 9):
+			var coord := Vector2i(x, y)
+			if not result.has(coord):
+				result.append(coord)
 	return result
 
 
@@ -439,8 +488,8 @@ static func node_id(coord: Vector2i) -> StringName:
 
 
 static func is_coord_valid(coord: Vector2i) -> bool:
-	if coord.y >= 4 and coord.y <= 7:
-		return coord.x >= -1 and coord.x <= 7
+	if coord.y >= 4 and coord.y <= 8:
+		return coord.x >= -2 and coord.x <= 8
 	if coord.y >= 0 and coord.y <= 3:
 		return coord.x >= 2 and coord.x <= 4
 	return false

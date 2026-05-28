@@ -39,6 +39,7 @@ func _ready() -> void:
 	direction = direction.normalized()
 	rotation = direction.angle()
 	spawn_position = global_position
+	set_collision_mask_value(1, true)
 	_ensure_placeholder_nodes()
 	if not body_entered.is_connected(_on_body_entered):
 		body_entered.connect(_on_body_entered)

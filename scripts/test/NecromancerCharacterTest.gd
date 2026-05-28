@@ -82,6 +82,7 @@ func _test_definition() -> void:
 	_assert(player.primary_ability == &"necromancer_soul_beam", "Necromancer primary ability is Soul Beam")
 	_assert(player.secondary_ability == &"necromancer_skeleton_archer", "Necromancer secondary ability is Skeleton Archer")
 	_assert(player.utility_ability == &"necromancer_soul_surge", "Necromancer utility ability is Soul Surge")
+	_assert(player.character_definition.get_active_frame(&"primary", 0) == 6, "Necromancer Quick Shot triggers on the sixth frame")
 	_assert(player.talent_catalog == NECROMANCER_TALENT_CATALOG, "Necromancer uses its skull talent catalog")
 	_assert(is_equal_approx(player.max_hp, 80.0), "Necromancer max HP matches source role")
 	_assert(is_equal_approx(player.projectile_damage, 14.0), "Necromancer base damage matches source role")
@@ -92,6 +93,8 @@ func _test_textures() -> void:
 	for animation_name in [&"idle", &"run", &"attack", &"ability", &"pummel", &"rolling", &"slide_start", &"slide_end", &"damage", &"death"]:
 		var texture: Texture2D = player.character_definition.get_texture(animation_name)
 		_assert(texture != null, "Necromancer texture loads: %s" % animation_name)
+	_assert(int(player.call("_get_animation_frame_count", &"attack")) == 14, "Necromancer attack skips the blank final quickshot frame")
+	_assert(int(player.call("_get_animation_frame_column", &"attack", 13)) == 13, "Necromancer attack ends on the last non-empty quickshot frame")
 
 
 func _test_talent_catalog() -> void:

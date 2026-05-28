@@ -4,13 +4,20 @@ const SCREEN_SIZE := Vector2(1920, 1080)
 const PLAY_AREA_SIZE := Vector2(1280, 1280)
 const PLAY_AREA_CENTER := Vector2(960, 540)
 const PLAY_AREA_RECT := Rect2(PLAY_AREA_CENTER - PLAY_AREA_SIZE * 0.5, PLAY_AREA_SIZE)
-const ROUND_10_MAP_SIZE_MULTIPLIER := 1.15
+const ROUND_10_MAP_SIZE_MULTIPLIER := 1.25
 const ROUND_10_MAP_EXPAND_SHAKE_MAGNITUDE := 12.0
 const ROUND_10_MAP_EXPAND_SHAKE_DURATION := 0.22
 const ROUND_10_MAP_EXPAND_DELAY := 0.18
 const ROUND_10_MAP_EXPAND_ZOOM_FACTOR := 1.08
 const CAMERA_VISIBLE_SIZE := Vector2(1152, 648)
 const CAMERA_ZOOM := Vector2(SCREEN_SIZE.x / CAMERA_VISIBLE_SIZE.x, SCREEN_SIZE.y / CAMERA_VISIBLE_SIZE.y)
+const FINAL_ENEMY_DEATH_FOCUS_TIME_SCALE := 0.35
+const FINAL_ENEMY_DEATH_FOCUS_ZOOM_FACTOR := 1.35
+const FINAL_ENEMY_DEATH_FOCUS_IN_DURATION := 0.32
+const FINAL_ENEMY_DEATH_FOCUS_OUT_DURATION := 0.34
+const FINAL_ENEMY_DEATH_FOCUS_MIN_DURATION := 0.35
+const FINAL_ENEMY_DEATH_FOCUS_MAX_DURATION := 5.0
+const FINAL_ENEMY_DEATH_FOCUS_OFFSET := Vector2(0.0, -34.0)
 const PLAYER_POSITION := PLAY_AREA_CENTER + Vector2(-500, 0)
 const ARENA_TILE_SIZE := Vector2i(32, 32)
 const ARENA_TILE_SCALE := 2.0
@@ -26,6 +33,39 @@ const ROUND_ENRAGE_MAX_SPEED_BONUS := 1.0
 const PLAYER_CONTAINER_GOLD_DROP_CHANCE := 0.5
 const PLAYER_CONTAINER_GOLD_DROP_MIN := 1
 const PLAYER_CONTAINER_GOLD_DROP_MAX := 3
+const OBSTACLE_COUNT_MIN := 7
+const OBSTACLE_COUNT_MAX := 12
+const OBSTACLE_PLACEMENT_ATTEMPTS := 80
+const OBSTACLE_MIN_PLAYER_DISTANCE := 180.0
+const OBSTACLE_MIN_CONTAINER_DISTANCE := 190.0
+const OBSTACLE_MIN_OBSTACLE_DISTANCE := 135.0
+const CONTAINER_MIN_OBSTACLE_DISTANCE := 96.0
+const OBSTACLE_EDGE_PADDING := 150.0
+const RITUAL_PILLAR_DIAGONAL_OFFSETS: Array[float] = [260.0, 440.0, 620.0]
+const RITUAL_CENTER_SKULL_OFFSETS: Array[Vector2] = [
+	Vector2(-72.0, -28.0),
+	Vector2(54.0, -38.0),
+	Vector2(-34.0, 52.0),
+	Vector2(82.0, 44.0),
+]
+const FOREST_GRID_SIZE := 10
+const FOREST_TREE_COUNT_MIN := 10
+const FOREST_TREE_COUNT_MAX := 14
+const FOREST_EDGE_PADDING := 170.0
+const FOREST_PLAYER_CLEAR_RADIUS := 260.0
+const FOREST_CENTER_SOFT_RADIUS := 300.0
+const FOREST_CELL_JITTER := 42.0
+const FOREST_CENTER_SKIP_CHANCE := 0.75
+const FOREST_MIN_TREE_DISTANCE := 180.0
+const ROCK_FIELD_GRID_SIZE := 10
+const ROCK_FIELD_COUNT_MIN := 9
+const ROCK_FIELD_COUNT_MAX := 13
+const ROCK_FIELD_EDGE_PADDING := 170.0
+const ROCK_FIELD_PLAYER_CLEAR_RADIUS := 260.0
+const ROCK_FIELD_CENTER_SOFT_RADIUS := 260.0
+const ROCK_FIELD_CELL_JITTER := 44.0
+const ROCK_FIELD_CENTER_SKIP_CHANCE := 0.6
+const ROCK_FIELD_MIN_ROCK_DISTANCE := 170.0
 
 const CONTAINER_COUNT := 40
 const GRID_SIZE := 16
@@ -48,6 +88,7 @@ const ITEM_DETAIL_CARD_POSITION := Vector2(1304.0, 24.0)
 const ITEM_DETAIL_CARD_ICON_SIZE := 104.0
 const ITEM_DETAIL_TEXT_BOX_MARGIN := Vector2(28.0, 18.0)
 const CONTAINER_HITBOX_PREVIEW_ROOT := NodePath("ContainerHitboxPreviews")
+const OBSTACLE_HITBOX_PREVIEW_ROOT := NodePath("ObstacleHitboxPreviews")
 const ALTAR_CLICK_RADIUS := 64.0
 const ALTAR_POSITION := PLAY_AREA_CENTER + Vector2(0.0, -210.0)
 const UPGRADE_ALTAR_GOLD_COST := 8
@@ -98,6 +139,18 @@ const SKULL_DECOR_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/map/skull2.png"),
 	preload("res://assets/map/small skull1.png"),
 	preload("res://assets/map/small skull2.png"),
+]
+const OBSTACLE_DEFINITIONS: Array[Dictionary] = [
+	{"name": "Tree01", "template": "Tree01", "texture": preload("res://assets/obstacles/trees/treee_01.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.6, "radius": 34.0, "sprite_offset": Vector2(0.0, -22.0)},
+	{"name": "Tree02", "template": "Tree02", "texture": preload("res://assets/obstacles/trees/treee_02.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.6, "radius": 34.0, "sprite_offset": Vector2(0.0, -22.0)},
+	{"name": "Tree03", "template": "Tree03", "texture": preload("res://assets/obstacles/trees/treee_03.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.6, "radius": 34.0, "sprite_offset": Vector2(0.0, -22.0)},
+	{"name": "Tree05", "template": "Tree05", "texture": preload("res://assets/obstacles/trees/treee_05.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.6, "radius": 34.0, "sprite_offset": Vector2(0.0, -22.0)},
+	{"name": "Rock06", "template": "Rock06", "texture": preload("res://assets/obstacles/rocks/rockaa_06.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.538, "radius": 30.0, "sprite_offset": Vector2(0.0, -8.0)},
+	{"name": "Rock07", "template": "Rock07", "texture": preload("res://assets/obstacles/rocks/rockaa_07.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.538, "radius": 30.0, "sprite_offset": Vector2(0.0, -8.0)},
+	{"name": "Rock08", "template": "Rock08", "texture": preload("res://assets/obstacles/rocks/rockaa_08.png"), "scale": Vector2(2.0, 2.0), "collision_scale": 1.538, "radius": 30.0, "sprite_offset": Vector2(0.0, -8.0)},
+	{"name": "Pillar1", "template": "Pillar1", "texture": preload("res://assets/obstacles/3-medium-magic-pillars.png"), "columns": 3, "frame": 0, "scale": Vector2(1.35, 1.35), "radius": 36.0, "sprite_offset": Vector2(0.0, -18.0)},
+	{"name": "Pillar2", "template": "Pillar2", "texture": preload("res://assets/obstacles/3-medium-magic-pillars.png"), "columns": 3, "frame": 1, "scale": Vector2(1.35, 1.35), "radius": 36.0, "sprite_offset": Vector2(0.0, -18.0)},
+	{"name": "Pillar3", "template": "Pillar3", "texture": preload("res://assets/obstacles/3-medium-magic-pillars.png"), "columns": 3, "frame": 2, "scale": Vector2(1.35, 1.35), "radius": 36.0, "sprite_offset": Vector2(0.0, -18.0)},
 ]
 
 enum Phase {
@@ -168,6 +221,7 @@ const ALTAR_BLESSINGS: Array[Dictionary] = [
 var containers: Array[BreakableContainer] = []
 var shop_containers: Array[BreakableContainer] = []
 var enemies: Array[EnemyBase] = []
+var obstacles: Array[StaticBody2D] = []
 var shop_container_data: Dictionary = {}
 var hovered_shop_preview_container: BreakableContainer
 var no_spawn_container_breaks: Dictionary = {}
@@ -186,6 +240,9 @@ var auto_break_triggered: bool = false
 var round_enrage_active: bool = false
 var round_enrage_elapsed: float = 0.0
 var shop_transition_pending: bool = false
+var final_enemy_death_focus_active: bool = false
+var final_enemy_death_focus_token: int = 0
+var final_enemy_death_focus_tween: Tween
 var round_10_map_expansion_effect_played: bool = false
 var altar_node: Node2D
 var altar_offer: Dictionary = {}
@@ -219,7 +276,7 @@ var pause_overlay: Control
 var pause_input_controller: Node
 var talent_tree_ui: CanvasLayer
 var bgm_player: AudioStreamPlayer
-var applied_map_size_multiplier: float = 1.0
+var applied_map_size_multiplier: float = ROUND_10_MAP_SIZE_MULTIPLIER
 
 
 func _ready() -> void:
@@ -237,6 +294,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	get_tree().paused = false
+	Engine.time_scale = 1.0
 	_stop_bgm()
 
 
@@ -496,11 +554,11 @@ func _get_map_size_multiplier() -> float:
 
 
 func _get_round_map_size_multiplier() -> float:
-	return ROUND_10_MAP_SIZE_MULTIPLIER if current_round >= 10 else 1.0
+	return ROUND_10_MAP_SIZE_MULTIPLIER
 
 
 func _should_play_round_10_map_expansion_effect() -> bool:
-	return current_round == 10 and not round_10_map_expansion_effect_played
+	return false
 
 
 func _play_round_10_map_expansion_effect() -> void:
@@ -609,6 +667,7 @@ func _start_combat_round() -> void:
 	if _should_play_round_10_map_expansion_effect():
 		await _play_round_10_map_expansion_effect()
 	_refresh_play_area_from_player()
+	_spawn_obstacles()
 	_spawn_containers()
 	if is_instance_valid(player):
 		player.emit_round_started(current_round)
@@ -642,6 +701,391 @@ func _spawn_containers() -> void:
 		var container := _create_combat_container(container_position, index + 1, container_type)
 		containers.append(container)
 		add_child(container)
+
+
+func _spawn_obstacles() -> void:
+	_clear_obstacles()
+	match randi() % 3:
+		0:
+			_spawn_mystic_ritual_obstacle_template()
+		1:
+			_spawn_forest_obstacle_template()
+		_:
+			_spawn_rock_field_obstacle_template()
+
+
+func _spawn_mystic_ritual_obstacle_template() -> void:
+	var center := _get_play_area_center()
+	var pillar_positions: Array[Vector2] = []
+	var diagonal_directions: Array[Vector2] = [
+		Vector2(-1.0, -1.0),
+		Vector2(1.0, 1.0),
+		Vector2(1.0, -1.0),
+		Vector2(-1.0, 1.0),
+	]
+	for direction in diagonal_directions:
+		for offset in RITUAL_PILLAR_DIAGONAL_OFFSETS:
+			pillar_positions.append(center + direction * offset)
+	for index in range(pillar_positions.size()):
+		var obstacle := _create_obstacle(pillar_positions[index], index + 1, _get_ritual_pillar_definition(index))
+		obstacles.append(obstacle)
+		add_child(obstacle)
+	_add_mystic_ritual_center_skulls()
+
+
+func _get_ritual_pillar_definition(index: int) -> Dictionary:
+	var pillar_definitions: Array[Dictionary] = []
+	for definition in OBSTACLE_DEFINITIONS:
+		if String(definition.get("name", "")).begins_with("Pillar"):
+			pillar_definitions.append(definition)
+	return pillar_definitions[index % pillar_definitions.size()]
+
+
+func _add_mystic_ritual_center_skulls() -> void:
+	var decorations := Node2D.new()
+	decorations.name = "CombatObstacleDecorations"
+	decorations.z_index = -10
+	add_child(decorations)
+
+	var center := _get_play_area_center()
+	for index in range(RITUAL_CENTER_SKULL_OFFSETS.size()):
+		_add_arena_edge_decoration(
+			decorations,
+			SKULL_DECOR_TEXTURES[index % SKULL_DECOR_TEXTURES.size()],
+			center + RITUAL_CENTER_SKULL_OFFSETS[index],
+			randf_range(-0.24, 0.24),
+			1.45,
+			randi() % 2 == 0
+		)
+
+
+func _spawn_forest_obstacle_template() -> void:
+	var tree_definitions := _get_tree_obstacle_definitions()
+	var candidates := _get_forest_tree_candidates()
+	candidates.shuffle()
+	var target_count := mini(randi_range(FOREST_TREE_COUNT_MIN, FOREST_TREE_COUNT_MAX), candidates.size())
+	var selected_positions: Array[Vector2] = []
+	for candidate in candidates:
+		if selected_positions.size() >= target_count:
+			break
+		if not _is_obstacle_position_far_from_selected(candidate, selected_positions, FOREST_MIN_TREE_DISTANCE):
+			continue
+		selected_positions.append(candidate)
+	for index in range(selected_positions.size()):
+		var obstacle := _create_obstacle(selected_positions[index], index + 1, tree_definitions.pick_random())
+		obstacles.append(obstacle)
+		add_child(obstacle)
+
+
+func _get_tree_obstacle_definitions() -> Array[Dictionary]:
+	var tree_definitions: Array[Dictionary] = []
+	for definition in OBSTACLE_DEFINITIONS:
+		if String(definition.get("name", "")).begins_with("Tree"):
+			tree_definitions.append(definition)
+	return tree_definitions
+
+
+func _is_obstacle_position_far_from_selected(candidate: Vector2, selected_positions: Array[Vector2], min_distance: float) -> bool:
+	for selected_position in selected_positions:
+		if candidate.distance_to(selected_position) < min_distance:
+			return false
+	return true
+
+
+func _get_forest_tree_candidates() -> Array[Vector2]:
+	var candidates: Array[Vector2] = []
+	var play_area_rect := _get_play_area_rect()
+	var allowed_rect := play_area_rect.grow(-FOREST_EDGE_PADDING)
+	var cell_size := play_area_rect.size / float(FOREST_GRID_SIZE)
+	var center := _get_play_area_center()
+	var player_position := player.global_position if is_instance_valid(player) else _get_player_position()
+	for row in range(FOREST_GRID_SIZE):
+		for column in range(FOREST_GRID_SIZE):
+			var candidate := play_area_rect.position + (Vector2(column, row) + Vector2(0.5, 0.5)) * cell_size
+			candidate += Vector2(
+				randf_range(-FOREST_CELL_JITTER, FOREST_CELL_JITTER),
+				randf_range(-FOREST_CELL_JITTER, FOREST_CELL_JITTER)
+			)
+			if not allowed_rect.has_point(candidate):
+				continue
+			if candidate.distance_to(player_position) < FOREST_PLAYER_CLEAR_RADIUS:
+				continue
+			if candidate.distance_to(center) < FOREST_CENTER_SOFT_RADIUS and randf() < FOREST_CENTER_SKIP_CHANCE:
+				continue
+			if not _is_obstacle_position_free(candidate):
+				continue
+			candidates.append(candidate)
+	return candidates
+
+
+func _spawn_rock_field_obstacle_template() -> void:
+	var rock_definitions := _get_rock_obstacle_definitions()
+	var candidates := _get_rock_field_candidates()
+	candidates.shuffle()
+	var target_count := mini(randi_range(ROCK_FIELD_COUNT_MIN, ROCK_FIELD_COUNT_MAX), candidates.size())
+	var selected_positions: Array[Vector2] = []
+	for candidate in candidates:
+		if selected_positions.size() >= target_count:
+			break
+		if not _is_obstacle_position_far_from_selected(candidate, selected_positions, ROCK_FIELD_MIN_ROCK_DISTANCE):
+			continue
+		selected_positions.append(candidate)
+	for index in range(selected_positions.size()):
+		var obstacle := _create_obstacle(selected_positions[index], index + 1, rock_definitions.pick_random())
+		obstacles.append(obstacle)
+		add_child(obstacle)
+
+
+func _get_rock_obstacle_definitions() -> Array[Dictionary]:
+	var rock_definitions: Array[Dictionary] = []
+	for definition in OBSTACLE_DEFINITIONS:
+		if String(definition.get("name", "")).begins_with("Rock"):
+			rock_definitions.append(definition)
+	return rock_definitions
+
+
+func _get_rock_field_candidates() -> Array[Vector2]:
+	var candidates: Array[Vector2] = []
+	var play_area_rect := _get_play_area_rect()
+	var allowed_rect := play_area_rect.grow(-ROCK_FIELD_EDGE_PADDING)
+	var cell_size := play_area_rect.size / float(ROCK_FIELD_GRID_SIZE)
+	var center := _get_play_area_center()
+	var player_position := player.global_position if is_instance_valid(player) else _get_player_position()
+	for row in range(ROCK_FIELD_GRID_SIZE):
+		for column in range(ROCK_FIELD_GRID_SIZE):
+			var candidate := play_area_rect.position + (Vector2(column, row) + Vector2(0.5, 0.5)) * cell_size
+			candidate += Vector2(
+				randf_range(-ROCK_FIELD_CELL_JITTER, ROCK_FIELD_CELL_JITTER),
+				randf_range(-ROCK_FIELD_CELL_JITTER, ROCK_FIELD_CELL_JITTER)
+			)
+			if not allowed_rect.has_point(candidate):
+				continue
+			if candidate.distance_to(player_position) < ROCK_FIELD_PLAYER_CLEAR_RADIUS:
+				continue
+			if candidate.distance_to(center) < ROCK_FIELD_CENTER_SOFT_RADIUS and randf() < ROCK_FIELD_CENTER_SKIP_CHANCE:
+				continue
+			if not _is_obstacle_position_free(candidate):
+				continue
+			candidates.append(candidate)
+	return candidates
+
+
+func _roll_obstacle_position() -> Vector2:
+	var play_area_rect := _get_play_area_rect().grow(-OBSTACLE_EDGE_PADDING)
+	for _attempt in range(OBSTACLE_PLACEMENT_ATTEMPTS):
+		var candidate := Vector2(
+			randf_range(play_area_rect.position.x, play_area_rect.end.x),
+			randf_range(play_area_rect.position.y, play_area_rect.end.y)
+		)
+		if _is_obstacle_position_free(candidate):
+			return candidate
+	return Vector2.INF
+
+
+func _is_obstacle_position_free(candidate: Vector2) -> bool:
+	if is_instance_valid(player) and candidate.distance_to(player.global_position) < OBSTACLE_MIN_PLAYER_DISTANCE:
+		return false
+	for container in containers:
+		if is_instance_valid(container) and candidate.distance_to(container.global_position) < OBSTACLE_MIN_CONTAINER_DISTANCE:
+			return false
+	for obstacle in obstacles:
+		if is_instance_valid(obstacle) and candidate.distance_to(obstacle.global_position) < OBSTACLE_MIN_OBSTACLE_DISTANCE:
+			return false
+	return true
+
+
+func _create_obstacle(obstacle_position: Vector2, obstacle_number: int, obstacle_definition: Dictionary = {}) -> StaticBody2D:
+	var definition: Dictionary = obstacle_definition if not obstacle_definition.is_empty() else OBSTACLE_DEFINITIONS.pick_random()
+	var texture := _pick_obstacle_texture(definition)
+	var obstacle := StaticBody2D.new()
+	obstacle.name = "%sObstacle%d" % [String(definition.get("name", "Map")), obstacle_number]
+	obstacle.global_position = obstacle_position
+	obstacle.z_index = 0
+	obstacle.collision_layer = 1
+	obstacle.collision_mask = 0
+	obstacle.add_to_group("walls")
+	obstacle.add_to_group("obstacle")
+
+	var collision := CollisionShape2D.new()
+	collision.name = "CollisionShape2D"
+	collision.position = _get_obstacle_collision_offset(definition)
+	collision.shape = _get_obstacle_collision_shape(definition)
+	obstacle.add_child(collision)
+
+	_add_obstacle_shadow(obstacle, collision, definition)
+
+	var sprite := Sprite2D.new()
+	sprite.name = "Sprite2D"
+	sprite.texture = texture
+	sprite.centered = true
+	sprite.position = definition.get("sprite_offset", Vector2.ZERO)
+	sprite.scale = definition.get("scale", Vector2.ONE)
+	obstacle.add_child(sprite)
+	return obstacle
+
+
+func _get_obstacle_collision_shape(definition: Dictionary) -> Shape2D:
+	var template := _get_obstacle_hitbox_template(definition)
+	var collision_scale := float(definition.get("collision_scale", 1.0))
+	if template != null and template.shape != null:
+		return _scale_obstacle_shape(_duplicate_obstacle_template_shape(template), collision_scale)
+
+	var shape := CircleShape2D.new()
+	shape.radius = float(definition.get("radius", 32.0)) * collision_scale
+	return shape
+
+
+func _get_obstacle_collision_offset(definition: Dictionary) -> Vector2:
+	var template := _get_obstacle_hitbox_template(definition)
+	if template != null:
+		return template.position * float(definition.get("collision_scale", 1.0))
+	return Vector2.ZERO
+
+
+func _duplicate_obstacle_template_shape(template: CollisionShape2D) -> Shape2D:
+	var shape_scale := template.scale.abs()
+	if template.shape is CircleShape2D:
+		var template_circle := template.shape as CircleShape2D
+		if is_equal_approx(shape_scale.x, shape_scale.y):
+			var circle := CircleShape2D.new()
+			circle.radius = template_circle.radius * maxf(shape_scale.x, 0.001)
+			return circle
+
+		var rectangle := RectangleShape2D.new()
+		rectangle.size = Vector2(
+			template_circle.radius * 2.0 * maxf(shape_scale.x, 0.001),
+			template_circle.radius * 2.0 * maxf(shape_scale.y, 0.001)
+		)
+		return rectangle
+
+	if template.shape is RectangleShape2D:
+		var template_rectangle := template.shape as RectangleShape2D
+		var rectangle := RectangleShape2D.new()
+		rectangle.size = Vector2(
+			template_rectangle.size.x * maxf(shape_scale.x, 0.001),
+			template_rectangle.size.y * maxf(shape_scale.y, 0.001)
+		)
+		return rectangle
+
+	return template.shape.duplicate() as Shape2D
+
+
+func _scale_obstacle_shape(shape: Shape2D, collision_scale: float) -> Shape2D:
+	if is_equal_approx(collision_scale, 1.0):
+		return shape
+	if shape is CircleShape2D:
+		var circle := shape as CircleShape2D
+		circle.radius *= collision_scale
+	elif shape is RectangleShape2D:
+		var rectangle := shape as RectangleShape2D
+		rectangle.size *= collision_scale
+	return shape
+
+
+func _get_obstacle_hitbox_template(definition: Dictionary) -> CollisionShape2D:
+	var preview_root := get_node_or_null(OBSTACLE_HITBOX_PREVIEW_ROOT)
+	if preview_root == null:
+		return null
+
+	var preview_name := String(definition.get("template", definition.get("name", "")))
+	if preview_name.is_empty():
+		return null
+	return preview_root.get_node_or_null("%s/CollisionShape2D" % preview_name) as CollisionShape2D
+
+
+func _add_obstacle_shadow(obstacle: Node2D, collision: CollisionShape2D, definition: Dictionary) -> void:
+	var template := _get_obstacle_shadow_template(definition)
+	var template_sprite := template as Sprite2D
+	if template_sprite != null:
+		var shadow := Sprite2D.new()
+		shadow.name = "Shadow"
+		shadow.texture = template_sprite.texture
+		shadow.centered = template_sprite.centered
+		shadow.region_enabled = template_sprite.region_enabled
+		shadow.region_rect = template_sprite.region_rect
+		shadow.flip_h = template_sprite.flip_h
+		shadow.flip_v = template_sprite.flip_v
+		shadow.modulate = template_sprite.modulate
+		shadow.position = template_sprite.position
+		shadow.rotation = template_sprite.rotation
+		shadow.scale = template_sprite.scale
+		shadow.skew = template_sprite.skew
+		shadow.z_index = template_sprite.z_index
+		obstacle.add_child(shadow)
+		return
+
+	var template_polygon := template as Polygon2D
+	if template_polygon != null:
+		var shadow := Polygon2D.new()
+		shadow.name = "Shadow"
+		shadow.color = template_polygon.color
+		shadow.polygon = template_polygon.polygon
+		shadow.position = template_polygon.position
+		shadow.rotation = template_polygon.rotation
+		shadow.scale = template_polygon.scale
+		shadow.z_index = template_polygon.z_index
+		obstacle.add_child(shadow)
+		return
+
+	var footprint_size := _get_obstacle_collision_footprint_size(collision)
+	var shadow_radius_x := maxf(footprint_size.x * 0.58, 18.0)
+	var shadow_radius_y := maxf(footprint_size.y * 0.17, 7.0)
+
+	var shadow := Polygon2D.new()
+	shadow.name = "Shadow"
+	shadow.color = Color(0.0, 0.0, 0.0, 0.32)
+	shadow.polygon = _ellipse_polygon(
+		shadow_radius_x,
+		shadow_radius_y,
+		24
+	)
+	shadow.position = collision.position + Vector2(0.0, footprint_size.y * 0.5)
+	shadow.z_index = -1
+	obstacle.add_child(shadow)
+
+
+func _get_obstacle_shadow_template(definition: Dictionary) -> Node:
+	var preview_root := get_node_or_null(OBSTACLE_HITBOX_PREVIEW_ROOT)
+	if preview_root == null:
+		return null
+
+	var preview_name := String(definition.get("template", definition.get("name", "")))
+	if preview_name.is_empty():
+		return null
+	return preview_root.get_node_or_null("%s/Shadow" % preview_name)
+
+
+func _get_obstacle_collision_footprint_size(collision: CollisionShape2D) -> Vector2:
+	if collision == null or collision.shape == null:
+		return Vector2(64.0, 64.0)
+
+	var shape := collision.shape
+	if shape is CircleShape2D:
+		var circle := shape as CircleShape2D
+		return Vector2.ONE * circle.radius * 2.0
+	if shape is RectangleShape2D:
+		var rectangle := shape as RectangleShape2D
+		return rectangle.size
+	return Vector2(64.0, 64.0)
+
+
+func _pick_obstacle_texture(definition: Dictionary) -> Texture2D:
+	var textures: Array = definition.get("textures", [])
+	if not textures.is_empty():
+		return textures.pick_random() as Texture2D
+
+	var base_texture := definition.get("texture") as Texture2D
+	var columns := int(definition.get("columns", 1))
+	if base_texture == null or columns <= 1:
+		return base_texture
+
+	var texture_size := base_texture.get_size()
+	var frame_width := texture_size.x / float(columns)
+	var frame_index := clampi(int(definition.get("frame", randi_range(0, columns - 1))), 0, columns - 1)
+	var atlas := AtlasTexture.new()
+	atlas.atlas = base_texture
+	atlas.region = Rect2(Vector2(frame_width * float(frame_index), 0.0), Vector2(frame_width, texture_size.y))
+	return atlas
 
 
 func _roll_combat_container_placements() -> Array[Dictionary]:
@@ -701,33 +1145,69 @@ func _get_extra_tomb_container_count() -> int:
 func _roll_container_placement(container_type: int, grid_cell_size: Vector2, occupied_cells: Dictionary, grid_bounds: Dictionary) -> Dictionary:
 	var play_area_rect := _get_play_area_rect()
 	if container_type == ContainerType.TOMB:
-		var top_left_cell := _pick_free_tomb_cell(occupied_cells, grid_bounds)
-		if top_left_cell == Vector2i(-1, -1):
-			return {}
+		return _roll_tomb_container_placement(grid_cell_size, occupied_cells, grid_bounds, play_area_rect)
+	return _roll_single_container_placement(grid_cell_size, occupied_cells, grid_bounds, play_area_rect)
 
+
+func _roll_tomb_container_placement(
+	grid_cell_size: Vector2,
+	occupied_cells: Dictionary,
+	grid_bounds: Dictionary,
+	play_area_rect: Rect2
+) -> Dictionary:
+	var candidates := _get_free_tomb_cells(occupied_cells, grid_bounds)
+	candidates.shuffle()
+	for top_left_cell in candidates:
+		var position: Vector2 = play_area_rect.position + (Vector2(top_left_cell) + Vector2(1.0, 1.0)) * grid_cell_size
+		if not _is_container_position_clear_of_obstacles(position):
+			continue
 		for row_offset in range(2):
 			for column_offset in range(2):
 				occupied_cells[top_left_cell + Vector2i(column_offset, row_offset)] = true
 		return {
-			"position": play_area_rect.position + (Vector2(top_left_cell) + Vector2(1.0, 1.0)) * grid_cell_size,
+			"position": position,
 		}
+	return {}
 
-	var cell := _pick_free_single_cell(occupied_cells, grid_bounds)
-	if cell == Vector2i(-1, -1):
-		return {}
 
-	occupied_cells[cell] = true
-	var position: Vector2 = play_area_rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * grid_cell_size
-	position += Vector2(
-		randf_range(-grid_cell_size.x * 0.38, grid_cell_size.x * 0.38),
-		randf_range(-grid_cell_size.y * 0.38, grid_cell_size.y * 0.38)
-	)
-	return {
-		"position": position,
-	}
+func _roll_single_container_placement(
+	grid_cell_size: Vector2,
+	occupied_cells: Dictionary,
+	grid_bounds: Dictionary,
+	play_area_rect: Rect2
+) -> Dictionary:
+	var candidates := _get_free_single_cells(occupied_cells, grid_bounds)
+	candidates.shuffle()
+	for cell in candidates:
+		var position: Vector2 = play_area_rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * grid_cell_size
+		position += Vector2(
+			randf_range(-grid_cell_size.x * 0.38, grid_cell_size.x * 0.38),
+			randf_range(-grid_cell_size.y * 0.38, grid_cell_size.y * 0.38)
+		)
+		if not _is_container_position_clear_of_obstacles(position):
+			continue
+		occupied_cells[cell] = true
+		return {
+			"position": position,
+		}
+	return {}
+
+
+func _is_container_position_clear_of_obstacles(candidate: Vector2) -> bool:
+	for obstacle in obstacles:
+		if is_instance_valid(obstacle) and candidate.distance_to(obstacle.global_position) < CONTAINER_MIN_OBSTACLE_DISTANCE:
+			return false
+	return true
 
 
 func _pick_free_tomb_cell(occupied_cells: Dictionary, grid_bounds: Dictionary) -> Vector2i:
+	var candidates := _get_free_tomb_cells(occupied_cells, grid_bounds)
+	if candidates.is_empty():
+		return Vector2i(-1, -1)
+	return candidates[randi_range(0, candidates.size() - 1)]
+
+
+func _get_free_tomb_cells(occupied_cells: Dictionary, grid_bounds: Dictionary) -> Array[Vector2i]:
 	var candidates: Array[Vector2i] = []
 	var min_index := int(grid_bounds.get("min", CONTAINER_GRID_MIN_INDEX))
 	var max_index := int(grid_bounds.get("max", CONTAINER_GRID_MAX_INDEX))
@@ -736,9 +1216,7 @@ func _pick_free_tomb_cell(occupied_cells: Dictionary, grid_bounds: Dictionary) -
 			var cell := Vector2i(column, row)
 			if _is_tomb_cell_free(cell, occupied_cells):
 				candidates.append(cell)
-	if candidates.is_empty():
-		return Vector2i(-1, -1)
-	return candidates[randi_range(0, candidates.size() - 1)]
+	return candidates
 
 
 func _is_tomb_cell_free(top_left_cell: Vector2i, occupied_cells: Dictionary) -> bool:
@@ -750,6 +1228,13 @@ func _is_tomb_cell_free(top_left_cell: Vector2i, occupied_cells: Dictionary) -> 
 
 
 func _pick_free_single_cell(occupied_cells: Dictionary, grid_bounds: Dictionary) -> Vector2i:
+	var candidates := _get_free_single_cells(occupied_cells, grid_bounds)
+	if candidates.is_empty():
+		return Vector2i(-1, -1)
+	return candidates[randi_range(0, candidates.size() - 1)]
+
+
+func _get_free_single_cells(occupied_cells: Dictionary, grid_bounds: Dictionary) -> Array[Vector2i]:
 	var candidates: Array[Vector2i] = []
 	var min_index := int(grid_bounds.get("min", CONTAINER_GRID_MIN_INDEX))
 	var max_index := int(grid_bounds.get("max", CONTAINER_GRID_MAX_INDEX))
@@ -758,9 +1243,7 @@ func _pick_free_single_cell(occupied_cells: Dictionary, grid_bounds: Dictionary)
 			var cell := Vector2i(column, row)
 			if not occupied_cells.has(cell):
 				candidates.append(cell)
-	if candidates.is_empty():
-		return Vector2i(-1, -1)
-	return candidates[randi_range(0, candidates.size() - 1)]
+	return candidates
 
 
 func _roll_combat_container_type() -> int:
@@ -799,6 +1282,7 @@ func _create_shop_container(container_position: Vector2, index: int, forced_cate
 	var category: int = forced_category if forced_category >= 0 else _roll_shop_category()
 	var tier: int = forced_tier if forced_tier >= 0 else _roll_shop_tier()
 	var base_price: int = _get_shop_price(category, tier)
+	base_price = _apply_shop_round_price_multiplier(base_price)
 	base_price = _apply_shop_tier_price_multiplier(base_price, tier)
 	var price: int = _apply_shop_price_discount(base_price)
 	var preview_item: ItemDefinition
@@ -853,6 +1337,9 @@ func _hide_container_hitbox_previews() -> void:
 	var preview_root := get_node_or_null(CONTAINER_HITBOX_PREVIEW_ROOT) as Node2D
 	if preview_root != null:
 		preview_root.visible = false
+	var obstacle_preview_root := get_node_or_null(OBSTACLE_HITBOX_PREVIEW_ROOT) as Node2D
+	if obstacle_preview_root != null:
+		obstacle_preview_root.visible = false
 
 
 func _get_container_collision_shape(container_type: int) -> Shape2D:
@@ -1197,7 +1684,9 @@ func refresh_shop_container_prices() -> void:
 			continue
 		var category: int = int(data.get("category", ShopCategory.BROWN))
 		var tier: int = int(data.get("tier", ShopTier.COMMON))
-		var base_price: int = _apply_shop_tier_price_multiplier(_get_shop_price(category, tier), tier)
+		var base_price: int = _get_shop_price(category, tier)
+		base_price = _apply_shop_round_price_multiplier(base_price)
+		base_price = _apply_shop_tier_price_multiplier(base_price, tier)
 		var price: int = _apply_shop_price_discount(base_price)
 		data["base_price"] = base_price
 		data["price"] = price
@@ -1321,6 +1810,8 @@ func _get_round_enemy_max_hp_multiplier() -> float:
 func _on_enemy_died(enemy: EnemyBase) -> void:
 	enemies.erase(enemy)
 	release_enemy_attack_token(enemy)
+	if _should_start_final_enemy_death_focus(enemy):
+		_start_final_enemy_death_focus(enemy)
 	var base_reward: int = int(enemy_gold_rewards.get(enemy, MELEE_ZOMBIE_GOLD))
 	enemy_gold_rewards.erase(enemy)
 	var gold_reward := _get_modified_enemy_gold_reward(enemy, base_reward)
@@ -1335,6 +1826,132 @@ func _on_enemy_died(enemy: EnemyBase) -> void:
 	hud_message = "Dropped %d gold and %d EXP." % [gold_reward + extra_gold_count, experience_reward]
 	_update_hud()
 	_check_combat_clear()
+
+
+func _should_start_final_enemy_death_focus(enemy: EnemyBase) -> bool:
+	if final_enemy_death_focus_active or phase != Phase.COMBAT or game_over:
+		return false
+	if not is_instance_valid(enemy) or not containers.is_empty() or not enemies.is_empty():
+		return false
+	for node in get_tree().get_nodes_in_group("enemy"):
+		var other_enemy := node as EnemyBase
+		if other_enemy == null or other_enemy == enemy:
+			continue
+		if is_instance_valid(other_enemy) and not other_enemy.is_dead and not other_enemy.is_queued_for_deletion():
+			return false
+	return true
+
+
+func should_play_final_enemy_death_sfx(enemy: EnemyBase) -> bool:
+	if phase != Phase.COMBAT or game_over:
+		return false
+	if not is_instance_valid(enemy) or not containers.is_empty():
+		return false
+	for active_enemy in enemies:
+		if active_enemy != enemy and is_instance_valid(active_enemy) and not active_enemy.is_dead:
+			return false
+	for node in get_tree().get_nodes_in_group("enemy"):
+		var other_enemy := node as EnemyBase
+		if other_enemy == null or other_enemy == enemy:
+			continue
+		if is_instance_valid(other_enemy) and not other_enemy.is_dead and not other_enemy.is_queued_for_deletion():
+			return false
+	return true
+
+
+func _start_final_enemy_death_focus(enemy: EnemyBase) -> void:
+	final_enemy_death_focus_active = true
+	final_enemy_death_focus_token += 1
+	_run_final_enemy_death_focus(enemy, final_enemy_death_focus_token)
+
+
+func _run_final_enemy_death_focus(enemy: EnemyBase, focus_token: int) -> void:
+	var previous_time_scale := Engine.time_scale
+	Engine.time_scale = FINAL_ENEMY_DEATH_FOCUS_TIME_SCALE
+	await _focus_camera_on_final_enemy_death(enemy, focus_token)
+	if focus_token == final_enemy_death_focus_token:
+		Engine.time_scale = previous_time_scale
+		final_enemy_death_focus_active = false
+		_check_combat_clear()
+
+
+func _focus_camera_on_final_enemy_death(enemy: EnemyBase, focus_token: int) -> void:
+	if not is_instance_valid(camera):
+		await _wait_for_final_enemy_death_focus(enemy)
+		return
+
+	var original_parent := camera.get_parent()
+	var original_position := camera.position
+	var original_global_position := camera.global_position
+	var original_zoom := _get_camera_base_zoom()
+	_reset_camera_transient_zoom()
+	camera.top_level = true
+	camera.global_position = original_global_position
+
+	var focus_position := enemy.global_position + FINAL_ENEMY_DEATH_FOCUS_OFFSET if is_instance_valid(enemy) else original_global_position
+	await _tween_final_enemy_death_camera(focus_position, original_zoom * FINAL_ENEMY_DEATH_FOCUS_ZOOM_FACTOR, FINAL_ENEMY_DEATH_FOCUS_IN_DURATION)
+	await _wait_for_final_enemy_death_focus(enemy)
+	if focus_token != final_enemy_death_focus_token or not is_instance_valid(camera):
+		return
+
+	var parent_2d := original_parent as Node2D
+	var restore_position: Vector2 = parent_2d.global_position + original_position if parent_2d != null else original_global_position
+	await _tween_final_enemy_death_camera(restore_position, original_zoom, FINAL_ENEMY_DEATH_FOCUS_OUT_DURATION)
+	if focus_token != final_enemy_death_focus_token or not is_instance_valid(camera):
+		return
+
+	_set_camera_base_zoom(original_zoom)
+	camera.zoom = original_zoom
+	camera.top_level = false
+	camera.position = original_position
+
+
+func _tween_final_enemy_death_camera(target_position: Vector2, target_zoom: Vector2, duration: float) -> void:
+	if not is_instance_valid(camera):
+		return
+	if final_enemy_death_focus_tween != null and final_enemy_death_focus_tween.is_valid():
+		final_enemy_death_focus_tween.kill()
+	final_enemy_death_focus_tween = create_tween()
+	final_enemy_death_focus_tween.set_parallel(true)
+	final_enemy_death_focus_tween.set_ignore_time_scale(true)
+	final_enemy_death_focus_tween.tween_property(camera, "global_position", target_position, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if _object_has_property(camera, &"base_zoom"):
+		final_enemy_death_focus_tween.tween_property(camera, "base_zoom", target_zoom, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	final_enemy_death_focus_tween.tween_property(camera, "zoom", target_zoom, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await final_enemy_death_focus_tween.finished
+
+
+func _wait_for_final_enemy_death_focus(enemy: EnemyBase) -> void:
+	var start_msec := Time.get_ticks_msec()
+	await get_tree().create_timer(FINAL_ENEMY_DEATH_FOCUS_MIN_DURATION, true, false, true).timeout
+	while is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+		var elapsed := float(Time.get_ticks_msec() - start_msec) / 1000.0
+		if elapsed >= FINAL_ENEMY_DEATH_FOCUS_MAX_DURATION:
+			break
+		await get_tree().process_frame
+
+
+func _reset_camera_transient_zoom() -> void:
+	if not is_instance_valid(camera):
+		return
+	for property_name in [&"zoom_timer", &"zoom_duration"]:
+		if _object_has_property(camera, property_name):
+			camera.set(property_name, 0.0)
+	if _object_has_property(camera, &"zoom_factor"):
+		camera.set(&"zoom_factor", 1.0)
+
+
+func _get_camera_base_zoom() -> Vector2:
+	if is_instance_valid(camera) and _object_has_property(camera, &"base_zoom"):
+		var value: Variant = camera.get(&"base_zoom")
+		if value is Vector2:
+			return value
+	return camera.zoom if is_instance_valid(camera) else CAMERA_ZOOM
+
+
+func _set_camera_base_zoom(value: Vector2) -> void:
+	if is_instance_valid(camera) and _object_has_property(camera, &"base_zoom"):
+		camera.set(&"base_zoom", value)
 
 
 func _try_drop_wizard_swift_flame_extra_gold(enemy: EnemyBase, chance_roll: float = -1.0) -> bool:
@@ -1865,6 +2482,14 @@ func _circle_polygon(radius: float, points: int) -> PackedVector2Array:
 	return polygon
 
 
+func _ellipse_polygon(radius_x: float, radius_y: float, points: int) -> PackedVector2Array:
+	var polygon := PackedVector2Array()
+	for point in range(points):
+		var angle := TAU * float(point) / float(points)
+		polygon.append(Vector2(cos(angle) * radius_x, sin(angle) * radius_y))
+	return polygon
+
+
 func request_enemy_attack_token(enemy: EnemyBase) -> bool:
 	var token_pool: Dictionary = _get_enemy_attack_token_pool(enemy)
 	if token_pool.has(enemy):
@@ -1923,6 +2548,7 @@ func _enter_shop_phase() -> void:
 		player.emit_round_ended()
 		player.settle_round_level_rewards()
 	_complete_active_altar_challenge()
+	_clear_obstacles()
 	_spawn_shop_containers()
 	_spawn_altar_offer()
 	_maybe_show_talent_tree()
@@ -2557,7 +3183,7 @@ func _check_defeat() -> void:
 
 
 func _check_combat_clear() -> void:
-	if phase != Phase.COMBAT or game_over or shop_transition_pending:
+	if phase != Phase.COMBAT or game_over or shop_transition_pending or final_enemy_death_focus_active:
 		return
 
 	if containers.is_empty() and enemies.is_empty() and not _has_enemy_nodes_in_scene():
@@ -2663,6 +3289,7 @@ func _win_game() -> void:
 	game_over = true
 	phase = Phase.VICTORY
 	_clear_shop_containers()
+	_clear_obstacles()
 	status_panel.visible = true
 	status_label.text = "Victory!\nYou cleared all 10 rounds.\nPress R to restart."
 	_update_hud()
@@ -2671,6 +3298,7 @@ func _win_game() -> void:
 func _lose_game() -> void:
 	game_over = true
 	phase = Phase.DEFEAT
+	_clear_obstacles()
 	status_panel.visible = true
 	status_label.text = "Defeat!\nThe zombies killed the player.\nPress R to restart."
 
@@ -2690,6 +3318,16 @@ func _clear_shop_containers() -> void:
 			container.queue_free()
 	shop_containers.clear()
 	shop_container_data.clear()
+
+
+func _clear_obstacles() -> void:
+	for obstacle in obstacles:
+		if is_instance_valid(obstacle):
+			obstacle.queue_free()
+	obstacles.clear()
+	var decorations := get_node_or_null("CombatObstacleDecorations")
+	if decorations != null:
+		decorations.queue_free()
 
 
 func _roll_shop_category() -> int:
@@ -2733,6 +3371,20 @@ func _apply_shop_tier_price_multiplier(base_price: int, tier: int) -> int:
 	if is_instance_valid(player) and player.has_method("get_shop_tier_price_multiplier"):
 		multiplier = float(player.get_shop_tier_price_multiplier(tier))
 	return maxi(1, int(round(float(base_price) * multiplier)))
+
+
+func _apply_shop_round_price_multiplier(base_price: int) -> int:
+	return maxi(1, int(round(float(base_price) * _get_shop_round_price_multiplier())))
+
+
+func _get_shop_round_price_multiplier() -> float:
+	if current_round >= 15:
+		return 2.5
+	if current_round >= 10:
+		return 2.0
+	if current_round >= 5:
+		return 1.4
+	return 1.0
 
 
 func _apply_shop_price_discount(base_price: int) -> int:

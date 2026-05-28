@@ -32,6 +32,7 @@ const FIREBALL_EXPLOSION_FRAME_SIZE := Vector2(64.0, 64.0)
 @export var impact_vulnerable_stacks: int = 0
 @export var pierce_enemies: bool = false
 @export var bounce_on_walls: bool = false
+@export var allow_crit: bool = true
 
 var owner_player: Node
 var age: float = 0.0
@@ -58,6 +59,7 @@ func setup(new_owner: Node, new_position: Vector2, new_direction: Vector2, new_d
 
 func _ready() -> void:
 	add_to_group("fireball_projectile")
+	set_collision_mask_value(1, true)
 	_apply_owner_spawn_modifiers()
 	_ensure_nodes()
 	if not body_entered.is_connected(_on_body_entered):
@@ -231,7 +233,7 @@ func explode(is_natural: bool = false) -> void:
 		if enemy_2d == null or enemy_2d.global_position.distance_to(global_position) > explosion_radius:
 			continue
 		if owner_player != null and owner_player.has_method("deal_player_damage_to_enemy"):
-			owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
+			owner_player.deal_player_damage_to_enemy(enemy, damage, {"source": "fireball", "direct": true, "allow_procs": allow_procs, "allow_crit": allow_crit})
 		elif enemy.has_method("take_damage"):
 			enemy.take_damage(damage)
 		if poison_stacks > 0 and enemy.has_method("apply_poison_stacks"):
@@ -260,7 +262,7 @@ func _damage_impact_enemy(enemy: Node) -> void:
 	impact_damaged_enemy_ids[enemy_id] = true
 	_apply_impact_status_effects(enemy)
 	if owner_player != null and owner_player.has_method("deal_player_damage_to_enemy"):
-		owner_player.deal_player_damage_to_enemy(enemy, impact_damage, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
+		owner_player.deal_player_damage_to_enemy(enemy, impact_damage, {"source": "fireball", "direct": true, "allow_procs": allow_procs, "allow_crit": allow_crit})
 	elif enemy.has_method("take_damage"):
 		enemy.take_damage(impact_damage)
 

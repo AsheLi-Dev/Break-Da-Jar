@@ -203,6 +203,9 @@ func spawn_fire_laser(player, start_position: Vector2, direction: Vector2, chain
 	if has_talent(&"wizard_short_laser_double_damage"):
 		laser.length *= 0.5
 		laser_damage_multiplier *= 2.0
+	if has_talent(&"wizard_short_laser_massive_damage"):
+		laser.length *= 0.2
+		laser_damage_multiplier *= 6.0
 	if has_talent(&"wizard_container_break_laser_no_container_damage"):
 		laser.damages_containers = false
 	laser.damages_enemies = damages_enemies
@@ -372,7 +375,7 @@ func update_fire_surge(player, delta: float) -> void:
 			player.fire_surge_fire_remaining += 2.0
 			var target := EFFECT_TARGETING.nearest_enemy(player, player.global_position, 700.0)
 			if target != null:
-				launch_fireball(player, target.global_position)
+				launch_fire_surge_fireball(player, target.global_position)
 	if player.fire_surge_remaining <= 0.0:
 		player.fire_surge_cooldown_pending = false
 		player.blessing_cooldown_remaining = 10.0
@@ -385,22 +388,26 @@ func launch_fire_surge_laser(player) -> void:
 	spawn_fire_laser(player, player.global_position, _direction_to(player, target.global_position, player.global_position))
 
 
+func launch_fire_surge_fireball(player, target_position: Vector2) -> void:
+	launch_fireball(player, target_position, false, _get_fire_surge_fireball_radius_multiplier(), _get_fire_surge_fireball_lifetime_multiplier())
+
+
 func launch_radial_fire_lasers(player) -> void:
 	for index in range(8):
 		var angle := TAU * float(index) / 8.0
 		spawn_fire_laser(player, player.global_position, Vector2(cos(angle), sin(angle)))
 
 
-func launch_fireball(player, target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0) -> void:
+func launch_fireball(player, target_position: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, emit_attack_started_event: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0, allow_crit: bool = true) -> void:
 	if player.get_tree() == null or player.get_tree().current_scene == null:
 		return
 	var direction := _direction_to(player, target_position, player.global_position)
 	if emit_attack_started_event:
 		player.attack_started.emit(player.global_position, direction, {"source": "fireball", "direct": true, "allow_procs": allow_procs})
-	spawn_fireball(player, player.global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus, damage_multiplier)
+	spawn_fireball(player, player.global_position, direction, consume_slide_fireball_bonus, radius_multiplier, lifetime_multiplier, allow_procs, scatter_on_explode, force_slide_fireball_bonus, damage_multiplier, allow_crit)
 
 
-func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0) -> void:
+func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, lifetime_multiplier: float = 1.0, allow_procs: bool = false, scatter_on_explode: bool = false, force_slide_fireball_bonus: bool = false, damage_multiplier: float = 1.0, allow_crit: bool = true) -> void:
 	if player.get_tree() == null or player.get_tree().current_scene == null:
 		return
 	var fireball := FIREBALL_SCRIPT.new() as FireballProjectile
@@ -431,6 +438,7 @@ func spawn_fireball(player, start_position: Vector2, direction: Vector2, consume
 		fireball.explode_replacement_callback = Callable(player, "_replace_wizard_primary_fireball_explosion_with_laser")
 	if scatter_on_explode:
 		fireball.explode_callback = Callable(player, "_launch_wizard_fire_essence_explosion_scatter")
+	fireball.allow_crit = allow_crit
 	fireball.collision_layer = 1 << 2
 	fireball.collision_mask = 1 << 1
 	fireball.explode_on_containers = true
@@ -591,20 +599,23 @@ func launch_primary_attack_pattern(player, target_position: Vector2, use_fire_es
 
 	var scatter_on_explode: bool = use_fire_essence_version and has_talent(&"wizard_fire_essence_explosion_scatter")
 	var apply_slide_fireball_bonus: bool = next_slide_fireball_ready
+	var allow_primary_crit := not has_talent(&"wizard_primary_crit_extra_fireballs")
 	if apply_slide_fireball_bonus:
 		next_slide_fireball_ready = false
-	launch_fireball(player, target_position, true, charged_radius_multiplier, 1.0, true, emit_attack_started_event, scatter_on_explode, apply_slide_fireball_bonus, charged_damage_multiplier)
+	launch_fireball(player, target_position, true, charged_radius_multiplier, 1.0, true, emit_attack_started_event, scatter_on_explode, apply_slide_fireball_bonus, charged_damage_multiplier, allow_primary_crit)
 	var offset_index := 0
 	if use_fire_essence_version:
-		launch_offset_fireballs(player, target_position, 3, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
+		launch_offset_fireballs(player, target_position, 3, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier, allow_primary_crit)
 		offset_index += 3
 	if has_talent(&"wizard_primary_extra_fireball"):
-		launch_offset_fireballs(player, target_position, 1, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
+		launch_offset_fireballs(player, target_position, 1, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier, allow_primary_crit)
 		offset_index += 1
 	var dash_stack_count := consume_dash_primary_fireball_stacks()
-	launch_offset_fireballs(player, target_position, dash_stack_count, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
+	launch_offset_fireballs(player, target_position, dash_stack_count, offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier, allow_primary_crit)
 	offset_index += dash_stack_count
-	launch_offset_fireballs(player, target_position, get_move_speed_extra_fireball_count(player), offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier)
+	launch_offset_fireballs(player, target_position, get_move_speed_extra_fireball_count(player), offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier, allow_primary_crit)
+	offset_index += get_move_speed_extra_fireball_count(player)
+	launch_offset_fireballs(player, target_position, get_primary_crit_extra_fireball_count(player), offset_index, apply_slide_fireball_bonus, charged_radius_multiplier, charged_damage_multiplier, allow_primary_crit)
 
 
 func launch_hovering_fireballs(player, target_position: Vector2, count: int, emit_attack_started_event: bool = true) -> void:
@@ -648,7 +659,7 @@ func _get_hovering_fireball_count(player) -> int:
 	return count
 
 
-func launch_offset_fireballs(player, target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, damage_multiplier: float = 1.0) -> void:
+func launch_offset_fireballs(player, target_position: Vector2, count: int, start_index: int = 0, force_slide_fireball_bonus: bool = false, radius_multiplier: float = 1.0, damage_multiplier: float = 1.0, allow_crit: bool = true) -> void:
 	if count <= 0:
 		return
 	var direction := _direction_to(player, target_position, player.global_position)
@@ -658,7 +669,7 @@ func launch_offset_fireballs(player, target_position: Vector2, count: int, start
 		var step := floori(float(offset_index) / 2.0) + 1
 		var sign_value := 1.0 if offset_index % 2 == 0 else -1.0
 		var angle := center_angle + deg_to_rad(10.0 * float(step) * sign_value)
-		launch_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, radius_multiplier, 1.0, true, false, false, force_slide_fireball_bonus, damage_multiplier)
+		launch_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0, true, radius_multiplier, 1.0, true, false, false, force_slide_fireball_bonus, damage_multiplier, allow_crit)
 
 
 func launch_fire_essence_explosion_scatter(player, origin: Vector2) -> void:
@@ -699,6 +710,7 @@ func spawn_fireball_duplicate(player, source_fireball: FireballProjectile, direc
 	duplicate.impact_vulnerable_stacks = source_fireball.impact_vulnerable_stacks
 	duplicate.pierce_enemies = source_fireball.pierce_enemies
 	duplicate.bounce_on_walls = source_fireball.bounce_on_walls
+	duplicate.allow_crit = source_fireball.allow_crit
 	duplicate.explode_replacement_callback = source_fireball.explode_replacement_callback
 	duplicate.explode_callback = source_fireball.explode_callback
 	duplicate.setup(source_fireball.owner_player, source_fireball.global_position, direction, source_fireball.damage, source_fireball.explosion_radius, source_fireball.allow_procs)
@@ -729,10 +741,18 @@ func get_move_speed_extra_fireball_count(player) -> int:
 	return maxi(floori(float(gold) / 50.0), 0)
 
 
+func get_primary_crit_extra_fireball_count(player) -> int:
+	if not has_talent(&"wizard_primary_crit_extra_fireballs"):
+		return 0
+	if player.stats == null or randf() >= player.stats.critical_chance:
+		return 0
+	return maxi(floori(player.stats.critical_damage_bonus / 0.5), 0)
+
+
 func launch_radial_fireballs(player) -> void:
 	for index in range(8):
 		var angle := TAU * float(index) / 8.0
-		launch_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0)
+		launch_fire_surge_fireball(player, player.global_position + Vector2(cos(angle), sin(angle)) * 200.0)
 
 
 func get_primary_echo_count(player) -> int:
@@ -742,6 +762,14 @@ func get_primary_echo_count(player) -> int:
 	if player.stats != null:
 		max_hp_value = float(player.stats.max_hp)
 	return maxi(floori(max_hp_value / 100.0), 0)
+
+
+func _get_fire_surge_fireball_radius_multiplier() -> float:
+	return 1.3 if has_talent(&"wizard_fire_surge_short_fireballs") else 1.0
+
+
+func _get_fire_surge_fireball_lifetime_multiplier() -> float:
+	return 0.1 if has_talent(&"wizard_fire_surge_short_fireballs") else 1.0
 
 
 func schedule_primary_echoes(player, target_position: Vector2, use_fire_essence_version: bool) -> void:

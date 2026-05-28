@@ -351,16 +351,8 @@ func _damage_overlapping_players(area: Area2D, attack_damage: float) -> void:
 
 
 func _try_damage_player(body: Node, attack_damage: float) -> void:
-	if is_stunned():
-		return
-	if hit_targets.has(body):
-		return
-
-	if body.is_in_group("player") and body.has_method("take_damage"):
-		hit_targets.append(body)
-		body.call("take_damage", attack_damage)
-		if state == State.SHOUT_ATTACK and body.has_method("apply_slow"):
-			body.call("apply_slow", shout_slow_multiplier, shout_slow_duration)
+	if try_damage_player_target(body, attack_damage, hit_targets) and state == State.SHOUT_ATTACK and body.has_method("apply_slow"):
+		body.call("apply_slow", shout_slow_multiplier, shout_slow_duration)
 
 
 func _on_stun_applied() -> void:

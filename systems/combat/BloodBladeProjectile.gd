@@ -32,6 +32,7 @@ func setup(new_owner: Node, start_position: Vector2, new_direction: Vector2, new
 
 
 func _ready() -> void:
+	set_collision_mask_value(1, true)
 	_ensure_nodes()
 	if not body_entered.is_connected(_on_body_entered):
 		body_entered.connect(_on_body_entered)
@@ -50,6 +51,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node) -> void:
+	if _is_wall_body(body):
+		_start_end_animation()
+		return
 	_try_damage_enemy(body)
 
 
@@ -82,6 +86,12 @@ func _get_enemy_target(node: Node) -> Node:
 		return parent
 
 	return null
+
+
+func _is_wall_body(body: Node) -> bool:
+	if body == null:
+		return false
+	return body is StaticBody2D or body is TileMap or body is TileMapLayer or body.is_in_group("wall") or body.is_in_group("walls")
 
 
 func _ensure_nodes() -> void:
